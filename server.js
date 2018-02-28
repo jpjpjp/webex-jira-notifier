@@ -36,7 +36,7 @@ if ((process.env.MONGO_USER) && (process.env.MONGO_PW)) {
   mConfig = require("./mongo.json");
 }
 var mCollection = null;
-var mongo_collection_name ="tjnMongoCollection";
+var mongo_collection_name ="cjnMongoCollection";
 var mongoUri = 'mongodb://'+mConfig.mongoUser+':'+mConfig.mongoPass+'@'+mConfig.mongoUrl+mConfig.mongoDb+'?ssl=true&replicaSet=Cluster0-shard-0&authSource=admin';
 
 mongo_client.connect(mongoUri, function(err, db) {
