@@ -1,0 +1,25 @@
+{
+  "name": "tropo-jira-notification-bot",
+  "version": "1.0.0",
+  "description": "Bot for notifying a user when they are mentioned in or assigned to a Tropo jira ticket",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "test-jira-event-handler.js"
+  },
+  "keywords": [
+    "Cisco",
+    "Tropo",
+    "Jira",
+    "Atlassian",
+    "Spark"
+  ],
+  "author": "JP Shipherd",
+  "license": "ISC",
+  "dependencies": {
+    "body-parser": "^1.15.2",
+    "express": "^4.14.0",
+    "mongodb": "^2.2.26",
+    "node-flint": "^4.5.3"
+  }
+}
