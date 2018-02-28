@@ -1,15 +1,14 @@
 {
-  "name": "tropo-jira-notification-bot",
+  "name": "cisco-jira-notification-bot",
   "version": "1.0.0",
-  "description": "Bot for notifying a user when they are mentioned in or assigned to a Tropo jira ticket",
+  "description": "Bot for notifying a user when they are mentioned in or assigned to a Cisco jira ticket",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "test-jira-event-handler.js"
+    "test": "node test-jira-event-handler.js"
   },
   "keywords": [
     "Cisco",
-    "Tropo",
     "Jira",
     "Atlassian",
     "Spark"
