@@ -313,18 +313,18 @@ app.get('/', function (req, res) {
 
 // Jira webbhook
 app.post('/jira', function (req, res) {
-  flint.debug('Processing incoming Jira Event');
   //console.log(req.body);
   let jiraEvent = {};
   try {
     jiraEvent = req.body;
     if (typeof jiraEvent.webhookEvent !== 'undefined') {
-      flint.debug('Processing incoming Jira Event %s:%s', jiraEvent.webhookEvent, jiraEvent.issue_event_type_name);
+      //flint.debug('Processing incoming Jira Event %s:%s', jiraEvent.webhookEvent, jiraEvent.issue_event_type_name);
+      console.log('Processing incoming Jira Event %s:%s', jiraEvent.webhookEvent, jiraEvent.issue_event_type_name);
       jiraEventHandler.processJiraEvent(jiraEvent, flint);
     }
   } catch (e) {
-    console.log('Error processing Jira Event Webhook:' + e);
-    console.log('Ignoring: '+ jiraEvent);
+    console.error('Error processing Jira Event Webhook:' + e);
+    console.error('Ignoring: '+ jiraEvent);
     res.status(400);
   }
   res.end();
