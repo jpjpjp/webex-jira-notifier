@@ -71,7 +71,7 @@ exports.processJiraEvent = function (jiraEvent, flint, callback=null) {
         ' deleted a Jira ', ' that was assigned to you.',
         'Description:', jiraEvent.issue.fields.description, callback);
     } else {
-      flint.debug('Ignoring Jira Event:' + jiraEvent.webhookEvent);
+      flint.debug('Ignoring Jira Event %s:%s', jiraEvent.webhookEvent, jiraEvent.issue_event_type_name);
       if (callback) {return(callback(null));}
     }
   } catch (e) {
