@@ -71,8 +71,7 @@ exports.processJiraEvent = function (jiraEvent, flint, callback=null) {
         ' deleted a Jira ', ' that was assigned to you.',
         'Description:', jiraEvent.issue.fields.description, callback);
     } else {
-      //flint.debug('Ignoring Jira Event %s:%s', jiraEvent.webhookEvent, jiraEvent.issue_event_type_name);
-      console.log('Ignoring Jira Event %s:%s', jiraEvent.webhookEvent, jiraEvent.issue_event_type_name);
+      flint.debug('Ignoring Jira Event %s:%s', jiraEvent.webhookEvent, jiraEvent.issue_event_type_name);
       if (callback) {return(callback(null));}
     }
   } catch (e) {
@@ -120,8 +119,7 @@ function notifyPeople(flint, jiraEvent, searchValue, author, eventName, action, 
       });
     } else {
       if (callback) {return(callback(null, null));}
-      //return flint.debug('No potential notification recipients are using the bot:' + searchValue)
-      return console.log('No potential notification recipients are using the bot:' + searchValue)
+      return flint.debug('No potential notification recipients are using the bot:' + searchValue)
     }
   });
 }
@@ -137,8 +135,7 @@ function getAllMentions(str) {
 }
 
 function sendNotification(flint, bot, jiraEvent, author, eventName, action, elementName, elementValue) {
-  //flint.debug('Sending a notification to '+bot.isDirectTo+' about '+jiraEvent.issue.key);
-  console.log('Sending a notification to '+bot.isDirectTo+' about '+jiraEvent.issue.key);
+  flint.debug('Sending a notification to '+bot.isDirectTo+' about '+jiraEvent.issue.key);
   bot.say({markdown: '<br>' + author +
     eventName + jiraEvent.issue.fields.issuetype.name +
     ': **' + jiraEvent.issue.fields.summary + '**' + action});

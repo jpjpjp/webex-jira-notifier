@@ -318,8 +318,7 @@ app.post('/jira', function (req, res) {
   try {
     jiraEvent = req.body;
     if (typeof jiraEvent.webhookEvent !== 'undefined') {
-      //flint.debug('Processing incoming Jira Event %s:%s', jiraEvent.webhookEvent, jiraEvent.issue_event_type_name);
-      console.log('Processing incoming Jira Event %s:%s', jiraEvent.webhookEvent, jiraEvent.issue_event_type_name);
+      flint.debug('Processing incoming Jira Event %s:%s', jiraEvent.webhookEvent, jiraEvent.issue_event_type_name);
       jiraEventHandler.processJiraEvent(jiraEvent, flint);
     }
   } catch (e) {
