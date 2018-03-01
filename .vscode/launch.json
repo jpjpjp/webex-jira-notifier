@@ -4,13 +4,30 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
-
         {
+            "name": "Launch Server",
             "type": "node",
             "request": "launch",
-            "name": "Launch Program",
- //           "program": "${workspaceFolder}/server.js"
+            "env": {"DEBUG": "flint"},
+            "program": "${workspaceFolder}/server.js"
+        },
+        {
+            "name": "Launch Test",
+            "type": "node",
+            "request": "launch",
+            "env": {"name":"DEBUG", "value":"flint"},
             "program": "${workspaceFolder}/test-jira-event-handler.js"
-        }
+        },
+        {
+            "name": "Heroku",
+            "type": "node",
+            "request": "attach",
+            "address": "localhost",
+            "port": 9229,
+            "protocol": "inspector",
+            "localRoot": "${workspaceFolder}",
+            "remoteRoot": "/app"
+        },        
+            
     ]
 }
