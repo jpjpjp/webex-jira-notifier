@@ -6,7 +6,7 @@
 
 //Determine which event we have.  If its one we care about see if it belongs
 // to someone in a room with our bot
-exports.processJiraEvent = function (jiraEvent, flint, callback=null) {
+exports.processJiraEvent = function (jiraEvent, flint, emailOrg, callback=null) {
   //logJiraEvent(jiraEvent);
   try {
     let toNotifyList = []
@@ -17,7 +17,7 @@ exports.processJiraEvent = function (jiraEvent, flint, callback=null) {
       notifyPeople(flint, jiraEvent, toNotifyList,  // extract mentions
         jiraEvent.comment.author.displayName,
         ' mentioned you in the Jira ', '', '',
-        jiraEvent.comment.body, callback);
+        jiraEvent.comment.body, emailOrg, callback);
     } else if ((jiraEvent.webhookEvent === 'jira:issue_updated') &&
               (jiraEvent.issue_event_type_name === 'issue_updated') || 
               (jiraEvent.issue_event_type_name === 'issue_assigned')) {
@@ -29,7 +29,7 @@ exports.processJiraEvent = function (jiraEvent, flint, callback=null) {
           toNotifyList.push(item.to);
           notifyPeople(flint, jiraEvent, toNotifyList, jiraEvent.user.displayName, //single user
             ' assigned existing Jira ', ' to you.', 'Description:',
-            jiraEvent.issue.fields.description, callback);
+            jiraEvent.issue.fields.description, emailOrg, callback);
         } else if (item.field === 'description') {
           // If data was added TO the description See if the user was mentioned
           if (item.toString) {
@@ -37,7 +37,7 @@ exports.processJiraEvent = function (jiraEvent, flint, callback=null) {
             notifyPeople(flint, jiraEvent, toNotifyList,  // extract mentions
               jiraEvent.user.displayName,
               ' updated the description of Jira ', ' to you.',
-              'Description:', item.toString, callback);  
+              'Description:', item.toString, emailOrg, callback);  
           } else {
             flint.debug('Ignoring delete only update to Description for Jira Event:' + jiraEvent.webhookEvent);
             if (callback) {return(callback(null));}
@@ -53,7 +53,8 @@ exports.processJiraEvent = function (jiraEvent, flint, callback=null) {
         notifyPeople(flint, jiraEvent, toNotifyList,  //one name
           jiraEvent.user.displayName,
           ' created a Jira ', ' and assigned it to you.',
-          'Description:', jiraEvent.issue.fields.description, callback);
+          'Description:', jiraEvent.issue.fields.description, 
+          emailOrg, callback);
       }
       if (jiraEvent.issue.fields.description) {
         // See if the user was assigned to this existing ticket
@@ -61,7 +62,8 @@ exports.processJiraEvent = function (jiraEvent, flint, callback=null) {
         notifyPeople(flint, jiraEvent, toNotifyList,  // extract mentions
           jiraEvent.user.displayName,
           ' mentioned you in a new Jira ', '',
-          'Description:', jiraEvent.issue.fields.description, callback);
+          'Description:', jiraEvent.issue.fields.description, 
+          emailOrg, callback);
       }
     } else if (jiraEvent.webhookEvent === 'jira:issue_deleted') {
       // Someone deleted a ticket that was assigned to the user
@@ -69,7 +71,8 @@ exports.processJiraEvent = function (jiraEvent, flint, callback=null) {
       notifyPeople(flint, jiraEvent, toNotifyList,  //one name
         jiraEvent.user.displayName,
         ' deleted a Jira ', ' that was assigned to you.',
-        'Description:', jiraEvent.issue.fields.description, callback);
+        'Description:', jiraEvent.issue.fields.description, 
+        emailOrg, callback);
     } else {
       flint.debug('Ignoring Jira Event %s:%s', jiraEvent.webhookEvent, jiraEvent.issue_event_type_name);
       if (callback) {return(callback(null));}
@@ -82,24 +85,14 @@ exports.processJiraEvent = function (jiraEvent, flint, callback=null) {
 };
 
 // Check the event against our users.  If we get a hit, send a spark message
-function notifyPeople(flint, jiraEvent, searchValue, author, eventName, action, elementName, elementValue, callback) {
+function notifyPeople(flint, jiraEvent, searchValue, author, eventName, action, elementName, elementValue, emailOrg, callback) {
   if (!searchValue.length) {
     if (callback) {return(callback(null, null));}
     return flint.debug('No one to notify for Jira Event:' + jiraEvent.webhookEvent)
   }
   searchValue.forEach(function(user) {
-    // Hack for Mike Cervantes, John Dyer,Kris Boone
-    // TODO -- make this configurable
-    if (user === 'mcervantes') {
-      email = 'miccerva@cisco.com';
-    } else if (user === 'jdyer') {
-      email = 'johndye@cisco.com';
-    } else if (user === 'kboone') {
-      email = 'krboone@cisco.com';
-    } else {
-      email = user + '@cisco.com';
-    }
-    bot = flint.bots.find(function(bot) {return bot.isDirectTo == email});
+    let email = user + '@' + emailOrg;
+    let bot = flint.bots.find(function(bot) {return bot.isDirectTo == email});
     if (bot) {
       let theBot = bot;
       theBot.recall('user_config')
