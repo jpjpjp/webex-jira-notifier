@@ -25,6 +25,7 @@ jspm_packages
 .node_repl_history
 
 # Config
+.env
 config.json
 mongo.json
 config-prodbot.json

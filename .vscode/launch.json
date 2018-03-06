@@ -9,6 +9,7 @@
             "type": "node",
             "request": "launch",
             "env": {"DEBUG": "flint"},
+            "protocol": "inspector",
             "program": "${workspaceFolder}/server.js"
         },
         {
