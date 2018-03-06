@@ -58,11 +58,13 @@ Flint.prototype.debug = function(message) {
   // console.log(message);
 };
 // Build the list of "bots" that we want our test suite to run against
+// The current set assumes all users work for ciso
 flint = new Flint();
 flint.bots.push(new Bot('jshipher@cisco.com'));
 flint.bots.push(new Bot('raschiff@cisco.com'));
-flint.bots.push(new Bot('krboone@cisco.com'));
+flint.bots.push(new Bot('kboone@cisco.com'));
 flint.bots.push(new Bot('lizlau@cisco.com'));
+let emailOrg = 'cisco.com'
 
 
 // Build the list of cannonical test objects.
@@ -170,7 +172,7 @@ for (var i = 0, len = testCases.length; i < len; i++) {
   test = testCases[i];
   //var jiraEvent = require(test.file);
   var jiraEvent = JSON.parse(fs.readFileSync(test.file, "utf8"))
-  jiraEventHandler.processJiraEvent(jiraEvent, flint, checkTestResult(flint, test, i+1));
+  jiraEventHandler.processJiraEvent(jiraEvent, flint, emailOrg, checkTestResult(flint, test, i+1));
 }
 
 function checkTestResult(flint, test, testNum) {

@@ -1,5 +1,5 @@
 {
-  "name": "cisco-jira-notification-bot",
+  "name": "jira-notification-bot",
   "version": "1.0.0",
   "description": "Bot for notifying a user when they are mentioned in or assigned to a Cisco jira ticket",
   "main": "server.js",
@@ -17,6 +17,7 @@
   "license": "ISC",
   "dependencies": {
     "body-parser": "^1.15.2",
+    "dotenv": "^5.0.1",
     "express": "^4.14.0",
     "mongodb": "^2.2.26",
     "node-flint": "^4.5.3"

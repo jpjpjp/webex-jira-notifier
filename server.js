@@ -1,5 +1,6 @@
 /*
-Heavily based off Nick Marus' node-flint framework helloworld example: https://github.com/nmarus/flint
+Cisco Spark Bot to notify users when they are mentioned in a
+Jira ticket and/or if it is assigned to them.
 */
 /*jshint esversion: 6 */  // Help out our linter
 
@@ -9,19 +10,29 @@ var express = require('express');
 var bodyParser = require('body-parser');
 var app = express();
 
-// Set the config vars for the environment we are running in
-var config = {};
-if ((process.env.WEBHOOK) && (process.env.TOKEN)) {
-  config.webhookUrl = process.env.WEBHOOK;
-  config.token = process.env.TOKEN;
+// When running locally read environment variables from a .env file
+require('dotenv').config();
+
+// Only allow users for our email organization user the bot
+let emailOrg = '';
+if (process.env.EMAIL_ORG) {
+  emailOrg = process.env.EMAIL_ORG;
 } else {
-  // sets config and the mongo DB vars for dev instances.
-  config = require("./config.json");
-}
-if (process.env.PORT) {
-  config.port = process.env.PORT;
+  console.error('Cannot read required environment varialbe EMAIL_ORG');
+  return;
 }
 
+
+// Set the config vars for the environment we are running in
+var config = {};
+if ((process.env.WEBHOOK) && (process.env.TOKEN) && (process.env.PORT)) {
+  config.webhookUrl = process.env.WEBHOOK;
+  config.token = process.env.TOKEN;
+  config.port = process.env.PORT;
+} else {
+  console.error('Cannot start server.  Missing required environment varialbles WEBHOOK and TOKEN');
+  return;
+}
 
 // Keep track about "stuff" I learn from the users in a hosted Mongo DB
 var mongo_client = require('mongodb').MongoClient;
@@ -32,8 +43,8 @@ if ((process.env.MONGO_USER) && (process.env.MONGO_PW)) {
   mConfig.mongoUrl = process.env.MONGO_URL;
   mConfig.mongoDb = process.env.MONGO_DB;
 } else {
-  // sets config and the mongo DB vars for dev instances.
-  mConfig = require("./mongo.json");
+  console.error('Cannot find required environent variables MONGO_USER, MONGO_PW, MONGO_URL, MONGO_DB');
+  return;
 }
 var mCollection = null;
 var mongo_collection_name ="cjnMongoCollection";
@@ -56,6 +67,15 @@ var botUserInfo = {
   trackTickets: []
 };
 
+// The admin will get extra notifications about bot usage
+var adminEmail = '';
+if (process.env.ADMIN_EMAIL) {
+  adminEmail = process.env.ADMIN_EMAIL;
+} else {
+  console.error('No ADMIN_EMAIL environment variable.  Will not notify author about bot activity')
+}
+var adminsBot = null;
+
 //app.use(bodyParser.json());
 app.use(bodyParser.json({limit: '50mb'}));
 
@@ -63,7 +83,6 @@ app.use(bodyParser.json({limit: '50mb'}));
 // Helper classes for dealing with Jira Webhook payload
 var jiraEventHandler = require("./jira-event.js");
 
-var jpsBot = null;
 // init flint
 var flint = new Flint(config);
 flint.start();
@@ -85,10 +104,10 @@ flint.on('spawn', function(bot){
      bot.exit();
      return;
   } else {
-    if (bot.isDirectTo === 'jshipher@cisco.com') {
+    if (bot.isDirectTo.toLocaleLowerCase() === adminEmail.toLocaleLowerCase()) {
       // Too chatty on Heroku
       // bot.say('**ACTIVE**');
-      jpsBot = bot;
+      adminsBot = bot;
     } else {
       flint.debug(bot.isDirectTo + ' is in a space with TropoJiraNotifier Bot');
     }
@@ -106,7 +125,7 @@ flint.on('spawn', function(bot){
             if (err) {return console.log("Can't add new user "+bot.isDirectTo+" to db:" + err.message);}
           });
           postInstructions(bot, /*status_only=*/false, /*instructions_only=*/true);
-          updateJp(bot.isDirectTo + ' created a space with TropoJiraNotifier Bot');
+          updateAdmin(bot.isDirectTo + ' created a space with TropoJiraNotifier Bot');
         }
         // Set the user specific configuration in this just spwaned instance of the  bot
         flint.debug('Setting these user configurations in the bot object');
@@ -120,12 +139,12 @@ flint.on('spawn', function(bot){
   }
 });
 
-function updateJp(message, listAll=false) {
+function updateAdmin(message, listAll=false) {
   try {
-    jpsBot.say(message);
+    adminsBot.say(message);
     if (listAll) {
       flint.bots.forEach(function(bot) {
-        jpsBot.say({'markdown': "* " + bot.isDirectTo});
+        adminsBot.say({'markdown': "* " + bot.isDirectTo});
       });
     }
   } catch (e) {
@@ -175,45 +194,6 @@ flint.hears(status_words, function(bot, trigger) {
   flint.debug('Processing Status Request for ' + bot.isDirectTo);
   postInstructions(bot, /*status_only=*/true);
   responded = true;
-});
-
-
-var hello_words= /^\/?(hello|hi|hey there|hiya)( |.|$)/i;
-flint.hears(hello_words, function(bot, trigger) {
-  console.log("hello fired");
-  bot.say('%s, you said hello to me!', trigger.personDisplayName);
-  postInstructions(bot);
-  responded = true;
-});
-
-/* On mention with command, using other trigger data, can use lite markdown formatting
-ex "@botname /whoami"
-*/
-flint.hears('/whoami', function(bot, trigger) {
-  console.log("/whoami fired");
-  //the "trigger" parameter gives you access to data about the user who entered the command
-  let roomId = "*" + trigger.roomId + "*";
-  let roomTitle = "**" + trigger.roomTitle + "**";
-  let personEmail = trigger.personEmail;
-  let personDisplayName = trigger.personDisplayName;
-  let outputString = `${personDisplayName} here is some of your information: \n\n\n **Room:** you are in "${roomTitle}" \n\n\n **Room id:** ${roomId} \n\n\n **Email:** your email on file is *${personEmail}*`;
-  bot.say("markdown", outputString);
-  responded = true;
-});
-
-/* On mention with command arguments
-ex User enters @botname /echo phrase, the bot will take the arguments and echo them back
-*/
-flint.hears('/echo', function(bot, trigger) {
-  console.log("/echo fired");
-  let phrase = trigger.args.slice(1).join(" ");
-  let outputString = `Ok, I'll say it: "${phrase}"`;
-  bot.say(outputString);
-  responded = true;
-});
-
-flint.hears('/roomid', function(bot, trigger) {
-  bot.say('This is your room ID', trigger.roomId);
 });
 
 var exit_words = /^\/?(exit|goodbye|mute|leave|shut( |-)?up)( |.|$)/i;
@@ -268,8 +248,8 @@ function setAskedExit(bot, mCollection, exitStatus) {
 }
 
 
-flint.hears('/showjptheusers', function(bot, trigger) {
-  updateJp('The following people are using me:', true);
+flint.hears('/showadmintheusers', function(bot, trigger) {
+  updateAdmin('The following people are using me:', true);
   responded = true;
 });
 
@@ -319,7 +299,7 @@ app.post('/jira', function (req, res) {
     jiraEvent = req.body;
     if (typeof jiraEvent.webhookEvent !== 'undefined') {
       flint.debug('Processing incoming Jira Event %s:%s', jiraEvent.webhookEvent, jiraEvent.issue_event_type_name);
-      jiraEventHandler.processJiraEvent(jiraEvent, flint);
+      jiraEventHandler.processJiraEvent(jiraEvent, flint, emailOrg);
     }
   } catch (e) {
     console.error('Error processing Jira Event Webhook:' + e);
