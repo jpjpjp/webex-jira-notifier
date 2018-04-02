@@ -35,30 +35,33 @@ if ((process.env.WEBHOOK) && (process.env.TOKEN) && (process.env.PORT)) {
 }
 
 // Keep track about "stuff" I learn from the users in a hosted Mongo DB
-var mongo_client = require('mongodb').MongoClient;
-var mConfig = {};
-if ((process.env.MONGO_USER) && (process.env.MONGO_PW)) {
-  mConfig.mongoUser = process.env.MONGO_USER;
-  mConfig.mongoPass = process.env.MONGO_PW;
-  mConfig.mongoUrl = process.env.MONGO_URL;
-  mConfig.mongoDb = process.env.MONGO_DB;
-} else {
-  console.error('Cannot find required environent variables MONGO_USER, MONGO_PW, MONGO_URL, MONGO_DB');
-  return;
-}
 var mCollection = null;
-var mongo_collection_name ="cjnMongoCollection";
-var mongoUri = 'mongodb://'+mConfig.mongoUser+':'+mConfig.mongoPass+'@'+mConfig.mongoUrl+mConfig.mongoDb+'?ssl=true&replicaSet=Cluster0-shard-0&authSource=admin';
+// TODO: Have a different env for offline mode vs. emulator mode
+if (!process.env.SPARK_API_URL) {
+  var mongo_client = require('mongodb').MongoClient;
+  var mConfig = {};
+  if ((process.env.MONGO_USER) && (process.env.MONGO_PW)) {
+    mConfig.mongoUser = process.env.MONGO_USER;
+    mConfig.mongoPass = process.env.MONGO_PW;
+    mConfig.mongoUrl = process.env.MONGO_URL;
+    mConfig.mongoDb = process.env.MONGO_DB;
+  } else {
+    console.error('Cannot find required environent variables MONGO_USER, MONGO_PW, MONGO_URL, MONGO_DB');
+    return;
+  }
+  var mongo_collection_name ="cjnMongoCollection";
+  var mongoUri = 'mongodb://'+mConfig.mongoUser+':'+mConfig.mongoPass+'@'+mConfig.mongoUrl+mConfig.mongoDb+'?ssl=true&replicaSet=Cluster0-shard-0&authSource=admin';
 
-mongo_client.connect(mongoUri, function(err, db) {
-  if (err) {return console.log('Error connecting to Mongo '+ err.message);}
-  db.collection(mongo_collection_name, function(err, collection) {
-    if (err) {return console.log('Error getting Mongo collection  '+ err.message);}
-    mCollection = collection;
-    mongo_client_ready = true;
-    flint.debug('Database connection for persistent storage is ready.');
+  mongo_client.connect(mongoUri, function(err, db) {
+    if (err) {return console.log('Error connecting to Mongo '+ err.message);}
+    db.collection(mongo_collection_name, function(err, collection) {
+      if (err) {return console.log('Error getting Mongo collection  '+ err.message);}
+      mCollection = collection;
+      mongo_client_ready = true;
+      flint.debug('Database connection for persistent storage is ready.');
+    });
   });
-});
+}
 
 // Keep track about "stuff" I learn from the users in a Mongo DB and in the bots memory store
 var botUserInfo = {
@@ -133,7 +136,14 @@ flint.on('spawn', function(bot){
         bot.store('user_config', newUser);
       });
     } else {
-      console.error("Can't access persistent data so many not have correct settings for user " + bot.isDirectTo);
+      if (process.env.SPARK_API_URL) {
+        // If we are in emulator mode just use memory store
+        postInstructions(bot, /*status_only=*/false, /*instructions_only=*/true);
+        updateAdmin(bot.isDirectTo + ' created a space with TropoJiraNotifier Bot');
+        bot.store('user_config', newUser);
+      } else {
+        console.error("Can't access persistent data so many not have correct settings for user " + bot.isDirectTo);
+      }
     }
     return;
   }
@@ -155,7 +165,7 @@ function updateAdmin(message, listAll=false) {
 
 function postInstructions(bot, status_only=false, instructions_only=false) {
   if (!status_only) {
-  bot.say("I will look for Jira tickets that are assigned to, or that mention " +
+    bot.say("I will look for Jira tickets that are assigned to, or that mention " +
         bot.isDirectTo + " and notify you so you can check out the ticket immediately." +
         "\n\nIf you get tired of this service please type the command **shut up** to get me to stop. " +
         'After that you can leave this room.' +
@@ -249,12 +259,14 @@ function setAskedExit(bot, mCollection, exitStatus) {
 
 
 flint.hears('/showadmintheusers', function(bot, trigger) {
+  flint.debug('Processing /showadmintheusers Request for ' + bot.isDirectTo);
   updateAdmin('The following people are using me:', true);
   responded = true;
 });
 
 var help_words = /^\/?help/i;
 flint.hears(help_words, function(bot, trigger) {
+  flint.debug('Processing help Request for ' + bot.isDirectTo);
   postInstructions(bot);
   responded = true;
 });
@@ -272,7 +284,8 @@ flint.hears(/(^| )jpsNodeBot|.*( |.|$)/i, function(bot, trigger) {
     bot.say('Don\'t know how to respond to "' + text +'"');
   }
   responded = false;
-  console.log("Got a message to my bot:" + text);
+  flint.debug("Got a message to my bot:" + text);
+
   //console.log(trigger);
 });
 
