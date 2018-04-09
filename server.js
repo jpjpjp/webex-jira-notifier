@@ -75,7 +75,7 @@ var adminEmail = '';
 if (process.env.ADMIN_EMAIL) {
   adminEmail = process.env.ADMIN_EMAIL;
 } else {
-  console.error('No ADMIN_EMAIL environment variable.  Will not notify author about bot activity')
+  console.error('No ADMIN_EMAIL environment variable.  Will not notify author about bot activity');
 }
 var adminsBot = null;
 
@@ -103,9 +103,9 @@ flint.on('spawn', function(bot){
 
   // Say hello to the room
   if(bot.isGroup) {
-     bot.say("Hi! Sorry, I only work in one on one rooms at the moment.  Goodbye.");
-     bot.exit();
-     return;
+    bot.say("Hi! Sorry, I only work in one on one rooms at the moment.  Goodbye.");
+    bot.exit();
+    return;
   } else {
     if (bot.isDirectTo.toLocaleLowerCase() === adminEmail.toLocaleLowerCase()) {
       // Too chatty on Heroku
@@ -124,7 +124,7 @@ flint.on('spawn', function(bot){
         } else {
           flint.debug("This is a new room.  Storing data about this user");
           newUser._id = bot.isDirectTo;
-          mCollection.insert(newUser, {w:1}, function(err, result) {
+          mCollection.insert(newUser, {w:1}, function(err) {
             if (err) {return console.log("Can't add new user "+bot.isDirectTo+" to db:" + err.message);}
           });
           postInstructions(bot, /*status_only=*/false, /*instructions_only=*/true);
@@ -153,9 +153,12 @@ function updateAdmin(message, listAll=false) {
   try {
     adminsBot.say(message);
     if (listAll) {
+      let count = 0;
       flint.bots.forEach(function(bot) {
         adminsBot.say({'markdown': "* " + bot.isDirectTo});
+        count += 1;
       });
+      adminsBot.say(`For a total of ${count} users.`);
     }
   } catch (e) {
     flint.debug('Unable to spark JP the news ' + message);
@@ -166,11 +169,13 @@ function updateAdmin(message, listAll=false) {
 function postInstructions(bot, status_only=false, instructions_only=false) {
   if (!status_only) {
     bot.say("I will look for Jira tickets that are assigned to, or that mention " +
-        bot.isDirectTo + " and notify you so you can check out the ticket immediately." +
+        bot.isDirectTo + " and notify you so you can check out the ticket immediately.  " +
+        "I'll also notify you of changes to any tickets you are watching." +
         "\n\nIf you get tired of this service please type the command **shut up** to get me to stop. " +
-        'After that you can leave this room.' +
-        "\n\nIf you ever want me to start notifying you again, restart a room with me and type **come back**." +
-        "\n\nIf you aren't sure if I'm giving you notifications, just type **status**");
+        'After that you can leave this room.  ' +
+        "If you ever want me to start notifying you again, restart a room with me and type **come back**." +
+        "\n\nIf you aren't sure if I'm giving you notifications, just type **status**" +
+        "\n\nQuestions or feedback?   Join the Ask JiraNotification Bot space here: https://eurl.io/#Hy4f7zOjG");
   }
   if (!instructions_only) {
     bot.recall('user_config')
@@ -200,14 +205,14 @@ ex User enters @botname /hello, the bot will write back
 */
 var responded = false;
 var status_words = /^\/?(status|are you (on|working))( |.|$)/i;
-flint.hears(status_words, function(bot, trigger) {
+flint.hears(status_words, function(bot/*, trigger*/) {
   flint.debug('Processing Status Request for ' + bot.isDirectTo);
   postInstructions(bot, /*status_only=*/true);
   responded = true;
 });
 
 var exit_words = /^\/?(exit|goodbye|mute|leave|shut( |-)?up)( |.|$)/i;
-flint.hears(exit_words, function(bot, trigger) {
+flint.hears(exit_words, function(bot/*, trigger*/) {
   flint.debug('Processing Exit Request for ' + bot.isDirectTo);
   setAskedExit(bot, mCollection, true);
   updateJp(bot.isDirectTo + ' asked me to turn off notifications');
@@ -215,7 +220,7 @@ flint.hears(exit_words, function(bot, trigger) {
 });
 
 var return_words = /^\/?(talk to me|return|un( |-)?mute|come( |-)?back)( |.|$)/i;
-flint.hears(return_words, function(bot, trigger) {
+flint.hears(return_words, function(bot/*, trigger*/) {
   flint.debug('Processing Return Request for ' + bot.isDirectTo);
   setAskedExit(bot, mCollection, false);
   updateJp(bot.isDirectTo + ' asked me to start notifying them again');
@@ -232,7 +237,7 @@ function setAskedExit(bot, mCollection, exitStatus) {
         return bot.say('Notifications are already **enabled**.');
       }
       if (mCollection) {
-        mCollection.update({'_id':bot.isDirectTo}, {$set:{'askedExit':exitStatus}}, {w:1}, function(err, result) {
+        mCollection.update({'_id':bot.isDirectTo}, {$set:{'askedExit':exitStatus}}, {w:1}, function(err/*, result*/) {
           if (err) {
             console.error("Can't communicate with db:" + err.message);
             return bot.say("Hmmn. I seem to have a database problem.   Please ask again later.");
@@ -258,14 +263,14 @@ function setAskedExit(bot, mCollection, exitStatus) {
 }
 
 
-flint.hears('/showadmintheusers', function(bot, trigger) {
+flint.hears('/showadmintheusers', function(bot/*, trigger*/) {
   flint.debug('Processing /showadmintheusers Request for ' + bot.isDirectTo);
   updateAdmin('The following people are using me:', true);
   responded = true;
 });
 
 var help_words = /^\/?help/i;
-flint.hears(help_words, function(bot, trigger) {
+flint.hears(help_words, function(bot/*, trigger*/) {
   flint.debug('Processing help Request for ' + bot.isDirectTo);
   postInstructions(bot);
   responded = true;
@@ -279,7 +284,6 @@ flint.hears(/(^| )jpsNodeBot|.*( |.|$)/i, function(bot, trigger) {
 
   //@ mention removed before further processing for group conversations. @symbol not passed in message
   let text = trigger.text;
-  let request = text.replace("jpsNodeBot ",'');
   if (!responded) {
     bot.say('Don\'t know how to respond to "' + text +'"');
   }
@@ -295,7 +299,7 @@ flint.hears(/(^| )jpsNodeBot|.*( |.|$)/i, function(bot, trigger) {
 
 // Spark webbhook
 app.post('/', webhook(flint));
-  var server = app.listen(config.port, function () {
+var server = app.listen(config.port, function () {
   flint.debug('Flint listening on port %s', config.port);
 });
 
