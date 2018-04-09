@@ -1,0 +1,485 @@
+{
+    "timestamp": 1522969970738,
+    "webhookEvent": "jira:issue_updated",
+    "issue_event_type_name": "issue_updated",
+    "user": {
+        "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/user?username=charlin",
+        "name": "charlin",
+        "key": "charlin",
+        "emailAddress": "charlin@cisco.com",
+        "avatarUrls": {
+            "48x48": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?avatarId=10122",
+            "24x24": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=small&avatarId=10122",
+            "16x16": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=xsmall&avatarId=10122",
+            "32x32": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=medium&avatarId=10122"
+        },
+        "displayName": "Charles Lin",
+        "active": true,
+        "timeZone": "America/Los_Angeles"
+    },
+    "issue": {
+        "id": "334091",
+        "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/issue/334091",
+        "key": "SPARK-7645",
+        "fields": {
+            "fixVersions": [],
+            "customfield_10473": {
+                "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/customFieldOption/10187",
+                "value": "Green",
+                "id": "10187"
+            },
+            "customfield_11443": [
+                {
+                    "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/user?username=alysrobi",
+                    "name": "alysrobi",
+                    "key": "alysrobi",
+                    "emailAddress": "alysrobi@cisco.com",
+                    "avatarUrls": {
+                        "48x48": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?avatarId=10122",
+                        "24x24": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=small&avatarId=10122",
+                        "16x16": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=xsmall&avatarId=10122",
+                        "32x32": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=medium&avatarId=10122"
+                    },
+                    "displayName": "Alyssa Robinson",
+                    "active": true,
+                    "timeZone": "Europe/London"
+                }
+            ],
+            "resolution": null,
+            "customfield_11201": null,
+            "customfield_11442": null,
+            "customfield_11720": null,
+            "customfield_10500": {
+                "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/customFieldOption/10501",
+                "value": "Clear",
+                "id": "10501"
+            },
+            "customfield_10469": null,
+            "customfield_10505": null,
+            "customfield_10506": null,
+            "customfield_11717": null,
+            "customfield_10507": null,
+            "customfield_10508": null,
+            "customfield_11718": null,
+            "lastViewed": "2018-04-06T00:10:49.676+0100",
+            "priority": {
+                "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/priority/8",
+                "iconUrl": "https://jira-eng-gpk2.cisco.com/jira/images/icons/priority_major.gif",
+                "name": "P3",
+                "id": "8"
+            },
+            "customfield_10100": null,
+            "customfield_10102": "2|w003ko:",
+            "customfield_10466": [
+                {
+                    "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/customFieldOption/10132",
+                    "value": "All (Browser independent)",
+                    "id": "10132"
+                }
+            ],
+            "labels": [
+                "ios"
+            ],
+            "customfield_11425": null,
+            "customfield_11700": null,
+            "customfield_11424": null,
+            "customfield_11427": null,
+            "customfield_11702": null,
+            "customfield_11426": null,
+            "customfield_11701": null,
+            "customfield_11307": null,
+            "customfield_11704": null,
+            "aggregatetimeoriginalestimate": null,
+            "timeestimate": null,
+            "versions": [],
+            "customfield_11428": null,
+            "customfield_11703": null,
+            "customfield_11706": null,
+            "customfield_11705": null,
+            "customfield_11708": null,
+            "customfield_11707": null,
+            "issuelinks": [],
+            "customfield_11709": null,
+            "assignee": {
+                "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/user?username=manjit",
+                "name": "manjit",
+                "key": "manjit",
+                "emailAddress": "manjit@cisco.com",
+                "avatarUrls": {
+                    "48x48": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?avatarId=10122",
+                    "24x24": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=small&avatarId=10122",
+                    "16x16": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=xsmall&avatarId=10122",
+                    "32x32": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=medium&avatarId=10122"
+                },
+                "displayName": "Manjit Grewal",
+                "active": true,
+                "timeZone": "America/Los_Angeles"
+            },
+            "status": {
+                "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/status/11300",
+                "description": "The issue is open and ready for the assignee to start work on it.",
+                "iconUrl": "https://jira-eng-gpk2.cisco.com/jira/images/icons/statuses/open.png",
+                "name": "New",
+                "id": "11300",
+                "statusCategory": {
+                    "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/statuscategory/2",
+                    "id": 2,
+                    "key": "new",
+                    "colorName": "blue-gray",
+                    "name": "To Do"
+                }
+            },
+            "components": [
+                {
+                    "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/component/14474",
+                    "id": "14474",
+                    "name": "Client: iOS"
+                }
+            ],
+            "customfield_11421": null,
+            "customfield_11300": null,
+            "customfield_11420": {
+                "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/customFieldOption/11850",
+                "value": "No",
+                "id": "11850"
+            },
+            "customfield_11423": null,
+            "customfield_11422": null,
+            "customfield_11418": null,
+            "aggregatetimeestimate": null,
+            "customfield_11419": null,
+            "creator": {
+                "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/user?username=charlin",
+                "name": "charlin",
+                "key": "charlin",
+                "emailAddress": "charlin@cisco.com",
+                "avatarUrls": {
+                    "48x48": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?avatarId=10122",
+                    "24x24": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=small&avatarId=10122",
+                    "16x16": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=xsmall&avatarId=10122",
+                    "32x32": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=medium&avatarId=10122"
+                },
+                "displayName": "Charles Lin",
+                "active": true,
+                "timeZone": "America/Los_Angeles"
+            },
+            "subtasks": [],
+            "reporter": {
+                "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/user?username=charlin",
+                "name": "charlin",
+                "key": "charlin",
+                "emailAddress": "charlin@cisco.com",
+                "avatarUrls": {
+                    "48x48": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?avatarId=10122",
+                    "24x24": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=small&avatarId=10122",
+                    "16x16": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=xsmall&avatarId=10122",
+                    "32x32": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=medium&avatarId=10122"
+                },
+                "displayName": "Charles Lin",
+                "active": true,
+                "timeZone": "America/Los_Angeles"
+            },
+            "aggregateprogress": {
+                "progress": 0,
+                "total": 0
+            },
+            "customfield_10200": null,
+            "customfield_11405": null,
+            "customfield_10712": {
+                "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/customFieldOption/11528",
+                "value": "Solution Test",
+                "id": "11528"
+            },
+            "customfield_11404": null,
+            "customfield_10713": null,
+            "progress": {
+                "progress": 0,
+                "total": 0
+            },
+            "votes": {
+                "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/issue/SPARK-7645/votes",
+                "votes": 0,
+                "hasVoted": false
+            },
+            "worklog": {
+                "startAt": 0,
+                "maxResults": 20,
+                "total": 0,
+                "worklogs": []
+            },
+            "issuetype": {
+                "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/issuetype/1",
+                "id": "1",
+                "description": "A problem in an existing feature.",
+                "iconUrl": "https://jira-eng-gpk2.cisco.com/jira/secure/viewavatar?size=xsmall&avatarId=10503&avatarType=issuetype",
+                "name": "Bug",
+                "subtask": false,
+                "avatarId": 10503
+            },
+            "timespent": null,
+            "project": {
+                "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/project/13306",
+                "id": "13306",
+                "key": "SPARK",
+                "name": "Spark",
+                "avatarUrls": {
+                    "48x48": "https://jira-eng-gpk2.cisco.com/jira/secure/projectavatar?pid=13306&avatarId=14333",
+                    "24x24": "https://jira-eng-gpk2.cisco.com/jira/secure/projectavatar?size=small&pid=13306&avatarId=14333",
+                    "16x16": "https://jira-eng-gpk2.cisco.com/jira/secure/projectavatar?size=xsmall&pid=13306&avatarId=14333",
+                    "32x32": "https://jira-eng-gpk2.cisco.com/jira/secure/projectavatar?size=medium&pid=13306&avatarId=14333"
+                },
+                "projectCategory": {
+                    "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/projectCategory/10000",
+                    "id": "10000",
+                    "description": "",
+                    "name": "SPARK"
+                }
+            },
+            "aggregatetimespent": null,
+            "customfield_11401": null,
+            "customfield_11400": null,
+            "customfield_10302": null,
+            "customfield_10303": null,
+            "customfield_10304": null,
+            "resolutiondate": null,
+            "workratio": -1,
+            "watches": {
+                "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/issue/SPARK-7329/watchers",
+                "watchCount": 4,
+                "isWatching": true
+            },
+            "created": "2018-04-06T00:02:38.900+0100",
+            "customfield_10300": null,
+            "customfield_10301": null,
+            "customfield_11744": null,
+            "customfield_11743": null,
+            "customfield_11746": null,
+            "customfield_11745": null,
+            "customfield_11747": null,
+            "updated": "2018-04-06T00:12:50.727+0100",
+            "timeoriginalestimate": null,
+            "description": "ios spark - roster list should be closed when user switch back to in-meeting view\r\n\r\ncurrently if you open and view the roster list, then tap the small PIP (which shows the in-meeting content) to return to the in-meeting view, the roster list is not considered to be 'closed'.   \r\n\r\nA consequence of that is user will have trouble getting back to the app main UI/main option menu when user wants to submit feedback.   If user now wants to submit feedback, by tapping upper left corner 'minimize' button, instead of seeing the spark main UI which shows options of \"Message\", \"Teams\", \"Call\", \"Meetings\", and \"Me\", you are back to seeing the opened roster list instead.\r\n\r\nNow, let's say user even decides to try to find/get to the Me option UI, by tapping the 'Close' button on upper left corner of the roster list, when roster list is closed, instead of showing user the main UI with the spark app's main menu options at bottom, it goes back to showing the in-meeting content full screen.   So user gets the impression that it is impossible to find/get to the 'Me' > 'Submit Feedback' UI\r\n\r\nsee video\r\n\r\nAs a comparison, Android does not show this particular behavior, so it is always easy for user to navigate and find the Me > Submit Feedback UI\r\n",
+            "customfield_11100": null,
+            "customfield_11101": null,
+            "customfield_11740": null,
+            "customfield_11102": null,
+            "customfield_11103": null,
+            "customfield_11742": null,
+            "timetracking": {},
+            "customfield_11104": null,
+            "customfield_11741": null,
+            "customfield_11458": null,
+            "customfield_11733": null,
+            "customfield_11457": null,
+            "customfield_10006": null,
+            "customfield_11732": null,
+            "customfield_10007": null,
+            "customfield_11735": null,
+            "customfield_11734": null,
+            "attachment": [
+                {
+                    "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/attachment/160784",
+                    "id": "160784",
+                    "filename": "IMG_1082.m4v",
+                    "author": {
+                        "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/user?username=charlin",
+                        "name": "charlin",
+                        "key": "charlin",
+                        "emailAddress": "charlin@cisco.com",
+                        "avatarUrls": {
+                            "48x48": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?avatarId=10122",
+                            "24x24": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=small&avatarId=10122",
+                            "16x16": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=xsmall&avatarId=10122",
+                            "32x32": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=medium&avatarId=10122"
+                        },
+                        "displayName": "Charles Lin",
+                        "active": true,
+                        "timeZone": "America/Los_Angeles"
+                    },
+                    "created": "2018-04-06T00:03:00.066+0100",
+                    "size": 24556115,
+                    "mimeType": "video/x-m4v",
+                    "content": "https://jira-eng-gpk2.cisco.com/jira/secure/attachment/160784/IMG_1082.m4v"
+                },
+                {
+                    "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/attachment/160785",
+                    "id": "160785",
+                    "filename": "IMG_1083.JPG 2018-04-05 16-03-44.png",
+                    "author": {
+                        "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/user?username=charlin",
+                        "name": "charlin",
+                        "key": "charlin",
+                        "emailAddress": "charlin@cisco.com",
+                        "avatarUrls": {
+                            "48x48": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?avatarId=10122",
+                            "24x24": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=small&avatarId=10122",
+                            "16x16": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=xsmall&avatarId=10122",
+                            "32x32": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=medium&avatarId=10122"
+                        },
+                        "displayName": "Charles Lin",
+                        "active": true,
+                        "timeZone": "America/Los_Angeles"
+                    },
+                    "created": "2018-04-06T00:09:12.838+0100",
+                    "size": 1632481,
+                    "mimeType": "image/png",
+                    "content": "https://jira-eng-gpk2.cisco.com/jira/secure/attachment/160785/IMG_1083.JPG+2018-04-05+16-03-44.png",
+                    "thumbnail": "https://jira-eng-gpk2.cisco.com/jira/secure/thumbnail/160785/_thumb_160785.png"
+                },
+                {
+                    "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/attachment/160786",
+                    "id": "160786",
+                    "filename": "IMG_1084.JPG",
+                    "author": {
+                        "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/user?username=charlin",
+                        "name": "charlin",
+                        "key": "charlin",
+                        "emailAddress": "charlin@cisco.com",
+                        "avatarUrls": {
+                            "48x48": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?avatarId=10122",
+                            "24x24": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=small&avatarId=10122",
+                            "16x16": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=xsmall&avatarId=10122",
+                            "32x32": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=medium&avatarId=10122"
+                        },
+                        "displayName": "Charles Lin",
+                        "active": true,
+                        "timeZone": "America/Los_Angeles"
+                    },
+                    "created": "2018-04-06T00:09:25.345+0100",
+                    "size": 1597465,
+                    "mimeType": "image/jpeg",
+                    "content": "https://jira-eng-gpk2.cisco.com/jira/secure/attachment/160786/IMG_1084.JPG",
+                    "thumbnail": "https://jira-eng-gpk2.cisco.com/jira/secure/thumbnail/160786/_thumb_160786.png"
+                },
+                {
+                    "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/attachment/160787",
+                    "id": "160787",
+                    "filename": "IMG_1085.JPG",
+                    "author": {
+                        "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/user?username=charlin",
+                        "name": "charlin",
+                        "key": "charlin",
+                        "emailAddress": "charlin@cisco.com",
+                        "avatarUrls": {
+                            "48x48": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?avatarId=10122",
+                            "24x24": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=small&avatarId=10122",
+                            "16x16": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=xsmall&avatarId=10122",
+                            "32x32": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=medium&avatarId=10122"
+                        },
+                        "displayName": "Charles Lin",
+                        "active": true,
+                        "timeZone": "America/Los_Angeles"
+                    },
+                    "created": "2018-04-06T00:09:38.727+0100",
+                    "size": 1880036,
+                    "mimeType": "image/jpeg",
+                    "content": "https://jira-eng-gpk2.cisco.com/jira/secure/attachment/160787/IMG_1085.JPG",
+                    "thumbnail": "https://jira-eng-gpk2.cisco.com/jira/secure/thumbnail/160787/_thumb_160787.png"
+                }
+            ],
+            "customfield_11737": "no",
+            "customfield_11736": null,
+            "customfield_10803": null,
+            "customfield_11739": null,
+            "customfield_10408": {
+                "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/customFieldOption/11976",
+                "value": "S3 - Moderate",
+                "id": "11976"
+            },
+            "customfield_11738": null,
+            "summary": "ios spark - roster list should transition to 'closed' state when user switch back to in-meeting view",
+            "customfield_11450": null,
+            "customfield_11452": null,
+            "customfield_11451": null,
+            "customfield_10000": null,
+            "customfield_11454": null,
+            "customfield_10001": "FEATURES-16",
+            "customfield_11453": null,
+            "customfield_10002": "9223372036854775807",
+            "customfield_11456": {
+                "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/customFieldOption/11999",
+                "value": "Meetings: Layouts",
+                "id": "11999"
+            },
+            "customfield_11731": null,
+            "customfield_11730": null,
+            "customfield_10511": null,
+            "customfield_11722": null,
+            "customfield_11446": null,
+            "customfield_10512": null,
+            "customfield_11205": null,
+            "customfield_11721": "9223372036854775807",
+            "environment": null,
+            "customfield_11206": null,
+            "customfield_11724": null,
+            "customfield_11603": null,
+            "customfield_11207": null,
+            "customfield_11602": null,
+            "customfield_11726": null,
+            "customfield_11605": null,
+            "customfield_11725": null,
+            "customfield_11604": null,
+            "duedate": null,
+            "customfield_11728": null,
+            "customfield_11606": null,
+            "customfield_11729": null,
+            "comment": {
+                "comments": [
+                    {
+                        "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/issue/334091/comment/1482738",
+                        "id": "1482738",
+                        "author": {
+                            "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/user?username=charlin",
+                            "name": "charlin",
+                            "key": "charlin",
+                            "emailAddress": "charlin@cisco.com",
+                            "avatarUrls": {
+                                "48x48": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?avatarId=10122",
+                                "24x24": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=small&avatarId=10122",
+                                "16x16": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=xsmall&avatarId=10122",
+                                "32x32": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=medium&avatarId=10122"
+                            },
+                            "displayName": "Charles Lin",
+                            "active": true,
+                            "timeZone": "America/Los_Angeles"
+                        },
+                        "body": " !IMG_1083.JPG 2018-04-05 16-03-44.png|thumbnail! \r\n\r\n !IMG_1084.JPG|thumbnail! \r\n\r\n !IMG_1085.JPG|thumbnail! ",
+                        "updateAuthor": {
+                            "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/user?username=charlin",
+                            "name": "charlin",
+                            "key": "charlin",
+                            "emailAddress": "charlin@cisco.com",
+                            "avatarUrls": {
+                                "48x48": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?avatarId=10122",
+                                "24x24": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=small&avatarId=10122",
+                                "16x16": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=xsmall&avatarId=10122",
+                                "32x32": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=medium&avatarId=10122"
+                            },
+                            "displayName": "Charles Lin",
+                            "active": true,
+                            "timeZone": "America/Los_Angeles"
+                        },
+                        "created": "2018-04-06T00:09:42.429+0100",
+                        "updated": "2018-04-06T00:09:42.429+0100"
+                    }
+                ],
+                "maxResults": 1,
+                "total": 1,
+                "startAt": 0
+            }
+        }
+    },
+    "changelog": {
+        "id": "1485989",
+        "items": [
+            {
+                "field": "description",
+                "fieldtype": "jira",
+                "from": null,
+                "fromString": "ios spark - roster list should be closed when user switch back to in-meeting view\r\n\r\ncurrently if you open and view the roster list, then tap the small PIP (which shows the in-meeting content) to return to the in-meeting view, the roster list is not considered to be 'closed'.   A consequence of that is if user now wants to submit feedback, by tapping upper left corner 'minimize' button, instead of seeing the spark main UI which shows options of \"Message\", \"Teams\", \"Call\", \"Meetings\", and \"Me\", you are back to seeing the opened roster list instead.\r\n\r\nNow, let's say user even decides to try to find/get to the Me option UI, by tapping the 'Close' button on upper left corner of the roster list, when roster list is closed, instead of showing user the main UI with the spark app's main menu options at bottom, it goes back to showing the in-meeting content full screen.   So user gets the impression that it is impossible to find/get to the 'Me' > 'Submit Feedback' UI\r\n\r\nsee video\r\n\r\nAs a comparison, Android does not show this particular behavior, so it is always easy for user to navigate and find the Me > Submit Feedback UI\r\n",
+                "to": null,
+                "toString": "ios spark - roster list should be closed when user switch back to in-meeting view\r\n\r\ncurrently if you open and view the roster list, then tap the small PIP (which shows the in-meeting content) to return to the in-meeting view, the roster list is not considered to be 'closed'.   \r\n\r\nA consequence of that is user will have trouble getting back to the app main UI/main option menu when user wants to submit feedback.   If user now wants to submit feedback, by tapping upper left corner 'minimize' button, instead of seeing the spark main UI which shows options of \"Message\", \"Teams\", \"Call\", \"Meetings\", and \"Me\", you are back to seeing the opened roster list instead.\r\n\r\nNow, let's say user even decides to try to find/get to the Me option UI, by tapping the 'Close' button on upper left corner of the roster list, when roster list is closed, instead of showing user the main UI with the spark app's main menu options at bottom, it goes back to showing the in-meeting content full screen.   So user gets the impression that it is impossible to find/get to the 'Me' > 'Submit Feedback' UI\r\n\r\nsee video\r\n\r\nAs a comparison, Android does not show this particular behavior, so it is always easy for user to navigate and find the Me > Submit Feedback UI\r\n"
+            }
+        ]
+    }
+}

@@ -1,0 +1,635 @@
+{
+    "timestamp": 1522969922819,
+    "webhookEvent": "jira:issue_updated",
+    "issue_event_type_name": "issue_resolved",
+    "user": {
+        "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/user?username=hahsiung",
+        "name": "hahsiung",
+        "key": "hahsiung",
+        "emailAddress": "hahsiung@cisco.com",
+        "avatarUrls": {
+            "48x48": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?avatarId=10122",
+            "24x24": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=small&avatarId=10122",
+            "16x16": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=xsmall&avatarId=10122",
+            "32x32": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=medium&avatarId=10122"
+        },
+        "displayName": "Hancheng Hsiung",
+        "active": true,
+        "timeZone": "Europe/London"
+    },
+    "issue": {
+        "id": "333285",
+        "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/issue/333285",
+        "key": "TROPO-13320",
+        "fields": {
+            "customfield_10473": {
+                "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/customFieldOption/10187",
+                "value": "Green",
+                "id": "10187"
+            },
+            "fixVersions": [
+                {
+                    "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/version/19455",
+                    "id": "19455",
+                    "description": "",
+                    "name": "15.13.0",
+                    "archived": false,
+                    "released": false
+                },
+                {
+                    "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/version/19457",
+                    "id": "19457",
+                    "name": "15.12.2",
+                    "archived": false,
+                    "released": false
+                }
+            ],
+            "customfield_11443": [
+                {
+                    "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/user?username=alysrobi",
+                    "name": "alysrobi",
+                    "key": "alysrobi",
+                    "emailAddress": "alysrobi@cisco.com",
+                    "avatarUrls": {
+                        "48x48": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?avatarId=10122",
+                        "24x24": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=small&avatarId=10122",
+                        "16x16": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=xsmall&avatarId=10122",
+                        "32x32": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=medium&avatarId=10122"
+                    },
+                    "displayName": "Alyssa Robinson",
+                    "active": true,
+                    "timeZone": "Europe/London"
+                }
+            ],
+            "resolution": {
+                "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/resolution/1",
+                "id": "1",
+                "description": "A fix for this issue is checked into the tree and tested.",
+                "name": "Fixed"
+            },
+            "customfield_11201": null,
+            "customfield_11442": null,
+            "customfield_11720": null,
+            "customfield_11445": "This will prevent adding new short code numbers to a production application in latest 15.12. We have RCA and possible solutions, just need to pick one.",
+            "customfield_10500": {
+                "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/customFieldOption/10501",
+                "value": "Clear",
+                "id": "10501"
+            },
+            "customfield_11711": null,
+            "customfield_11710": null,
+            "customfield_10469": null,
+            "customfield_11713": null,
+            "customfield_11712": null,
+            "customfield_11715": null,
+            "customfield_10505": null,
+            "customfield_11714": null,
+            "customfield_10506": null,
+            "customfield_11717": null,
+            "customfield_10507": null,
+            "customfield_11716": null,
+            "customfield_10508": null,
+            "customfield_11718": null,
+            "lastViewed": "2018-04-06T00:12:02.781+0100",
+            "customfield_10100": null,
+            "priority": {
+                "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/priority/10400",
+                "iconUrl": "https://jira-eng-gpk2.cisco.com/jira/images/icons/priorities/major.svg",
+                "name": "Major",
+                "id": "10400"
+            },
+            "customfield_10102": "2|o000w0:",
+            "customfield_10466": [
+                {
+                    "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/customFieldOption/10132",
+                    "value": "All (Browser independent)",
+                    "id": "10132"
+                }
+            ],
+            "labels": [],
+            "customfield_11700": null,
+            "customfield_11425": null,
+            "customfield_11424": null,
+            "customfield_11702": null,
+            "customfield_11427": null,
+            "customfield_11701": null,
+            "customfield_11426": null,
+            "customfield_11704": null,
+            "customfield_11307": null,
+            "customfield_11429": -1,
+            "aggregatetimeoriginalestimate": null,
+            "timeestimate": null,
+            "versions": [
+                {
+                    "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/version/19452",
+                    "id": "19452",
+                    "description": "",
+                    "name": "15.12.0",
+                    "archived": false,
+                    "released": true,
+                    "releaseDate": "2018-02-12"
+                }
+            ],
+            "customfield_11703": null,
+            "customfield_11428": null,
+            "customfield_11706": null,
+            "customfield_11705": null,
+            "customfield_11708": null,
+            "issuelinks": [],
+            "customfield_11709": null,
+            "assignee": {
+                "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/user?username=hahsiung",
+                "name": "hahsiung",
+                "key": "hahsiung",
+                "emailAddress": "hahsiung@cisco.com",
+                "avatarUrls": {
+                    "48x48": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?avatarId=10122",
+                    "24x24": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=small&avatarId=10122",
+                    "16x16": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=xsmall&avatarId=10122",
+                    "32x32": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=medium&avatarId=10122"
+                },
+                "displayName": "Hancheng Hsiung",
+                "active": true,
+                "timeZone": "Europe/London"
+            },
+            "status": {
+                "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/status/5",
+                "description": "A resolution has been taken, and it is awaiting verification by reporter. From here issues are either reopened, or are closed.",
+                "iconUrl": "https://jira-eng-gpk2.cisco.com/jira/images/icons/statuses/resolved.png",
+                "name": "Resolved",
+                "id": "5",
+                "statusCategory": {
+                    "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/statuscategory/3",
+                    "id": 3,
+                    "key": "done",
+                    "colorName": "green",
+                    "name": "Done"
+                }
+            },
+            "components": [
+                {
+                    "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/component/14942",
+                    "id": "14942",
+                    "name": "CDR",
+                    "description": "Billwise, CDR generation, and tropo-pause"
+                }
+            ],
+            "customfield_11421": null,
+            "customfield_11420": {
+                "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/customFieldOption/11850",
+                "value": "No",
+                "id": "11850"
+            },
+            "customfield_11300": null,
+            "customfield_11423": null,
+            "customfield_11422": null,
+            "customfield_11418": null,
+            "aggregatetimeestimate": null,
+            "customfield_11419": null,
+            "creator": {
+                "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/user?username=jsoliman",
+                "name": "jsoliman",
+                "key": "jsoliman",
+                "emailAddress": "jsoliman@cisco.com",
+                "avatarUrls": {
+                    "48x48": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?ownerId=jsoliman&avatarId=14642",
+                    "24x24": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=small&ownerId=jsoliman&avatarId=14642",
+                    "16x16": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=xsmall&ownerId=jsoliman&avatarId=14642",
+                    "32x32": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=medium&ownerId=jsoliman&avatarId=14642"
+                },
+                "displayName": "Joanne Soliman",
+                "active": true,
+                "timeZone": "Europe/London"
+            },
+            "subtasks": [],
+            "reporter": {
+                "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/user?username=jsoliman",
+                "name": "jsoliman",
+                "key": "jsoliman",
+                "emailAddress": "jsoliman@cisco.com",
+                "avatarUrls": {
+                    "48x48": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?ownerId=jsoliman&avatarId=14642",
+                    "24x24": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=small&ownerId=jsoliman&avatarId=14642",
+                    "16x16": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=xsmall&ownerId=jsoliman&avatarId=14642",
+                    "32x32": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=medium&ownerId=jsoliman&avatarId=14642"
+                },
+                "displayName": "Joanne Soliman",
+                "active": true,
+                "timeZone": "Europe/London"
+            },
+            "aggregateprogress": {
+                "progress": 0,
+                "total": 0
+            },
+            "customfield_10200": null,
+            "customfield_11405": null,
+            "customfield_11404": null,
+            "customfield_10713": null,
+            "progress": {
+                "progress": 0,
+                "total": 0
+            },
+            "votes": {
+                "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/issue/TROPO-13320/votes",
+                "votes": 0,
+                "hasVoted": false
+            },
+            "worklog": {
+                "startAt": 0,
+                "maxResults": 20,
+                "total": 0,
+                "worklogs": []
+            },
+            "issuetype": {
+                "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/issuetype/1",
+                "id": "1",
+                "description": "A problem in an existing feature.",
+                "iconUrl": "https://jira-eng-gpk2.cisco.com/jira/secure/viewavatar?size=xsmall&avatarId=10503&avatarType=issuetype",
+                "name": "Bug",
+                "subtask": false,
+                "avatarId": 10503
+            },
+            "timespent": null,
+            "project": {
+                "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/project/13621",
+                "id": "13621",
+                "key": "TROPO",
+                "name": "Tropo",
+                "avatarUrls": {
+                    "48x48": "https://jira-eng-gpk2.cisco.com/jira/secure/projectavatar?pid=13621&avatarId=14618",
+                    "24x24": "https://jira-eng-gpk2.cisco.com/jira/secure/projectavatar?size=small&pid=13621&avatarId=14618",
+                    "16x16": "https://jira-eng-gpk2.cisco.com/jira/secure/projectavatar?size=xsmall&pid=13621&avatarId=14618",
+                    "32x32": "https://jira-eng-gpk2.cisco.com/jira/secure/projectavatar?size=medium&pid=13621&avatarId=14618"
+                },
+                "projectCategory": {
+                    "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/projectCategory/10101",
+                    "id": "10101",
+                    "description": "",
+                    "name": "Engineering"
+                }
+            },
+            "aggregatetimespent": null,
+            "customfield_11401": null,
+            "customfield_11400": null,
+            "customfield_10302": null,
+            "customfield_10303": null,
+            "customfield_10304": null,
+            "resolutiondate": "2018-04-06T00:12:02.790+0100",
+            "workratio": -1,
+            "watches": {
+                "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/issue/SPARK-7329/watchers",
+                "watchCount": 4,
+                "isWatching": true
+            },
+            "created": "2018-04-02T22:40:27.070+0100",
+            "customfield_10300": null,
+            "customfield_10301": null,
+            "customfield_11744": null,
+            "customfield_11743": null,
+            "customfield_11746": null,
+            "customfield_11745": null,
+            "customfield_11747": null,
+            "updated": "2018-04-06T00:12:02.814+0100",
+            "timeoriginalestimate": null,
+            "description": "Hi Mike and Wing,\r\n\r\n I was running some regression tests today on QA CCS2 system (15.12.04 \"buildDate\": \"2018-02-22 16:27:36\") and the following 3 tests failed when calling BW’s “addservice” api.\r\n\r\nPossible config error or bug relating to “pricingPrefix” value?\r\n\r\nMy understanding from Sanjiv is that for Shortcodes, BW will still look up the plan using numeric instead of xx:x:x format, or did I misunderstand? Thx. -Joanne\r\n\r\n \r\n\r\n+Tests and log snippets:+\r\n\r\nTest 1 – Short Code Normal\r\n\r\nMar 29 03:48:22.168 INFO  localhost PRISM 9410///017dd982-fbc8-4bdc-ba9c-b131fca22f3c/1/[] [http-0.0.0.0-8080-exec-16] Billwise response: \\{\"success\":false,\"requestId\":203372602,\"message\":\"Failure\",\"datasetId\":\"290\",\"companyCd\":\"290\",\"customerCd\":\"011301\",\"packageCd\":\"SC01\",\"servicePoolCd\":\"000\",\"salesAgentCd\":\"000001\",\"effectiveDate\":\"2018-03-29T03:48:22Z\",\"reasonCd\":\"A\",\"updateSwitch\":true,\"switchCd\":\"290\",\"serviceId\":\"N000000000007660\",\"alternateServiceId\":\"19513000004\",\"pricingPrefix\":\"US:G:B\",\"rateElementType\":30,\"errors\":[{\"field\":\"pricingPrefix\",\"value\":\"US:G:B\",\"errorCode\":\"apiAddServiceCommand.pricingPrefix.missingRecurringAmount.error\"}]}\r\n\r\n \r\n\r\nTest2 – Short Code Shared\r\n\r\nMar 29 03:48:22.660 INFO  localhost PRISM 9410///8bb0a79a-d4b1-4c91-bb97-72aca241c453/1/[] [http-0.0.0.0-8080-exec-23] Billwise response: \\{\"success\":false,\"requestId\":203372603,\"message\":\"Failure\",\"datasetId\":\"290\",\"companyCd\":\"290\",\"customerCd\":\"011301\",\"packageCd\":\"SS01\",\"servicePoolCd\":\"000\",\"salesAgentCd\":\"000001\",\"effectiveDate\":\"2018-03-29T03:48:22Z\",\"reasonCd\":\"A\",\"updateSwitch\":true,\"switchCd\":\"290\",\"serviceId\":\"N000000000007661\",\"alternateServiceId\":\"19515000004\",\"pricingPrefix\":\"US:G:S\",\"rateElementType\":37,\"errors\":[{\"field\":\"pricingPrefix\",\"value\":\"US:G:S\",\"errorCode\":\"apiAddServiceCommand.pricingPrefix.missingRecurringAmount.error\"}]}\r\n\r\n \r\n\r\nTest3 – this is a customer owned number\r\n\r\nMar 29 03:48:24.067 INFO  localhost PRISM 9410///d5832114-1e28-4be4-8053-b3e80c3f1ed2/1/[] [http-0.0.0.0-8080-exec-30] Billwise response: {\"success\":false,\"requestId\":203372609,\"message\":\"Failure\",\"datasetId\":\"290\",\"companyCd\":\"290\",\"customerCd\":\"011301\",\"packageCd\":\"TP1A\",\"servicePoolCd\":\"000\",\"salesAgentCd\":\"000001\",\"effectiveDate\":\"2018-03-29T03:48:23Z\",\"reasonCd\":\"A\",\"updateSwitch\":true,\"switchCd\":\"290\",\"serviceId\":\"N000000000007663\",\"alternateServiceId\":\"19517000097\",\"pricingPrefix\":\"null:G:B\",\"rateElementType\":10,\"errors\":[{\"field\":\"pricingPrefix\",\"value*\":\"null:G:B\",\"*errorCode\":\"apiAddServiceCommand.pricingPrefix.missingRecurringAmount.error\"}]}\r\n\r\n \r\n\r\n ",
+            "customfield_11100": null,
+            "customfield_11101": null,
+            "customfield_11740": null,
+            "customfield_11102": null,
+            "customfield_11103": null,
+            "customfield_11742": null,
+            "timetracking": {},
+            "customfield_11104": null,
+            "customfield_11741": null,
+            "customfield_11458": null,
+            "customfield_11733": null,
+            "customfield_10006": null,
+            "customfield_11457": null,
+            "customfield_11732": null,
+            "customfield_10007": null,
+            "customfield_11735": null,
+            "customfield_10008": null,
+            "customfield_11734": null,
+            "attachment": [],
+            "customfield_11737": "no",
+            "customfield_11736": null,
+            "customfield_10803": null,
+            "customfield_11739": null,
+            "summary": "Failed the api call to addservice for short code number due to new logic for \"pricingPrefix\"",
+            "customfield_11450": null,
+            "customfield_11452": null,
+            "customfield_10000": null,
+            "customfield_11451": null,
+            "customfield_10001": null,
+            "customfield_11454": null,
+            "customfield_10002": "9223372036854775807",
+            "customfield_11453": null,
+            "customfield_11731": null,
+            "customfield_11730": null,
+            "customfield_10511": null,
+            "customfield_10512": null,
+            "customfield_11446": null,
+            "customfield_11205": null,
+            "customfield_11721": "9223372036854775807",
+            "customfield_11206": null,
+            "customfield_11603": null,
+            "customfield_11207": null,
+            "customfield_11602": null,
+            "customfield_11726": null,
+            "customfield_11605": null,
+            "customfield_11725": null,
+            "customfield_11604": null,
+            "duedate": null,
+            "customfield_11728": null,
+            "customfield_11606": null,
+            "customfield_11729": null,
+            "comment": {
+                "comments": [
+                    {
+                        "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/issue/333285/comment/1480897",
+                        "id": "1480897",
+                        "author": {
+                            "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/user?username=jsoliman",
+                            "name": "jsoliman",
+                            "key": "jsoliman",
+                            "emailAddress": "jsoliman@cisco.com",
+                            "avatarUrls": {
+                                "48x48": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?ownerId=jsoliman&avatarId=14642",
+                                "24x24": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=small&ownerId=jsoliman&avatarId=14642",
+                                "16x16": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=xsmall&ownerId=jsoliman&avatarId=14642",
+                                "32x32": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=medium&ownerId=jsoliman&avatarId=14642"
+                            },
+                            "displayName": "Joanne Soliman",
+                            "active": true,
+                            "timeZone": "Europe/London"
+                        },
+                        "body": "*From:* Mike McFarland <[mike.mcfarland@billwiseinc.com|mailto:mike.mcfarland@billwiseinc.com]>\r\n*Date:* Thursday, March 29, 2018 at 9:21 AM\r\n*To:* \"Joanne Soliman (jsoliman)\" <[jsoliman@cisco.com|mailto:jsoliman@cisco.com]>, \"Wing Tang (wingtan)\" <[wingtan@cisco.com|mailto:wingtan@cisco.com]>\r\n*Cc:* hahsiung Hsiung <[hahsiung@cisco.com|mailto:hahsiung@cisco.com]>, \"Sanjiv Parikh (sanparik)\" <[sanparik@cisco.com|mailto:sanparik@cisco.com]>\r\n*Subject:* Re: Call to BW api addservice failure\r\n\r\n \r\n\r\nHi Joanne & Wing\r\n\r\nTest 1 - this is a tropo problem.  Tropo has recognized that the phone number being put on billing is a short code and has selected the default short code monthly service price code of SC01 and has set the rateElementType = 30 BUT the rate sheet (short code normal) for this rateElementType does not contain any monthly rates in the format of CC:B:F.\r\n\r\nSolution:  Tropo must first decide which rate sheet it wants to use to determine the monthly rate and setup charges for Short Code numbers (normal, shared, and vanity) and if the rates should be decided by number or by cc:b:f rule.  \r\n\r\n1a.  If Tropo wants to use the short code normal rate sheet (30) and determine rate by short code value, then Tropo should NOT send the CC:B:F value in the  pricingPrefix field but instead send the actual short code value in the pricingPrefix field.\r\n * I think this is the proper solution.\r\n\r\n1b.  If Tropo wants to use the short code normal rate sheet (30) and determine the monthly rate and setup fee by CC:B:F rule; then Tropo must populate the short code normal rate sheet (30) with rate values in the the CC:B:F format.\r\n\r\n1c.  If Tropo wants to use the phone in rate sheet (10) and determine the rate by actual short code number; then Tropo must change the rateElementType from 30 to 10 AND provide the actual short code number in the pricingPrefix field.\r\n\r\n1d.  If Tropo wants to use the phone-in rate sheet (10) and determine the setup fee and monthly rate using the CC:B:F rule; then Tropo must change the rateElementType from 30 to 10 for short code numbers.\r\n * I don't think this is the desired solution since the CC:B:F formatted rules apply to normal phone numbers and not short codes, where short codes are charged much higher monthly rates and setup fees.\r\n\r\nTest 2 - this is a Tropo problem also.  See above except change from short code normal rateElementType (30) to short code Shared rateElementType (37).\r\n\r\nTest 3 - this is a Tropo problem also.  The phone number service activation/billing request indicated that the rateElementType was 10 (which is the phone-in rate sheet), but failed to provide a value in the pricingPrefix field.  The pricing prefix field must contain either the entire phone number OR enough digits to determine the desired monthly service rate OR a cc:b:f formatted value.",
+                        "updateAuthor": {
+                            "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/user?username=jsoliman",
+                            "name": "jsoliman",
+                            "key": "jsoliman",
+                            "emailAddress": "jsoliman@cisco.com",
+                            "avatarUrls": {
+                                "48x48": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?ownerId=jsoliman&avatarId=14642",
+                                "24x24": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=small&ownerId=jsoliman&avatarId=14642",
+                                "16x16": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=xsmall&ownerId=jsoliman&avatarId=14642",
+                                "32x32": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=medium&ownerId=jsoliman&avatarId=14642"
+                            },
+                            "displayName": "Joanne Soliman",
+                            "active": true,
+                            "timeZone": "Europe/London"
+                        },
+                        "created": "2018-04-02T22:41:42.738+0100",
+                        "updated": "2018-04-02T22:41:42.738+0100"
+                    },
+                    {
+                        "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/issue/333285/comment/1480921",
+                        "id": "1480921",
+                        "author": {
+                            "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/user?username=jsoliman",
+                            "name": "jsoliman",
+                            "key": "jsoliman",
+                            "emailAddress": "jsoliman@cisco.com",
+                            "avatarUrls": {
+                                "48x48": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?ownerId=jsoliman&avatarId=14642",
+                                "24x24": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=small&ownerId=jsoliman&avatarId=14642",
+                                "16x16": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=xsmall&ownerId=jsoliman&avatarId=14642",
+                                "32x32": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=medium&ownerId=jsoliman&avatarId=14642"
+                            },
+                            "displayName": "Joanne Soliman",
+                            "active": true,
+                            "timeZone": "Europe/London"
+                        },
+                        "body": "We had a call between Sanjiv, Hancheng, Wing and BW's Mike, and me. Bellow is the decision-\r\n\r\nSo for all short code types (SS, SV & SC), tropo-cdr will give the numeric prefix as in the pass when calling BW's /api/addService.\r\n\r\n \r\n\r\nAs for the customer owned number (i.e. Test3 in description), Sanjiv is to make decision and let us know soon.",
+                        "updateAuthor": {
+                            "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/user?username=jsoliman",
+                            "name": "jsoliman",
+                            "key": "jsoliman",
+                            "emailAddress": "jsoliman@cisco.com",
+                            "avatarUrls": {
+                                "48x48": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?ownerId=jsoliman&avatarId=14642",
+                                "24x24": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=small&ownerId=jsoliman&avatarId=14642",
+                                "16x16": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=xsmall&ownerId=jsoliman&avatarId=14642",
+                                "32x32": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=medium&ownerId=jsoliman&avatarId=14642"
+                            },
+                            "displayName": "Joanne Soliman",
+                            "active": true,
+                            "timeZone": "Europe/London"
+                        },
+                        "created": "2018-04-02T23:43:52.296+0100",
+                        "updated": "2018-04-02T23:49:16.871+0100"
+                    },
+                    {
+                        "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/issue/333285/comment/1480925",
+                        "id": "1480925",
+                        "author": {
+                            "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/user?username=wingtan",
+                            "name": "wingtan",
+                            "key": "wingtan",
+                            "emailAddress": "wingtan@cisco.com",
+                            "avatarUrls": {
+                                "48x48": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?ownerId=wingtan&avatarId=14638",
+                                "24x24": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=small&ownerId=wingtan&avatarId=14638",
+                                "16x16": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=xsmall&ownerId=wingtan&avatarId=14638",
+                                "32x32": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=medium&ownerId=wingtan&avatarId=14638"
+                            },
+                            "displayName": "Wing Tang",
+                            "active": true,
+                            "timeZone": "Europe/London"
+                        },
+                        "body": "Yes, for all the short codes we will send numeric prefix.  All others will send xx:x:x formatted prefix.",
+                        "updateAuthor": {
+                            "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/user?username=wingtan",
+                            "name": "wingtan",
+                            "key": "wingtan",
+                            "emailAddress": "wingtan@cisco.com",
+                            "avatarUrls": {
+                                "48x48": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?ownerId=wingtan&avatarId=14638",
+                                "24x24": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=small&ownerId=wingtan&avatarId=14638",
+                                "16x16": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=xsmall&ownerId=wingtan&avatarId=14638",
+                                "32x32": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=medium&ownerId=wingtan&avatarId=14638"
+                            },
+                            "displayName": "Wing Tang",
+                            "active": true,
+                            "timeZone": "Europe/London"
+                        },
+                        "created": "2018-04-02T23:56:30.620+0100",
+                        "updated": "2018-04-02T23:56:30.620+0100"
+                    },
+                    {
+                        "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/issue/333285/comment/1480962",
+                        "id": "1480962",
+                        "author": {
+                            "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/user?username=wingtan",
+                            "name": "wingtan",
+                            "key": "wingtan",
+                            "emailAddress": "wingtan@cisco.com",
+                            "avatarUrls": {
+                                "48x48": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?ownerId=wingtan&avatarId=14638",
+                                "24x24": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=small&ownerId=wingtan&avatarId=14638",
+                                "16x16": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=xsmall&ownerId=wingtan&avatarId=14638",
+                                "32x32": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=medium&ownerId=wingtan&avatarId=14638"
+                            },
+                            "displayName": "Wing Tang",
+                            "active": true,
+                            "timeZone": "Europe/London"
+                        },
+                        "body": "changes make to master (15.13) and 15.12 branches.  The resulting jar file is: rest-billwise-trunk-SNAPSHOT.jar.",
+                        "updateAuthor": {
+                            "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/user?username=wingtan",
+                            "name": "wingtan",
+                            "key": "wingtan",
+                            "emailAddress": "wingtan@cisco.com",
+                            "avatarUrls": {
+                                "48x48": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?ownerId=wingtan&avatarId=14638",
+                                "24x24": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=small&ownerId=wingtan&avatarId=14638",
+                                "16x16": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=xsmall&ownerId=wingtan&avatarId=14638",
+                                "32x32": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=medium&ownerId=wingtan&avatarId=14638"
+                            },
+                            "displayName": "Wing Tang",
+                            "active": true,
+                            "timeZone": "Europe/London"
+                        },
+                        "created": "2018-04-03T02:11:15.456+0100",
+                        "updated": "2018-04-03T02:11:15.456+0100"
+                    },
+                    {
+                        "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/issue/333285/comment/1482029",
+                        "id": "1482029",
+                        "author": {
+                            "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/user?username=wingtan",
+                            "name": "wingtan",
+                            "key": "wingtan",
+                            "emailAddress": "wingtan@cisco.com",
+                            "avatarUrls": {
+                                "48x48": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?ownerId=wingtan&avatarId=14638",
+                                "24x24": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=small&ownerId=wingtan&avatarId=14638",
+                                "16x16": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=xsmall&ownerId=wingtan&avatarId=14638",
+                                "32x32": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=medium&ownerId=wingtan&avatarId=14638"
+                            },
+                            "displayName": "Wing Tang",
+                            "active": true,
+                            "timeZone": "Europe/London"
+                        },
+                        "body": "[~hahsiung], I made the same changes to Bit-Bucket Provisioning branch for 15.12.",
+                        "updateAuthor": {
+                            "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/user?username=wingtan",
+                            "name": "wingtan",
+                            "key": "wingtan",
+                            "emailAddress": "wingtan@cisco.com",
+                            "avatarUrls": {
+                                "48x48": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?ownerId=wingtan&avatarId=14638",
+                                "24x24": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=small&ownerId=wingtan&avatarId=14638",
+                                "16x16": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=xsmall&ownerId=wingtan&avatarId=14638",
+                                "32x32": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=medium&ownerId=wingtan&avatarId=14638"
+                            },
+                            "displayName": "Wing Tang",
+                            "active": true,
+                            "timeZone": "Europe/London"
+                        },
+                        "created": "2018-04-04T19:42:58.308+0100",
+                        "updated": "2018-04-04T19:43:46.614+0100"
+                    },
+                    {
+                        "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/issue/333285/comment/1482038",
+                        "id": "1482038",
+                        "author": {
+                            "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/user?username=hahsiung",
+                            "name": "hahsiung",
+                            "key": "hahsiung",
+                            "emailAddress": "hahsiung@cisco.com",
+                            "avatarUrls": {
+                                "48x48": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?avatarId=10122",
+                                "24x24": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=small&avatarId=10122",
+                                "16x16": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=xsmall&avatarId=10122",
+                                "32x32": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=medium&avatarId=10122"
+                            },
+                            "displayName": "Hancheng Hsiung",
+                            "active": true,
+                            "timeZone": "Europe/London"
+                        },
+                        "body": "[~wingtan]  Thanks",
+                        "updateAuthor": {
+                            "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/user?username=hahsiung",
+                            "name": "hahsiung",
+                            "key": "hahsiung",
+                            "emailAddress": "hahsiung@cisco.com",
+                            "avatarUrls": {
+                                "48x48": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?avatarId=10122",
+                                "24x24": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=small&avatarId=10122",
+                                "16x16": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=xsmall&avatarId=10122",
+                                "32x32": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=medium&avatarId=10122"
+                            },
+                            "displayName": "Hancheng Hsiung",
+                            "active": true,
+                            "timeZone": "Europe/London"
+                        },
+                        "created": "2018-04-04T20:06:04.433+0100",
+                        "updated": "2018-04-04T20:06:04.433+0100"
+                    },
+                    {
+                        "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/issue/333285/comment/1482124",
+                        "id": "1482124",
+                        "author": {
+                            "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/user?username=jsoliman",
+                            "name": "jsoliman",
+                            "key": "jsoliman",
+                            "emailAddress": "jsoliman@cisco.com",
+                            "avatarUrls": {
+                                "48x48": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?ownerId=jsoliman&avatarId=14642",
+                                "24x24": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=small&ownerId=jsoliman&avatarId=14642",
+                                "16x16": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=xsmall&ownerId=jsoliman&avatarId=14642",
+                                "32x32": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=medium&ownerId=jsoliman&avatarId=14642"
+                            },
+                            "displayName": "Joanne Soliman",
+                            "active": true,
+                            "timeZone": "Europe/London"
+                        },
+                        "body": "h2. Verified that T-CDR is sending numeric \"pricingPRefix\" for all 3 shortcake types:\r\n\r\n1. SC01\r\n\r\nApr 04 23:44:56.328 INFO  localhost PRISM 9410///ab3f77a7-1aa6-4731-a141-a1062a3396fd/1/[] [http-0.0.0.0-8080-exec-30] Sending POST request to Billwise API. Endpoint: [https://tropoqa.connect4billing.com:8443/cwa290/api/addService] with entity: \\{\"customerCd\":\"011301\",\"packageCd\":\"SC01\",\"serviceId\":\"N000000000007693\",\"product\":\"empty\",\"effectiveDate\":\"2018-04-04T23:44:56Z\",\"rateElementType\":30,\"pricingPrefix\":\"19513000009\",\"alternateServiceId\":\"19513000009\"}\r\n\r\n \r\n\r\n2. SV01\r\n\r\nApr 04 23:44:57.214 INFO  localhost PRISM 9410///ecbc7e4e-b001-48b4-94bd-a7cddbb0f222/1/[] [http-0.0.0.0-8080-exec-34] Sending POST request to Billwise API. Endpoint: [https://tropoqa.connect4billing.com:8443/cwa290/api/addService] with entity: {\"customerCd\":\"011301\",\"packageCd*\":\"SV01\"*,\"serviceId\":\"N000000000007694\",\"product\":\"empty\",\"effectiveDate\":\"2018-04-04T23:44:57Z\",\"rateElementType\":35,\"pricingPrefix\":\"19514000001\",\"alternateServiceId\":\"19514000001\"}\r\n\r\n \r\n\r\n3. SS01\r\n\r\nApr 04 23:44:58.130 INFO  localhost PRISM 9410///b5fde376-3ffa-429f-942f-511729dd2dcb/1/[] [http-0.0.0.0-8080-exec-37] Sending POST request to Billwise API. Endpoint: [https://tropoqa.connect4billing.com:8443/cwa290/api/addService] with entity: \\{\"customerCd\":\"011301\",\"packageCd\":\"SS01\",\"serviceId\":\"N000000000007695\",\"product\":\"empty\",\"effectiveDate\":\"2018-04-04T23:44:58Z\",\"rateElementType\":37,\"pricingPrefix\":\"19515000009\",\"alternateServiceId\":\"19515000009\"}\r\n\r\n \r\nh2. Tested on CCS2-\r\n\r\n< Date: Thu, 05 Apr 2018 00:04:08 GMT\r\n\r\n< \r\n\r\n{\r\n\r\n  \"version\": \"origin/15.12 - 95a19bcee07a1363b044965d6c473d1d871af09d\",\r\n\r\n  \"revision\": \"origin/15.12 - 95a19bcee07a1363b044965d6c473d1d871af09d\",\r\n\r\n  \"build\": \"23\",\r\n\r\n  \"buildDate\": \"2018-04-04 20:17:04\",\r\n\r\n  \"buildBy\": \"Tropo LLC\",\r\n\r\n  \"canReachDatabase\": true,\r\n\r\n  \"schemaVersion\": \"15.12.0.4\",\r\n\r\n  \"schemaUpdatedOn\": \"28/01/2018\"\r\n\r\n* Connection #0 to host localhost left intact\r\n\r\n}[root@qaprov1 provisioning]# \r\n\r\n \r\n\r\n \r\n\r\n ",
+                        "updateAuthor": {
+                            "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/user?username=jsoliman",
+                            "name": "jsoliman",
+                            "key": "jsoliman",
+                            "emailAddress": "jsoliman@cisco.com",
+                            "avatarUrls": {
+                                "48x48": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?ownerId=jsoliman&avatarId=14642",
+                                "24x24": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=small&ownerId=jsoliman&avatarId=14642",
+                                "16x16": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=xsmall&ownerId=jsoliman&avatarId=14642",
+                                "32x32": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=medium&ownerId=jsoliman&avatarId=14642"
+                            },
+                            "displayName": "Joanne Soliman",
+                            "active": true,
+                            "timeZone": "Europe/London"
+                        },
+                        "created": "2018-04-05T01:05:38.243+0100",
+                        "updated": "2018-04-05T01:05:38.243+0100"
+                    }
+                ],
+                "maxResults": 7,
+                "total": 7,
+                "startAt": 0
+            }
+        }
+    },
+    "changelog": {
+        "id": "1485986",
+        "items": [
+            {
+                "field": "resolution",
+                "fieldtype": "jira",
+                "from": null,
+                "fromString": null,
+                "to": "1",
+                "toString": "Fixed"
+            },
+            {
+                "field": "status",
+                "fieldtype": "jira",
+                "from": "12228",
+                "fromString": "In Development",
+                "to": "5",
+                "toString": "Resolved"
+            }
+        ]
+    }
+}
