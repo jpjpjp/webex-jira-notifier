@@ -185,7 +185,7 @@ function notifyWatchers(flint, jiraEvent, notifyList, author, cb) {
           }
         });
       }).catch(function(err) {
-        flint.debug('Unable to get any watcher info: '+err.statusCode);
+        flint.debug('Unable to get any watcher info: '+err.message);
       });
     } else {
       flint.debug('No watchers of this issue to notify');
