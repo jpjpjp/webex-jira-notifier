@@ -142,6 +142,7 @@ function notifyWatchers(flint, jiraEvent, notifyList, author, cb) {
 
       // Remove after we parse some data and feel good about all conditions
       let watcherNews = getWatcherNews(jiraEvent);
+      flint.debug('Looking for watcher info: '+jiraEvent.issue.fields.watches.self);
 
       request({
         "method":"GET", 
