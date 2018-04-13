@@ -1,0 +1,436 @@
+{
+    "timestamp": 1523460120955,
+    "webhookEvent": "jira:issue_updated",
+    "issue_event_type_name": "issue_comment_edited",
+    "user": {
+        "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/user?username=jshipher",
+        "name": "jshipher",
+        "key": "jshipher",
+        "emailAddress": "jshipher@cisco.com",
+        "avatarUrls": {
+            "48x48": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?avatarId=10122",
+            "24x24": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=small&avatarId=10122",
+            "16x16": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=xsmall&avatarId=10122",
+            "32x32": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=medium&avatarId=10122"
+        },
+        "displayName": "JP Shipherd",
+        "active": true,
+        "timeZone": "Europe/London"
+    },
+    "issue": {
+        "id": "334895",
+        "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/issue/334895",
+        "key": "TROPO-13333",
+        "fields": {
+            "customfield_10473": {
+                "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/customFieldOption/10187",
+                "value": "Green",
+                "id": "10187"
+            },
+            "fixVersions": [],
+            "customfield_11443": [
+                {
+                    "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/user?username=alysrobi",
+                    "name": "alysrobi",
+                    "key": "alysrobi",
+                    "emailAddress": "alysrobi@cisco.com",
+                    "avatarUrls": {
+                        "48x48": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?avatarId=10122",
+                        "24x24": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=small&avatarId=10122",
+                        "16x16": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=xsmall&avatarId=10122",
+                        "32x32": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=medium&avatarId=10122"
+                    },
+                    "displayName": "Alyssa Robinson",
+                    "active": true,
+                    "timeZone": "Europe/London"
+                }
+            ],
+            "resolution": null,
+            "customfield_11201": null,
+            "customfield_11442": null,
+            "customfield_11720": null,
+            "customfield_11445": null,
+            "customfield_10500": {
+                "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/customFieldOption/10501",
+                "value": "Clear",
+                "id": "10501"
+            },
+            "customfield_11711": null,
+            "customfield_11710": null,
+            "customfield_10469": null,
+            "customfield_11713": null,
+            "customfield_11715": null,
+            "customfield_10505": null,
+            "customfield_11714": null,
+            "customfield_10506": null,
+            "customfield_11717": null,
+            "customfield_10507": null,
+            "customfield_11716": null,
+            "customfield_10508": null,
+            "customfield_11718": null,
+            "lastViewed": "2018-04-11T16:22:00.941+0100",
+            "customfield_10100": null,
+            "priority": {
+                "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/priority/10404",
+                "iconUrl": "https://jira-eng-gpk2.cisco.com/jira/images/icons/priorities/minor.svg",
+                "name": "Minor",
+                "id": "10404"
+            },
+            "customfield_10102": "2|w007vs:",
+            "customfield_10466": [
+                {
+                    "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/customFieldOption/10132",
+                    "value": "All (Browser independent)",
+                    "id": "10132"
+                }
+            ],
+            "labels": [],
+            "customfield_11700": null,
+            "customfield_11425": null,
+            "customfield_11424": null,
+            "customfield_11702": null,
+            "customfield_11701": null,
+            "customfield_11426": null,
+            "customfield_11704": null,
+            "customfield_11307": null,
+            "customfield_11429": -1,
+            "aggregatetimeoriginalestimate": null,
+            "timeestimate": null,
+            "versions": [
+                {
+                    "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/version/19455",
+                    "id": "19455",
+                    "description": "",
+                    "name": "15.13.0",
+                    "archived": false,
+                    "released": false
+                }
+            ],
+            "customfield_11703": null,
+            "customfield_11428": null,
+            "customfield_11706": null,
+            "customfield_11705": null,
+            "customfield_11708": null,
+            "issuelinks": [],
+            "customfield_11709": null,
+            "assignee": {
+                "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/user?username=jsoliman",
+                "name": "jsoliman",
+                "key": "jsoliman",
+                "emailAddress": "jsoliman@cisco.com",
+                "avatarUrls": {
+                    "48x48": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?ownerId=jsoliman&avatarId=14642",
+                    "24x24": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=small&ownerId=jsoliman&avatarId=14642",
+                    "16x16": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=xsmall&ownerId=jsoliman&avatarId=14642",
+                    "32x32": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=medium&ownerId=jsoliman&avatarId=14642"
+                },
+                "displayName": "Joanne Soliman",
+                "active": true,
+                "timeZone": "Europe/London"
+            },
+            "status": {
+                "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/status/1",
+                "description": "The issue is open and ready for the assignee to start work on it.",
+                "iconUrl": "https://jira-eng-gpk2.cisco.com/jira/images/icons/statuses/open.png",
+                "name": "Open",
+                "id": "1",
+                "statusCategory": {
+                    "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/statuscategory/2",
+                    "id": 2,
+                    "key": "new",
+                    "colorName": "blue-gray",
+                    "name": "To Do"
+                }
+            },
+            "components": [],
+            "customfield_11421": null,
+            "customfield_11420": {
+                "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/customFieldOption/11850",
+                "value": "No",
+                "id": "11850"
+            },
+            "customfield_11300": null,
+            "customfield_11423": null,
+            "customfield_11422": null,
+            "customfield_11418": null,
+            "aggregatetimeestimate": null,
+            "customfield_11419": null,
+            "creator": {
+                "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/user?username=jsoliman",
+                "name": "jsoliman",
+                "key": "jsoliman",
+                "emailAddress": "jsoliman@cisco.com",
+                "avatarUrls": {
+                    "48x48": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?ownerId=jsoliman&avatarId=14642",
+                    "24x24": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=small&ownerId=jsoliman&avatarId=14642",
+                    "16x16": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=xsmall&ownerId=jsoliman&avatarId=14642",
+                    "32x32": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=medium&ownerId=jsoliman&avatarId=14642"
+                },
+                "displayName": "Joanne Soliman",
+                "active": true,
+                "timeZone": "Europe/London"
+            },
+            "subtasks": [],
+            "reporter": {
+                "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/user?username=jsoliman",
+                "name": "jsoliman",
+                "key": "jsoliman",
+                "emailAddress": "jsoliman@cisco.com",
+                "avatarUrls": {
+                    "48x48": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?ownerId=jsoliman&avatarId=14642",
+                    "24x24": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=small&ownerId=jsoliman&avatarId=14642",
+                    "16x16": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=xsmall&ownerId=jsoliman&avatarId=14642",
+                    "32x32": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=medium&ownerId=jsoliman&avatarId=14642"
+                },
+                "displayName": "Joanne Soliman",
+                "active": true,
+                "timeZone": "Europe/London"
+            },
+            "aggregateprogress": {
+                "progress": 0,
+                "total": 0
+            },
+            "customfield_10200": null,
+            "customfield_11405": null,
+            "customfield_11404": null,
+            "customfield_11800": null,
+            "customfield_10713": null,
+            "progress": {
+                "progress": 0,
+                "total": 0
+            },
+            "votes": {
+                "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/issue/TROPO-13333/votes",
+                "votes": 0,
+                "hasVoted": false
+            },
+            "worklog": {
+                "startAt": 0,
+                "maxResults": 20,
+                "total": 0,
+                "worklogs": []
+            },
+            "issuetype": {
+                "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/issuetype/3",
+                "id": "3",
+                "description": "Todo item, not necessarily feature related.",
+                "iconUrl": "https://jira-eng-gpk2.cisco.com/jira/secure/viewavatar?size=xsmall&avatarId=10518&avatarType=issuetype",
+                "name": "Task",
+                "subtask": false,
+                "avatarId": 10518
+            },
+            "timespent": null,
+            "project": {
+                "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/project/13621",
+                "id": "13621",
+                "key": "TROPO",
+                "name": "Tropo",
+                "avatarUrls": {
+                    "48x48": "https://jira-eng-gpk2.cisco.com/jira/secure/projectavatar?pid=13621&avatarId=14618",
+                    "24x24": "https://jira-eng-gpk2.cisco.com/jira/secure/projectavatar?size=small&pid=13621&avatarId=14618",
+                    "16x16": "https://jira-eng-gpk2.cisco.com/jira/secure/projectavatar?size=xsmall&pid=13621&avatarId=14618",
+                    "32x32": "https://jira-eng-gpk2.cisco.com/jira/secure/projectavatar?size=medium&pid=13621&avatarId=14618"
+                },
+                "projectCategory": {
+                    "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/projectCategory/10101",
+                    "id": "10101",
+                    "description": "",
+                    "name": "Engineering"
+                }
+            },
+            "aggregatetimespent": null,
+            "customfield_11401": null,
+            "customfield_11400": null,
+            "customfield_10302": null,
+            "customfield_10303": null,
+            "customfield_10304": null,
+            "resolutiondate": null,
+            "workratio": -1,
+            "watches": {
+                "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/issue/TROPO-13333/watchers",
+                "watchCount": 3,
+                "isWatching": true
+            },
+            "created": "2018-04-10T23:35:38.413+0100",
+            "customfield_10300": null,
+            "customfield_10301": null,
+            "customfield_11744": null,
+            "customfield_11743": null,
+            "customfield_11746": null,
+            "customfield_11745": null,
+            "customfield_11747": null,
+            "updated": "2018-04-11T16:16:42.419+0100",
+            "timeoriginalestimate": null,
+            "description": "Create analysis tool and use it to compare & analyzing pricing api results from middleware and PAPI.",
+            "customfield_11100": null,
+            "customfield_11101": null,
+            "customfield_11740": null,
+            "customfield_11102": null,
+            "customfield_11103": null,
+            "customfield_11742": null,
+            "timetracking": {},
+            "customfield_11104": null,
+            "customfield_11741": null,
+            "customfield_11458": null,
+            "customfield_11733": null,
+            "customfield_10006": null,
+            "customfield_11457": null,
+            "customfield_11732": null,
+            "customfield_10007": null,
+            "customfield_11735": null,
+            "customfield_10008": null,
+            "customfield_11734": null,
+            "attachment": [],
+            "customfield_11737": "no",
+            "customfield_11736": null,
+            "customfield_10803": null,
+            "customfield_11739": null,
+            "summary": "Create analysis tool and use it to compare & analyzing pricing api results from middleware and PAPI",
+            "customfield_11450": null,
+            "customfield_11452": null,
+            "customfield_10000": null,
+            "customfield_11451": null,
+            "customfield_10001": null,
+            "customfield_11454": null,
+            "customfield_10002": "9223372036854775807",
+            "customfield_11453": null,
+            "customfield_11731": null,
+            "customfield_11730": null,
+            "customfield_10511": null,
+            "customfield_10512": null,
+            "customfield_11446": null,
+            "customfield_11205": null,
+            "customfield_11721": "9223372036854775807",
+            "customfield_11206": null,
+            "customfield_11603": null,
+            "customfield_11207": null,
+            "customfield_11602": null,
+            "customfield_11726": null,
+            "customfield_11605": null,
+            "customfield_11725": null,
+            "customfield_11604": null,
+            "duedate": null,
+            "customfield_11728": null,
+            "customfield_11606": null,
+            "customfield_11729": null,
+            "comment": {
+                "comments": [
+                    {
+                        "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/issue/334895/comment/1484456",
+                        "id": "1484456",
+                        "author": {
+                            "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/user?username=jsoliman",
+                            "name": "jsoliman",
+                            "key": "jsoliman",
+                            "emailAddress": "jsoliman@cisco.com",
+                            "avatarUrls": {
+                                "48x48": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?ownerId=jsoliman&avatarId=14642",
+                                "24x24": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=small&ownerId=jsoliman&avatarId=14642",
+                                "16x16": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=xsmall&ownerId=jsoliman&avatarId=14642",
+                                "32x32": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=medium&ownerId=jsoliman&avatarId=14642"
+                            },
+                            "displayName": "Joanne Soliman",
+                            "active": true,
+                            "timeZone": "Europe/London"
+                        },
+                        "body": "Hi [~jshipher], for this ticket i have created a tool to do the comparison , and a wiki, [Analyze Pricing api differences between the node middleware API and PAPI|https://confluence-eng-gpk2.cisco.com/conf/display/TROPO/Analyze+Pricing+api+differences+between+the+node+middleware+API+and+PAPI] to document the findings and proposals (for PAPI changes). \r\n\r\n*I have q for you pls,* as mentioned in the wiki above, as #8 in the table, i noticed that for EU countries, there is a common difference between PAPI and the Middleware API, and that is for \"sms\", PAPI showed empty entries while Middleware shows some values. \r\n\r\nSince i don't have access to production BW, so i can't tell which one is correct, can you pls. let me know which is correct? \r\n\r\nThx. -Joanne",
+                        "updateAuthor": {
+                            "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/user?username=jsoliman",
+                            "name": "jsoliman",
+                            "key": "jsoliman",
+                            "emailAddress": "jsoliman@cisco.com",
+                            "avatarUrls": {
+                                "48x48": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?ownerId=jsoliman&avatarId=14642",
+                                "24x24": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=small&ownerId=jsoliman&avatarId=14642",
+                                "16x16": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=xsmall&ownerId=jsoliman&avatarId=14642",
+                                "32x32": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=medium&ownerId=jsoliman&avatarId=14642"
+                            },
+                            "displayName": "Joanne Soliman",
+                            "active": true,
+                            "timeZone": "Europe/London"
+                        },
+                        "created": "2018-04-11T04:48:11.608+0100",
+                        "updated": "2018-04-11T04:48:11.608+0100"
+                    },
+                    {
+                        "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/issue/334895/comment/1484811",
+                        "id": "1484811",
+                        "author": {
+                            "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/user?username=jshipher",
+                            "name": "jshipher",
+                            "key": "jshipher",
+                            "emailAddress": "jshipher@cisco.com",
+                            "avatarUrls": {
+                                "48x48": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?avatarId=10122",
+                                "24x24": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=small&avatarId=10122",
+                                "16x16": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=xsmall&avatarId=10122",
+                                "32x32": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=medium&avatarId=10122"
+                            },
+                            "displayName": "JP Shipherd",
+                            "active": true,
+                            "timeZone": "Europe/London"
+                        },
+                        "body": "Hi [~jsoliman], I suspect a lot of these differences will go away if you point to the same Billwise instance.   The easiest thing to do is probably have you point your test system to the production instance of billwise.  I have read only access credentials that I can share with you if you ping me on Spark.   Talk to Hancheng and make sure he's OK with that.  If suspect this will make 90% of the differences go away.\r\n\r\nIf you are strongly against pointing to production billwise, I can help you spin up a local instance of the middleware talking to whatever instance of BW you are talking to.   With that said, I think production is better since if there are differences in the data (which their obviously are), there might be a problem that we don't catch.  Either way just ping me on Spark and we'll come up with a plan.\r\n\r\nThanks for doing this!",
+                        "updateAuthor": {
+                            "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/user?username=jshipher",
+                            "name": "jshipher",
+                            "key": "jshipher",
+                            "emailAddress": "jshipher@cisco.com",
+                            "avatarUrls": {
+                                "48x48": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?avatarId=10122",
+                                "24x24": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=small&avatarId=10122",
+                                "16x16": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=xsmall&avatarId=10122",
+                                "32x32": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=medium&avatarId=10122"
+                            },
+                            "displayName": "JP Shipherd",
+                            "active": true,
+                            "timeZone": "Europe/London"
+                        },
+                        "created": "2018-04-11T16:16:42.419+0100",
+                        "updated": "2018-04-11T16:22:00.946+0100"
+                    }
+                ],
+                "maxResults": 2,
+                "total": 2,
+                "startAt": 0
+            }
+        }
+    },
+    "comment": {
+        "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/issue/334895/comment/1484811",
+        "id": "1484811",
+        "author": {
+            "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/user?username=jshipher",
+            "name": "jshipher",
+            "key": "jshipher",
+            "emailAddress": "jshipher@cisco.com",
+            "avatarUrls": {
+                "48x48": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?avatarId=10122",
+                "24x24": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=small&avatarId=10122",
+                "16x16": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=xsmall&avatarId=10122",
+                "32x32": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=medium&avatarId=10122"
+            },
+            "displayName": "JP Shipherd",
+            "active": true,
+            "timeZone": "Europe/London"
+        },
+        "body": "Hi [~jsoliman], I suspect a lot of these differences will go away if you point to the same Billwise instance.   The easiest thing to do is probably have you point your test system to the production instance of billwise.  I have read only access credentials that I can share with you if you ping me on Spark.   Talk to Hancheng and make sure he's OK with that.  If suspect this will make 90% of the differences go away.\r\n\r\nIf you are strongly against pointing to production billwise, I can help you spin up a local instance of the middleware talking to whatever instance of BW you are talking to.   With that said, I think production is better since if there are differences in the data (which their obviously are), there might be a problem that we don't catch.  Either way just ping me on Spark and we'll come up with a plan.\r\n\r\nThanks for doing this!",
+        "updateAuthor": {
+            "self": "https://jira-eng-gpk2.cisco.com/jira/rest/api/2/user?username=jshipher",
+            "name": "jshipher",
+            "key": "jshipher",
+            "emailAddress": "jshipher@cisco.com",
+            "avatarUrls": {
+                "48x48": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?avatarId=10122",
+                "24x24": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=small&avatarId=10122",
+                "16x16": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=xsmall&avatarId=10122",
+                "32x32": "https://jira-eng-gpk2.cisco.com/jira/secure/useravatar?size=medium&avatarId=10122"
+            },
+            "displayName": "JP Shipherd",
+            "active": true,
+            "timeZone": "Europe/London"
+        },
+        "created": "2018-04-11T16:16:42.419+0100",
+        "updated": "2018-04-11T16:22:00.946+0100"
+    }
+}
