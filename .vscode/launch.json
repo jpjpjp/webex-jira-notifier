@@ -18,7 +18,9 @@
             "type": "node",
             "request": "launch",
             "env": {"DEBUG":"flint",
-                    "VERBOSE":"true"},
+                    "VERBOSE":"true",
+                    "LOG_LEVEL": "0"},
+            "outputCapture": "std",
             "program": "${workspaceFolder}/test-jira-event-handler.js"
         },
         {
