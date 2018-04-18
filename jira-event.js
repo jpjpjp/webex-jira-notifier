@@ -46,9 +46,12 @@ exports.processJiraEvent = function (jiraEvent, flint, emailOrg, callback=null) 
               (jiraEvent.issue_event_type_name === 'issue_assigned')) {
       // Loop through the changed elements to see if one was that assignation
       if ((!jiraEvent.changelog) || (!jiraEvent.changelog.items.length)) {
-        logger.error('Expected a changelog for %s:%s but did not find one!', 
-          jiraEvent.webhookEvent, jiraEvent.issue_event_type_name);
-        createTestCase(null, jiraEvent);            
+        logger.error('Expected a changelog for %s:%s but did not find one!' +
+          ' No one will be notified', jiraEvent.webhookEvent, 
+        jiraEvent.issue_event_type_name);
+        createTestCase(null, jiraEvent);   
+        if (callback) {callback(e);}
+        return;     
       }
       for (var i = 0, len = jiraEvent.changelog.items.length; i < len; i++) {
         var item = jiraEvent.changelog.items[i];
@@ -201,7 +204,7 @@ function notifyWatchers(flint, jiraEvent, notifyList, author, cb) {
           if (bot) {
             let theBot = bot;
             theBot.recall('user_config').then(function(userConfig) {
-              if (userConfig.askedExit) {
+              if ((userConfig.askedExit) || (userConfig.watcherMsgs === false)) {
                 return logger.verbose('Supressing message to ' + theBot.isDirectTo);
               }
               watcherNews = (!watcherNews) ? getWatcherNews(jiraEvent) : watcherNews;
@@ -223,7 +226,7 @@ function notifyWatchers(flint, jiraEvent, notifyList, author, cb) {
           }
         });
       }).catch(function(err) {
-        logger.warn('Unable to get any watcher info from%s, :%s',
+        logger.warn('Unable to get any watcher info from %s, :%s',
           jiraEvent.issue.fields.watches.self, err.message);
       });
     } else {
@@ -319,8 +322,12 @@ function sendNotification(flint, bot, jiraEvent, author, eventName, action, elem
     ': **' + jiraEvent.issue.fields.summary + '**' + action});
   if ((elementName) || (elementValue)) {
     // Try replacing newlines with <br > to keep all the text in one block
-    elementName = elementName.replace(/(?:\r\n\r\n|\r\n|\r|\n)/g, '<br />');
-    elementValue = elementValue.replace(/(?:\r\n\r\n|\r\n|\r|\n)/g, '<br />');
+    if (elementName) {
+      elementName = elementName.replace(/(?:\r\n\r\n|\r\n|\r|\n)/g, '<br />');
+    } 
+    if (elementValue) {
+      elementValue = elementValue.replace(/(?:\r\n\r\n|\r\n|\r|\n)/g, '<br />');
+    }
     bot.say({markdown: '> ' + elementName + elementValue});
   }
   bot.say('https://jira-eng-gpk2.cisco.com/jira/browse/' + jiraEvent.issue.key);
