@@ -67,6 +67,8 @@ if (!process.env.SPARK_API_URL) {
 var botUserInfo = {
   _id: null,
   askedExit: false,
+  watchersMsgs: true,
+  newFunctionalityMsg: false,
   trackTickets: []
 };
 
@@ -122,6 +124,14 @@ flint.on('spawn', function(bot){
         if (reply !== null) {
           logger.debug('User config exists in DB, so this is an existing room.  Bot has restarted.');
           newUser = reply;
+          if (!newUser.hasOwnProperty('newFunctionalityMsg')) {
+            sayNewFunctionalityMessage(bot);
+            newUser.newFunctionalityMsg = true;
+            newUser.watcherMsgs = true;
+            mCollection.replaceOne({'_id': bot.isDirectTo}, newUser, {w:1}, function(err) {
+              if (err) {return console.log("Can't add new user "+bot.isDirectTo+" to db:" + err.message);}
+            });
+          }
         } else {
           logger.info("This is a new room.  Storing data about this user");
           newUser._id = bot.isDirectTo;
@@ -167,25 +177,52 @@ function updateAdmin(message, listAll=false) {
   }
 }
 
+function sayNewFunctionalityMessage(bot) {
+  bot.say('I\'ve just been updated so that I can give you more information!\n\n'+
+    'In addition to notifying you when you are mentioned in, or assigned to, '+
+    'a jira ticket, I will now send you a message if a ticket you are watching '+
+    'is changed.\n\n'+
+    'This may make me too "chatty" for some users, especially those who are '+
+    'automatically made watchers to many tickets.   To turn off watcher messages, '+
+    'but keep getting notified for mentions and assignments just type **no watchers**\n\n'+
+    'If you want the functionality back, type **yes watchers**'+
+    "\n\nIf you aren't sure which messages you are getting, just type **status**" +
+    "\n\nQuestions or feedback?   Join the Ask JiraNotification Bot space here: https://eurl.io/#Hy4f7zOjG"
+  );
+}
+
+
 function postInstructions(bot, status_only=false, instructions_only=false) {
   if (!status_only) {
     bot.say("I will look for Jira tickets that are assigned to, or that mention " +
         bot.isDirectTo + " and notify you so you can check out the ticket immediately.  " +
         "I'll also notify you of changes to any tickets you are watching." +
-        "\n\nIf you get tired of this service please type the command **shut up** to get me to stop. " +
-        'After that you can leave this room.  ' +
-        "If you ever want me to start notifying you again, restart a room with me and type **come back**." +
+        '\n\nIf the watcher messages make me too "chatty", but you want to '+
+        'keep getting notified for mentions and assignments just type **no watchers**\n\n'+
+        '\nIf you want the watcher messages back, type **yes watchers**'+
+        "\n\nYou can also type the command **shut up** to get me to stop sending any messages. " +
+        "\nIf you ever want me to start notifying you again, type **come back**." +
         "\n\nIf you aren't sure if I'm giving you notifications, just type **status**" +
         "\n\nQuestions or feedback?   Join the Ask JiraNotification Bot space here: https://eurl.io/#Hy4f7zOjG");
   }
   if (!instructions_only) {
     bot.recall('user_config')
       .then(function(userConfig) {
+        let msg = '';
         if (userConfig.askedExit) {
-          bot.say("\n\nCurrent Status: Notifications are **disabled**.");
+          msg = "\n\nCurrent Status: \n* Notifications are **disabled**.";
         } else {
-          bot.say("\n\nCurrent Status: Notifications are **enabled**.");
+          msg = "\n\nCurrent Status: \n* Mention and Assignment Notifications are **enabled**.";
+          if (userConfig.watcherMsgs) {
+            msg += "\n* Watched Ticket Changed Notifications are **enabled**.";
+          } else {
+            msg += "\n* Watched Ticket Changed Notifications are **disabled**.";
+          }
         }
+        if (status_only) {
+          msg += '\n\nType **help** to learn how to change your Notification state.';
+        }
+        bot.say(msg);
         logger.debug('Status for '+ bot.isDirectTo + ': ' + userConfig);
       })
       .catch(function(err) {
@@ -196,37 +233,9 @@ function postInstructions(bot, status_only=false, instructions_only=false) {
   }
 }
 
-
 /****
-## Process incoming messages
+## Helper methods for per-user notification level control
 ****/
-
-/* On mention with command
-ex User enters @botname /hello, the bot will write back
-*/
-var responded = false;
-var status_words = /^\/?(status|are you (on|working))( |.|$)/i;
-flint.hears(status_words, function(bot/*, trigger*/) {
-  logger.verbose('Processing Status Request for ' + bot.isDirectTo);
-  postInstructions(bot, /*status_only=*/true);
-  responded = true;
-});
-
-var exit_words = /^\/?(exit|goodbye|mute|leave|shut( |-)?up)( |.|$)/i;
-flint.hears(exit_words, function(bot/*, trigger*/) {
-  logger.verbose('Processing Exit Request for ' + bot.isDirectTo);
-  setAskedExit(bot, mCollection, true);
-  updateJp(bot.isDirectTo + ' asked me to turn off notifications');
-  responded = true;
-});
-
-var return_words = /^\/?(talk to me|return|un( |-)?mute|come( |-)?back)( |.|$)/i;
-flint.hears(return_words, function(bot/*, trigger*/) {
-  logger.verbose('Processing Return Request for ' + bot.isDirectTo);
-  setAskedExit(bot, mCollection, false);
-  updateJp(bot.isDirectTo + ' asked me to start notifying them again');
-  responded = true;
-});
 
 function setAskedExit(bot, mCollection, exitStatus) {
   bot.recall('user_config')
@@ -250,6 +259,7 @@ function setAskedExit(bot, mCollection, exitStatus) {
           } else {
             bot.say("OK.   I'll start giving you updates.  If you want to turn them off again just type **shut up**.");
           }
+          postInstructions(bot, /*status_only=*/true);
         });
       } else {
         logger.error('Unable to store exit request for ' + bot.isDirectTo + ' because DB never properly set up.');
@@ -263,6 +273,95 @@ function setAskedExit(bot, mCollection, exitStatus) {
     });
 }
 
+function toggleWatcherMsg(bot, mCollection, state) {
+  bot.recall('user_config')
+    .then(function(userConfig) {
+      if (userConfig.askedExit) {
+        bot.say('You curently have all notifications turned off.\n\n'+
+          'Type **come back** to enable notifications and then you can '+
+          'fine tune your watcher notification status.');
+        return postInstructions(bot, /*status_only=*/true);
+      }
+      if ((!userConfig.hasOwnProperty('watcherMsgs')) ||
+          (userConfig.watcherMsgs) && (state === true)) {
+        bot.say('Watched Ticket Notifications are already enabled.');
+        return postInstructions(bot, /*status_only=*/true);
+      }
+      if ((!userConfig.watcherMsgs) && (state === false)) {
+        bot.say('Watched Ticket Notifications are already disabled.');
+        return postInstructions(bot, /*status_only=*/true);
+      }
+      if (mCollection) {
+        mCollection.update({'_id':bot.isDirectTo}, {$set:{'watcherMsgs':state}}, {w:1}, function(err/*, result*/) {
+          if (err) {
+            logger.error("Can't communicate with db:" + err.message);
+            return bot.say("Hmmn. I seem to have a database problem.   Please ask again later.");
+          }
+          userConfig.watcherMsgs = state;
+          bot.store('user_config', userConfig);
+          if (state === true) {
+            bot.say("OK. I will notify you about changes to tickets you are watching.  If you want to turn them off again just type **no watchers**.");
+          } else {
+            bot.say("OK. I won't notify you about changes to tickets you are watching.  If you want to turn them on again just type **yes watchers**.");
+          }
+          postInstructions(bot, /*status_only=*/true);
+        });
+      } else {
+        logger.error('Unable to store exit request for ' + bot.isDirectTo + ' because DB never properly set up.');
+        bot.say("Hmmn. I seem to have a database problem.   Please ask again later.");
+      }
+    })
+    .catch(function(err) {
+      logger.error('Unable to get watcherMsgs status for ' + bot.isDirectTo);
+      logger.error(err.message);
+      bot.say("Hmmn. I seem to have a database problem.   Please ask again later.");
+    });
+}
+
+/****
+## Process incoming messages
+****/
+
+/* On mention with command
+ex User enters @botname /hello, the bot will write back
+*/
+var responded = false;
+var status_words = /^\/?(status|are you (on|working))( |.|$)/i;
+flint.hears(status_words, function(bot/*, trigger*/) {
+  logger.verbose('Processing Status Request for ' + bot.isDirectTo);
+  postInstructions(bot, /*status_only=*/true);
+  responded = true;
+});
+
+var no_watcher_words = /^\/?(no watcher)s?( |.|$)/i;
+flint.hears(no_watcher_words, function(bot/*, trigger*/) {
+  logger.verbose('Processing Disable Watcher Notifications Request for ' + bot.isDirectTo);
+  toggleWatcherMsg(bot, mCollection, false); 
+  responded = true;
+});
+
+var yes_watcher_words = /^\/?(yes watcher)s?( |.|$)/i;
+flint.hears(yes_watcher_words, function(bot/*, trigger*/) {
+  logger.verbose('Processing Disable Watcher Notifications Request for ' + bot.isDirectTo);
+  toggleWatcherMsg(bot, mCollection, true); 
+  responded = true;
+});
+
+var exit_words = /^\/?(exit|goodbye|mute|leave|shut( |-)?up)( |.|$)/i;
+flint.hears(exit_words, function(bot/*, trigger*/) {
+  logger.verbose('Processing Exit Request for ' + bot.isDirectTo);
+  setAskedExit(bot, mCollection, true);
+  updateJp(bot.isDirectTo + ' asked me to turn off notifications');
+  responded = true;
+});
+
+var return_words = /^\/?(talk to me|return|un( |-)?mute|come( |-)?back)( |.|$)/i;
+flint.hears(return_words, function(bot/*, trigger*/) {
+  logger.verbose('Processing Return Request for ' + bot.isDirectTo);
+  setAskedExit(bot, mCollection, false);
+  updateJp(bot.isDirectTo + ' asked me to start notifying them again');
+  responded = true;
+});
 
 flint.hears('/showadmintheusers', function(bot/*, trigger*/) {
   logger.verbose('Processing /showadmintheusers Request for ' + bot.isDirectTo);
@@ -286,7 +385,8 @@ flint.hears(/(^| )jpsNodeBot|.*( |.|$)/i, function(bot, trigger) {
   //@ mention removed before further processing for group conversations. @symbol not passed in message
   let text = trigger.text;
   if (!responded) {
-    bot.say('Don\'t know how to respond to "' + text +'"');
+    bot.say('Don\'t know how to respond to "' + text +'"'+
+      '.  Enter **help** for info on what I do understand.');
     logger.warn('Bot did not know how to respond to: '+text);
   }
   responded = false;
