@@ -20,6 +20,10 @@
     "dotenv": "^5.0.1",
     "express": "^4.14.0",
     "mongodb": "^2.2.26",
-    "node-flint": "^4.5.3"
+    "node-flint": "^4.5.3",
+    "request": "^2.85.0",
+    "request-promise": "^4.2.2",
+    "winston": "^2.4.1",
+    "winston-papertrail": "^1.0.5"
   }
 }

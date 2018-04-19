@@ -18,7 +18,7 @@ let emailOrg = '';
 if (process.env.EMAIL_ORG) {
   emailOrg = process.env.EMAIL_ORG;
 } else {
-  console.error('Cannot read required environment varialbe EMAIL_ORG');
+  logger.error('Cannot read required environment variable EMAIL_ORG');
   return;
 }
 
@@ -30,40 +30,45 @@ if ((process.env.WEBHOOK) && (process.env.TOKEN) && (process.env.PORT)) {
   config.token = process.env.TOKEN;
   config.port = process.env.PORT;
 } else {
-  console.error('Cannot start server.  Missing required environment varialbles WEBHOOK and TOKEN');
+  logger.error('Cannot start server.  Missing required environment varialbles WEBHOOK and TOKEN');
   return;
 }
 
 // Keep track about "stuff" I learn from the users in a hosted Mongo DB
-var mongo_client = require('mongodb').MongoClient;
-var mConfig = {};
-if ((process.env.MONGO_USER) && (process.env.MONGO_PW)) {
-  mConfig.mongoUser = process.env.MONGO_USER;
-  mConfig.mongoPass = process.env.MONGO_PW;
-  mConfig.mongoUrl = process.env.MONGO_URL;
-  mConfig.mongoDb = process.env.MONGO_DB;
-} else {
-  console.error('Cannot find required environent variables MONGO_USER, MONGO_PW, MONGO_URL, MONGO_DB');
-  return;
-}
 var mCollection = null;
-var mongo_collection_name ="cjnMongoCollection";
-var mongoUri = 'mongodb://'+mConfig.mongoUser+':'+mConfig.mongoPass+'@'+mConfig.mongoUrl+mConfig.mongoDb+'?ssl=true&replicaSet=Cluster0-shard-0&authSource=admin';
+// TODO: Have a different env for offline mode vs. emulator mode
+if (!process.env.SPARK_API_URL) {
+  var mongo_client = require('mongodb').MongoClient;
+  var mConfig = {};
+  if ((process.env.MONGO_USER) && (process.env.MONGO_PW)) {
+    mConfig.mongoUser = process.env.MONGO_USER;
+    mConfig.mongoPass = process.env.MONGO_PW;
+    mConfig.mongoUrl = process.env.MONGO_URL;
+    mConfig.mongoDb = process.env.MONGO_DB;
+  } else {
+    logger.error('Cannot find required environent variables MONGO_USER, MONGO_PW, MONGO_URL, MONGO_DB');
+    return;
+  }
+  var mongo_collection_name ="cjnMongoCollection";
+  var mongoUri = 'mongodb://'+mConfig.mongoUser+':'+mConfig.mongoPass+'@'+mConfig.mongoUrl+mConfig.mongoDb+'?ssl=true&replicaSet=Cluster0-shard-0&authSource=admin';
 
-mongo_client.connect(mongoUri, function(err, db) {
-  if (err) {return console.log('Error connecting to Mongo '+ err.message);}
-  db.collection(mongo_collection_name, function(err, collection) {
-    if (err) {return console.log('Error getting Mongo collection  '+ err.message);}
-    mCollection = collection;
-    mongo_client_ready = true;
-    flint.debug('Database connection for persistent storage is ready.');
+  mongo_client.connect(mongoUri, function(err, db) {
+    if (err) {return logger.error('Error connecting to Mongo '+ err.message);}
+    db.collection(mongo_collection_name, function(err, collection) {
+      if (err) {return logger.error('Error getting Mongo collection  '+ err.message);}
+      mCollection = collection;
+      mongo_client_ready = true;
+      logger.info('Database connection for persistent storage is ready.');
+    });
   });
-});
+}
 
 // Keep track about "stuff" I learn from the users in a Mongo DB and in the bots memory store
 var botUserInfo = {
   _id: null,
   askedExit: false,
+  watchersMsgs: true,
+  newFunctionalityMsg: false,
   trackTickets: []
 };
 
@@ -72,7 +77,7 @@ var adminEmail = '';
 if (process.env.ADMIN_EMAIL) {
   adminEmail = process.env.ADMIN_EMAIL;
 } else {
-  console.error('No ADMIN_EMAIL environment variable.  Will not notify author about bot activity')
+  logger.error('No ADMIN_EMAIL environment variable.  Will not notify author about bot activity');
 }
 var adminsBot = null;
 
@@ -87,53 +92,69 @@ var jiraEventHandler = require("./jira-event.js");
 var flint = new Flint(config);
 flint.start();
 flint.messageFormat = 'markdown';
-console.log("Starting flint, please wait...");
+logger.info("Starting flint, please wait...");
 
 flint.on("initialized", function() {
-  console.log("Flint initialized successfully! [Press CTRL-C to quit]");
+  logger.info("Flint initialized successfully! [Press CTRL-C to quit]");
 });
 
 
 flint.on('spawn', function(bot){
   // An instance of the bot has been added to a room
-  console.log('new bot spawned in room: %s with %s', bot.room.id, bot.isDirectTo);
+  logger.verbose('new bot spawned in room: %s', bot.room.id);
 
   // Say hello to the room
   if(bot.isGroup) {
-     bot.say("Hi! Sorry, I only work in one on one rooms at the moment.  Goodbye.");
-     bot.exit();
-     return;
+    bot.say("Hi! Sorry, I only work in one on one rooms at the moment.  Goodbye.");
+    bot.exit();
+    return;
   } else {
     if (bot.isDirectTo.toLocaleLowerCase() === adminEmail.toLocaleLowerCase()) {
       // Too chatty on Heroku
       // bot.say('**ACTIVE**');
       adminsBot = bot;
+      logger.info('Admin:%s is in a space with the Notifier Bot', bot.isDirectTo);
     } else {
-      flint.debug(bot.isDirectTo + ' is in a space with TropoJiraNotifier Bot');
+      logger.info(bot.isDirectTo + ' is in a space with CiscoJiraNotifier Bot');
     }
     newUser = botUserInfo ;
     if (mCollection) {
       mCollection.findOne({'_id': bot.isDirectTo}, function(err, reply){
         if (err) {return console.log("Can't communicate with db:" + err.message);}
         if (reply !== null) {
-          flint.debug('User config exists in DB, so this is an existing room.  Bot has restarted.');
+          logger.debug('User config exists in DB, so this is an existing room.  Bot has restarted.');
           newUser = reply;
+          if (!newUser.hasOwnProperty('newFunctionalityMsg')) {
+            sayNewFunctionalityMessage(bot);
+            newUser.newFunctionalityMsg = true;
+            newUser.watcherMsgs = true;
+            mCollection.replaceOne({'_id': bot.isDirectTo}, newUser, {w:1}, function(err) {
+              if (err) {return console.log("Can't add new user "+bot.isDirectTo+" to db:" + err.message);}
+            });
+          }
         } else {
-          flint.debug("This is a new room.  Storing data about this user");
+          logger.info("This is a new room.  Storing data about this user");
           newUser._id = bot.isDirectTo;
-          mCollection.insert(newUser, {w:1}, function(err, result) {
+          mCollection.insert(newUser, {w:1}, function(err) {
             if (err) {return console.log("Can't add new user "+bot.isDirectTo+" to db:" + err.message);}
           });
           postInstructions(bot, /*status_only=*/false, /*instructions_only=*/true);
           updateAdmin(bot.isDirectTo + ' created a space with TropoJiraNotifier Bot');
         }
         // Set the user specific configuration in this just spwaned instance of the  bot
-        flint.debug('Setting these user configurations in the bot object');
-        flint.debug(newUser);
+        logger.debug('Setting these user configurations in the bot object');
+        logger.debug(newUser);
         bot.store('user_config', newUser);
       });
     } else {
-      console.error("Can't access persistent data so many not have correct settings for user " + bot.isDirectTo);
+      if (process.env.SPARK_API_URL) {
+        // If we are in emulator mode just use memory store
+        postInstructions(bot, /*status_only=*/false, /*instructions_only=*/true);
+        updateAdmin(bot.isDirectTo + ' created a space with TropoJiraNotifier Bot');
+        bot.store('user_config', newUser);
+      } else {
+        logger.error("Can't access persistent data so many not have correct settings for user " + bot.isDirectTo);
+      }
     }
     return;
   }
@@ -143,74 +164,78 @@ function updateAdmin(message, listAll=false) {
   try {
     adminsBot.say(message);
     if (listAll) {
+      let count = 0;
       flint.bots.forEach(function(bot) {
         adminsBot.say({'markdown': "* " + bot.isDirectTo});
+        count += 1;
       });
+      adminsBot.say(`For a total of ${count} users.`);
     }
   } catch (e) {
-    flint.debug('Unable to spark JP the news ' + message);
-    flint.debug('Reason: ' + e.message);
+    logger.warn('Unable to spark Admin the news ' + message);
+    logger.warn('Reason: ' + e.message);
   }
 }
 
+function sayNewFunctionalityMessage(bot) {
+  bot.say('I\'ve just been updated so that I can give you more information!\n\n'+
+    'In addition to notifying you when you are mentioned in, or assigned to, '+
+    'a jira ticket, I will now send you a message if a ticket you are watching '+
+    'is changed.\n\n'+
+    'This may make me too "chatty" for some users, especially those who are '+
+    'automatically made watchers to many tickets.   To turn off watcher messages, '+
+    'but keep getting notified for mentions and assignments just type **no watchers**\n\n'+
+    'If you want the functionality back, type **yes watchers**'+
+    "\n\nIf you aren't sure which messages you are getting, just type **status**" +
+    "\n\nQuestions or feedback?   Join the Ask JiraNotification Bot space here: https://eurl.io/#Hy4f7zOjG"
+  );
+}
+
+
 function postInstructions(bot, status_only=false, instructions_only=false) {
   if (!status_only) {
-  bot.say("I will look for Jira tickets that are assigned to, or that mention " +
-        bot.isDirectTo + " and notify you so you can check out the ticket immediately." +
-        "\n\nIf you get tired of this service please type the command **shut up** to get me to stop. " +
-        'After that you can leave this room.' +
-        "\n\nIf you ever want me to start notifying you again, restart a room with me and type **come back**." +
-        "\n\nIf you aren't sure if I'm giving you notifications, just type **status**");
+    bot.say("I will look for Jira tickets that are assigned to, or that mention " +
+        bot.isDirectTo + " and notify you so you can check out the ticket immediately.  " +
+        "I'll also notify you of changes to any tickets you are watching." +
+        '\n\nIf the watcher messages make me too "chatty", but you want to '+
+        'keep getting notified for mentions and assignments just type **no watchers**\n\n'+
+        '\nIf you want the watcher messages back, type **yes watchers**'+
+        "\n\nYou can also type the command **shut up** to get me to stop sending any messages. " +
+        "\nIf you ever want me to start notifying you again, type **come back**." +
+        "\n\nIf you aren't sure if I'm giving you notifications, just type **status**" +
+        "\n\nQuestions or feedback?   Join the Ask JiraNotification Bot space here: https://eurl.io/#Hy4f7zOjG");
   }
   if (!instructions_only) {
     bot.recall('user_config')
       .then(function(userConfig) {
+        let msg = '';
         if (userConfig.askedExit) {
-          bot.say("\n\nCurrent Status: Notifications are **disabled**.");
+          msg = "\n\nCurrent Status: \n* Notifications are **disabled**.";
         } else {
-          bot.say("\n\nCurrent Status: Notifications are **enabled**.");
+          msg = "\n\nCurrent Status: \n* Mention and Assignment Notifications are **enabled**.";
+          if (userConfig.watcherMsgs) {
+            msg += "\n* Watched Ticket Changed Notifications are **enabled**.";
+          } else {
+            msg += "\n* Watched Ticket Changed Notifications are **disabled**.";
+          }
         }
-        flint.debug('Status for '+ bot.isDirectTo + ': ' + userConfig);
+        if (status_only) {
+          msg += '\n\nType **help** to learn how to change your Notification state.';
+        }
+        bot.say(msg);
+        logger.debug('Status for '+ bot.isDirectTo + ': ' + userConfig);
       })
       .catch(function(err) {
-        console.error('Unable to get askedExit status for ' + bot.isDirectTo);
-        console.error(err.message);
+        logger.error('Unable to get askedExit status for ' + bot.isDirectTo);
+        logger.error(err.message);
         bot.say("Hmmn. I seem to have a database problem, and can't report my notification status.   Please ask again later.");
       });
   }
 }
 
-
 /****
-## Process incoming messages
+## Helper methods for per-user notification level control
 ****/
-
-/* On mention with command
-ex User enters @botname /hello, the bot will write back
-*/
-var responded = false;
-var status_words = /^\/?(status|are you (on|working))( |.|$)/i;
-flint.hears(status_words, function(bot, trigger) {
-  flint.debug('Processing Status Request for ' + bot.isDirectTo);
-  postInstructions(bot, /*status_only=*/true);
-  responded = true;
-});
-
-var exit_words = /^\/?(exit|goodbye|mute|leave|shut( |-)?up)( |.|$)/i;
-flint.hears(exit_words, function(bot, trigger) {
-  flint.debug('Processing Exit Request for ' + bot.isDirectTo);
-  setAskedExit(bot, mCollection, true);
-  updateJp(bot.isDirectTo + ' asked me to turn off notifications');
-  responded = true;
-});
-
-var return_words = /^\/?(talk to me|return|un( |-)?mute|come( |-)?back)( |.|$)/i;
-flint.hears(return_words, function(bot, trigger) {
-  flint.debug('Processing Return Request for ' + bot.isDirectTo);
-  setAskedExit(bot, mCollection, false);
-  updateJp(bot.isDirectTo + ' asked me to start notifying them again');
-  responded = true;
-});
 
 function setAskedExit(bot, mCollection, exitStatus) {
   bot.recall('user_config')
@@ -222,9 +247,9 @@ function setAskedExit(bot, mCollection, exitStatus) {
         return bot.say('Notifications are already **enabled**.');
       }
       if (mCollection) {
-        mCollection.update({'_id':bot.isDirectTo}, {$set:{'askedExit':exitStatus}}, {w:1}, function(err, result) {
+        mCollection.update({'_id':bot.isDirectTo}, {$set:{'askedExit':exitStatus}}, {w:1}, function(err/*, result*/) {
           if (err) {
-            console.error("Can't communicate with db:" + err.message);
+            logger.error("Can't communicate with db:" + err.message);
             return bot.say("Hmmn. I seem to have a database problem.   Please ask again later.");
           }
           userConfig.askedExit = exitStatus;
@@ -234,27 +259,119 @@ function setAskedExit(bot, mCollection, exitStatus) {
           } else {
             bot.say("OK.   I'll start giving you updates.  If you want to turn them off again just type **shut up**.");
           }
+          postInstructions(bot, /*status_only=*/true);
         });
       } else {
-        console.log('Unable to store exit request for ' + bot.isDirectTo + ' because DB never properly set up.');
+        logger.error('Unable to store exit request for ' + bot.isDirectTo + ' because DB never properly set up.');
         bot.say("Hmmn. I seem to have a database problem.   Please ask again later.");
       }
     })
     .catch(function(err) {
-      console.error('Unable to get quietMode status for ' + bot.isDirectTo);
-      console.error(err.message);
+      logger.error('Unable to get quietMode status for ' + bot.isDirectTo);
+      logger.error(err.message);
       bot.say("Hmmn. I seem to have a database problem.   Please ask again later.");
     });
 }
 
+function toggleWatcherMsg(bot, mCollection, state) {
+  bot.recall('user_config')
+    .then(function(userConfig) {
+      if (userConfig.askedExit) {
+        bot.say('You curently have all notifications turned off.\n\n'+
+          'Type **come back** to enable notifications and then you can '+
+          'fine tune your watcher notification status.');
+        return postInstructions(bot, /*status_only=*/true);
+      }
+      if ((!userConfig.hasOwnProperty('watcherMsgs')) ||
+          (userConfig.watcherMsgs) && (state === true)) {
+        bot.say('Watched Ticket Notifications are already enabled.');
+        return postInstructions(bot, /*status_only=*/true);
+      }
+      if ((!userConfig.watcherMsgs) && (state === false)) {
+        bot.say('Watched Ticket Notifications are already disabled.');
+        return postInstructions(bot, /*status_only=*/true);
+      }
+      if (mCollection) {
+        mCollection.update({'_id':bot.isDirectTo}, {$set:{'watcherMsgs':state}}, {w:1}, function(err/*, result*/) {
+          if (err) {
+            logger.error("Can't communicate with db:" + err.message);
+            return bot.say("Hmmn. I seem to have a database problem.   Please ask again later.");
+          }
+          userConfig.watcherMsgs = state;
+          bot.store('user_config', userConfig);
+          if (state === true) {
+            bot.say("OK. I will notify you about changes to tickets you are watching.  If you want to turn them off again just type **no watchers**.");
+          } else {
+            bot.say("OK. I won't notify you about changes to tickets you are watching.  If you want to turn them on again just type **yes watchers**.");
+          }
+          postInstructions(bot, /*status_only=*/true);
+        });
+      } else {
+        logger.error('Unable to store exit request for ' + bot.isDirectTo + ' because DB never properly set up.');
+        bot.say("Hmmn. I seem to have a database problem.   Please ask again later.");
+      }
+    })
+    .catch(function(err) {
+      logger.error('Unable to get watcherMsgs status for ' + bot.isDirectTo);
+      logger.error(err.message);
+      bot.say("Hmmn. I seem to have a database problem.   Please ask again later.");
+    });
+}
 
-flint.hears('/showadmintheusers', function(bot, trigger) {
+/****
+## Process incoming messages
+****/
+
+/* On mention with command
+ex User enters @botname /hello, the bot will write back
+*/
+var responded = false;
+var status_words = /^\/?(status|are you (on|working))( |.|$)/i;
+flint.hears(status_words, function(bot/*, trigger*/) {
+  logger.verbose('Processing Status Request for ' + bot.isDirectTo);
+  postInstructions(bot, /*status_only=*/true);
+  responded = true;
+});
+
+var no_watcher_words = /^\/?(no watcher)s?( |.|$)/i;
+flint.hears(no_watcher_words, function(bot/*, trigger*/) {
+  logger.verbose('Processing Disable Watcher Notifications Request for ' + bot.isDirectTo);
+  toggleWatcherMsg(bot, mCollection, false); 
+  responded = true;
+});
+
+var yes_watcher_words = /^\/?(yes watcher)s?( |.|$)/i;
+flint.hears(yes_watcher_words, function(bot/*, trigger*/) {
+  logger.verbose('Processing Disable Watcher Notifications Request for ' + bot.isDirectTo);
+  toggleWatcherMsg(bot, mCollection, true); 
+  responded = true;
+});
+
+var exit_words = /^\/?(exit|goodbye|mute|leave|shut( |-)?up)( |.|$)/i;
+flint.hears(exit_words, function(bot/*, trigger*/) {
+  logger.verbose('Processing Exit Request for ' + bot.isDirectTo);
+  setAskedExit(bot, mCollection, true);
+  updateJp(bot.isDirectTo + ' asked me to turn off notifications');
+  responded = true;
+});
+
+var return_words = /^\/?(talk to me|return|un( |-)?mute|come( |-)?back)( |.|$)/i;
+flint.hears(return_words, function(bot/*, trigger*/) {
+  logger.verbose('Processing Return Request for ' + bot.isDirectTo);
+  setAskedExit(bot, mCollection, false);
+  updateJp(bot.isDirectTo + ' asked me to start notifying them again');
+  responded = true;
+});
+
+flint.hears('/showadmintheusers', function(bot/*, trigger*/) {
+  logger.verbose('Processing /showadmintheusers Request for ' + bot.isDirectTo);
   updateAdmin('The following people are using me:', true);
   responded = true;
 });
 
 var help_words = /^\/?help/i;
-flint.hears(help_words, function(bot, trigger) {
+flint.hears(help_words, function(bot/*, trigger*/) {
+  logger.verbose('Processing help Request for ' + bot.isDirectTo);
   postInstructions(bot);
   responded = true;
 });
@@ -267,12 +384,14 @@ flint.hears(/(^| )jpsNodeBot|.*( |.|$)/i, function(bot, trigger) {
 
   //@ mention removed before further processing for group conversations. @symbol not passed in message
   let text = trigger.text;
-  let request = text.replace("jpsNodeBot ",'');
   if (!responded) {
-    bot.say('Don\'t know how to respond to "' + text +'"');
+    bot.say('Don\'t know how to respond to "' + text +'"'+
+      '.  Enter **help** for info on what I do understand.');
+    logger.warn('Bot did not know how to respond to: '+text);
   }
   responded = false;
-  console.log("Got a message to my bot:" + text);
+  logger.verbose("Got a message to my bot:" + text);
+
   //console.log(trigger);
 });
 
@@ -282,8 +401,8 @@ flint.hears(/(^| )jpsNodeBot|.*( |.|$)/i, function(bot, trigger) {
 
 // Spark webbhook
 app.post('/', webhook(flint));
-  var server = app.listen(config.port, function () {
-  flint.debug('Flint listening on port %s', config.port);
+var server = app.listen(config.port, function () {
+  logger.info('Flint listening on port %s', config.port);
 });
 
 // Basic liveness test
@@ -293,17 +412,16 @@ app.get('/', function (req, res) {
 
 // Jira webbhook
 app.post('/jira', function (req, res) {
-  //console.log(req.body);
   let jiraEvent = {};
   try {
     jiraEvent = req.body;
     if (typeof jiraEvent.webhookEvent !== 'undefined') {
-      flint.debug('Processing incoming Jira Event %s:%s', jiraEvent.webhookEvent, jiraEvent.issue_event_type_name);
+      logger.info('Processing incoming Jira Event %s:%s', jiraEvent.webhookEvent, jiraEvent.issue_event_type_name);
       jiraEventHandler.processJiraEvent(jiraEvent, flint, emailOrg);
     }
   } catch (e) {
-    console.error('Error processing Jira Event Webhook:' + e);
-    console.error('Ignoring: '+ jiraEvent);
+    logger.warn('Error processing Jira Event Webhook:' + e);
+    logger.warn('Ignoring: '+ jiraEvent);
     res.status(400);
   }
   res.end();
@@ -323,7 +441,7 @@ function sayGoodbye() {
             "You still have an email client, don't you?<br><br>**INACTIVE**"});
     *
     */
-  flint.debug('stoppping...');
+  logger.info('stoppping...');
   server.close();
   flint.stop().then(function() {
     process.exit();

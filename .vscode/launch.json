@@ -4,11 +4,12 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
+
         {
             "name": "Launch Server",
             "type": "node",
             "request": "launch",
-            "env": {"DEBUG": "flint"},
+            "env": {"DEBUG":"flint"},
             "protocol": "inspector",
             "program": "${workspaceFolder}/server.js"
         },
@@ -16,7 +17,10 @@
             "name": "Launch Test",
             "type": "node",
             "request": "launch",
-            "env": {"name":"DEBUG", "value":"flint"},
+            "env": {"DEBUG":"flint",
+                    "VERBOSE":"true",
+                    "LOG_LEVEL": "0"},
+            "outputCapture": "std",
             "program": "${workspaceFolder}/test-jira-event-handler.js"
         },
         {
