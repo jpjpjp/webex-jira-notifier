@@ -9,10 +9,10 @@ var webhook = require('node-flint/webhook');
 var express = require('express');
 var bodyParser = require('body-parser');
 var app = express();
-logger = require('./logger');
 
 // When running locally read environment variables from a .env file
 require('dotenv').config();
+logger = require('./logger');
 
 // Only allow users for our email organization user the bot
 let emailOrg = '';
