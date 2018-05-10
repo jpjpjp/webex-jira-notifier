@@ -24,7 +24,7 @@ if (process.env.JIRA) {
 //Determine which event we have.  If its one we care about see if it belongs
 // to someone in a room with our bot
 exports.processJiraEvent = function (jiraEvent, flint, emailOrg, callback=null) {
-  //logJiraEvent(jiraEvent);
+  logJiraEvent(jiraEvent);
   try {
     // We'll build a list of users who are mentioned or assigned
     let toNotifyList = [];
@@ -110,6 +110,15 @@ exports.processJiraEvent = function (jiraEvent, flint, emailOrg, callback=null) 
           emailOrg, callback);
       }
     } else if (jiraEvent.webhookEvent === 'jira:issue_deleted') {
+      if (!jiraEvent.issue.fields.assignee.name) {
+        logger.warning('Got an issue deleted with no assignee');
+        e = new Error('DeletedWithNoAssignee');
+        createTestCase(e, jiraEvent);
+        notifyWatchers(flint, jiraEvent, [],  //no one was "notified"
+          jiraEvent.user.displayName, callback);
+        if (callback) {(callback(e));}
+        return;
+      }
       // Someone deleted a ticket that was assigned to the user
       toNotifyList.push(jiraEvent.issue.fields.assignee.name);
       notifyPeople(flint, jiraEvent, toNotifyList,  //one name
@@ -352,9 +361,8 @@ function createTestCase(e, jiraEvent, changedField='') {
       logger.error('Error writing jira event to disk:' + err);
     }
     if (e) {
-      jiraEvent = e.message + '\n'+ jiraEvent;
       fs.appendFile("./jira-event-test-cases/" + jiraEvent.timestamp + '-' + jiraEvent.webhookEvent + '-' +
-        jiraEvent.issue_event_type_name + ".error", JSON.stringify(e, null, 4), (err) => {
+        jiraEvent.issue_event_type_name + "_"+ e.message+".error", JSON.stringify(e, null, 4), (err) => {
         if (err) {
           logger.error('Error writing jira event to disk:' + err);
         }

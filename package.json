@@ -19,7 +19,6 @@
     "body-parser": "^1.15.2",
     "dotenv": "^5.0.1",
     "express": "^4.14.0",
-    "logger": "0.0.1",
     "mongodb": "^2.2.26",
     "node-flint": "^4.5.3",
     "request": "^2.85.0",

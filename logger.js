@@ -10,8 +10,8 @@ if (process.env.PAPERTRAIL) {
   require('winston-papertrail').Papertrail;
 
   var winstonPapertrail = new winston.transports.Papertrail({
-    host: 'logs3.papertrailapp.com',  // TODO Read from env
-    port: 37882                     // TODO Read from env
+    host: process.env.PAPERTRAIL_HOST,
+    port: process.env.PAPERTRAIL_PORT
   });
   
   winstonPapertrail.on('error', function(err) {
