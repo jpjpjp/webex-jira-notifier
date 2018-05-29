@@ -1,5 +1,5 @@
-# cisco-jira-notifier
-Bot to notify users of the Cisco jira system when a ticket has been assigned to them or they have been mentioned.
+# webex-jira-notifier
+Webex Teams Bot to notify users of Jira when a ticket has been assigned to them, when they have been mentioned, or when a watched ticket has been updated.
 
 This bot works only in one on one rooms, not in spaces.   Because its impossible to "leave" a one on one room, the bot supports "shut up", and "come back" commands to turn off notifications.   It also supports a "status" command to check if notifications are on or off.
 
@@ -15,7 +15,7 @@ Prerequisites:
 
 - [ ] node.js (minimum supported v4.2.6 with *use-strict* runtime flag & npm 2.14.12 and up)
 
-- [ ] Sign up for Cisco Spark (logged in with your web browser)
+- [ ] Sign up for Webex Teams (logged in with your web browser)
 
 - [ ] Administrator of Jira system that you'd like to notify for.   
 
@@ -27,7 +27,7 @@ Prerequisites:
 
 - [ ] As a Jira administrator configure Jira to set up a webhook that will fire whenever an Issue is created, updated or deleted.  The url will be the URL where your ngrok server is running (during development), or the url where your app ins running in production, with appended with '/jira'.  For example: http://myserver.ngrok.io/jira
 
-- [ ] Create a Cisco Spark Bot (save the email address and API key): https://developer.ciscospark.com/add-bot.html
+- [ ] Create a Webex Teams Bot (save the email address and API key): https://developer.ciscospark.com/add-bot.html
 
 - [ ] Create or use an existing Mongo Altas DB account and create a Database to save each users setting information in.
 
@@ -43,6 +43,15 @@ Set the following environmnt varibles in a file if running locally or in your pr
 * MONGO_URL - the url where your Mongo Atlas DB is running
 * MONGO_DB - the name of the Mongo Atlas DB to use
 * ADMIN_EMAIL - the email address of the Cisco Spark user to notify about bot activity.  This is generally the developer who maintains this bot
+
+Optionally in order to support watcher notification, the basic auth token of a jira user is needed in order to query jira for the watchers on any updated tickets.
+* JIRA - basic auth token for an authorized Jira user
+
+Also optionally, this bot can use a proxy server to route the watcher requests to a jira.  When these variables are set the bot will replace the portion of the wather URL that came with the Jira webhook and replace it with the string in the proxy server.  For example one might set the following environment varialbes:
+* JIRA_URL - base URL for my secure jira server ie: https://jira.securecompany.com/jira
+* PROXY-URL - base URL for the proxy server, ie: https://jira-proxy.securcompany.com/jira
+
+When using a proxy make sure to set the JIRA environment token to a proxy authorized user.  The proxy server is responsible for replace this with a token for a user authorized in the real system.
 
 Start your node server in your enviornment.  This can be done via a debugger when running locally or by entering the following:
     ```npm start```
