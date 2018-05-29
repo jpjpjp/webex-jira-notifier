@@ -54,7 +54,7 @@ exports.processJiraEvent = function (jiraEvent, flint, emailOrg, callback=null) 
         logger.error('Expected a changelog for %s:%s but did not find one!' +
           ' No one will be notified', jiraEvent.webhookEvent, 
         jiraEvent.issue_event_type_name);
-        createTestCase(null, jiraEvent);   
+        createTestCase(null, jiraEvent, 'no-changelog');   
         if (callback) {callback(e);}
         return;     
       }
@@ -116,9 +116,9 @@ exports.processJiraEvent = function (jiraEvent, flint, emailOrg, callback=null) 
       }
     } else if (jiraEvent.webhookEvent === 'jira:issue_deleted') {
       if (!jiraEvent.issue.fields.assignee.name) {
-        logger.warning('Got an issue deleted with no assignee');
+        logger.error('Got an issue deleted with no assignee');
         e = new Error('DeletedWithNoAssignee');
-        createTestCase(e, jiraEvent);
+        createTestCase(e, jiraEvent, 'no-assignee');
         notifyWatchers(flint, jiraEvent, [],  //no one was "notified"
           jiraEvent.user.displayName, callback);
         if (callback) {(callback(e));}
@@ -140,7 +140,7 @@ exports.processJiraEvent = function (jiraEvent, flint, emailOrg, callback=null) 
     }
   } catch (e) {
     logger.error('Caught Error in JiraEvent Handler:' + e);
-    createTestCase(e, jiraEvent);
+    createTestCase(e, jiraEvent, 'caught-error');
     if (callback) {return(callback(e));}
   }
 };
@@ -291,17 +291,17 @@ function getWatcherNews(jiraEvent) {
     watcherNews.description = ' deleted a Jira ';
     watcherNews.change = jiraEvent.issue.fields.description;
   } else {
-    logger.warn('Using generic watcherNews for %s:%s_%s', jiraEvent.timestamp, jiraEvent.webhookEvent, jiraEvent.issue_event_type_name);
-    createTestCase(null, jiraEvent);
+    logger.error('Using generic watcherNews for %s:%s_%s', jiraEvent.timestamp, jiraEvent.webhookEvent, jiraEvent.issue_event_type_name);
+    createTestCase(null, jiraEvent, 'no-type-handler');
   } 
   return watcherNews;
 }
 
 function getNewsFromChangelong(jiraEvent, change) {
   if (!jiraEvent.changelog) {
-    logger.warn('No changelong for eventtype:%s, issue_type:%s', 
+    logger.error('No changelong for eventtype:%s, issue_type:%s', 
       jiraEvent.issue_event_type_name, jiraEvent.issue_event_type_name);
-    createTestCase(null, jiraEvent);
+    createTestCase(null, jiraEvent, 'no-changelog');
     return change;
   };
   for (let i = 0, len = jiraEvent.changelog.items.length; i < len; i++) {
@@ -318,9 +318,9 @@ function getNewsFromChangelong(jiraEvent, change) {
     }
   }
   if (!change) {
-    logger.warn('Unable to find a changed field for eventtype:%s, issue_type:%s', 
+    logger.error('Unable to find a changed field for eventtype:%s, issue_type:%s', 
       jiraEvent.issue_event_type_name, jiraEvent.issue_event_type_name);
-    createTestCase(null, jiraEvent);
+    createTestCase(null, jiraEvent, 'no-change');
   }
   return change;
 }
