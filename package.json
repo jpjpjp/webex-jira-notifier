@@ -4,7 +4,7 @@
   "description": "Bot for notifying a user when they are mentioned in or assigned to a Cisco jira ticket",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
+    "start": "mkdir JiraEvents; node server.js",
     "test": "node test-jira-event-handler.js"
   },
   "keywords": [
