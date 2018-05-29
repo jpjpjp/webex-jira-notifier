@@ -29,7 +29,7 @@ if (process.env.JIRA) {
 //Determine which event we have.  If its one we care about see if it belongs
 // to someone in a room with our bot
 exports.processJiraEvent = function (jiraEvent, flint, emailOrg, callback=null) {
-  logJiraEvent(jiraEvent);
+  //logJiraEvent(jiraEvent);
   try {
     // We'll build a list of users who are mentioned or assigned
     let toNotifyList = [];
