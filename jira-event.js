@@ -10,13 +10,18 @@ logger = require('./logger');
 
 // Only allow users for our email organization user the bot
 let request = null;
-let bearerToken = '';
+let basicToken = '';
 if (process.env.JIRA) {
   // for finding watchers
   request = require('request-promise');
-  bearerToken = process.env.JIRA;
-  //auth = 'bearer dQPy6UgJpuJ9h6Vx9kx35t8fXMSNUWE6';// + process.env.JIRA;
-//  auth = 'Basic ' + process.env.JIRA;
+  basicToken = process.env.JIRA;
+  if ((process.env.JIRA_URL) && (process.env.PROXY_URL)) {
+    // Set variables to get watcher info via a server
+    jira_url = process.env.JIRA_URL;
+    jira_url_regexp = new RegExp(jira_url);
+    proxy_url = process.env.PROXY_URL;
+    logger.info('Will attempt to access Jira via proxy at ' + jira_url);
+  }
 } else {
   logger.error('Cannot read Jira credential.  Will not notify watchers');
 }
@@ -191,14 +196,21 @@ function notifyWatchers(flint, jiraEvent, notifyList, author, cb) {
 
       // Remove after we parse some data and feel good about all conditions
       let watcherNews = getWatcherNews(jiraEvent);
-      logger.debug('Looking for watcher info: '+jiraEvent.issue.fields.watches.self);
+      let watcherUrl = jiraEvent.issue.fields.watches.self;
+
+      // Use a proxy server if configured
+      if (jira_url_regexp) {
+        watcherUrl = watcherUrl.replace(jira_url_regexp, proxy_url);
+      }
+      logger.debug('Looking for watcher info: '+watcherUrl);
       logger.debug('Will send '+watcherNews.description+', changes:'+watcherNews.change);
 
-      request.get(jiraEvent.issue.fields.watches.self, {
+      request.get(watcherUrl, {
         "json": true,
         headers: {
-          'Authorization': 'Basic ' + bearerToken
-//          'bearer' : bearerToken
+          'Authorization': 'Basic ' + basicToken
+          // If I ever switch to OAuth
+          //'bearer' : bearerToken
         }
       }).then(function(resp) {
         // Uncomment afters seeing some data
