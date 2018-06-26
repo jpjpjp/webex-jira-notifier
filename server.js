@@ -170,7 +170,7 @@ function updateAdmin(message, listAll=false) {
         message += '* ' + bot.isDirectTo + '\n';
         count += 1;
       });
-      message += `For a total of ${count} users.`;
+      message += `\n\nFor a total of ${count} users.`;
     }
     adminsBot.say({'markdown': message});
   } catch (e) {
