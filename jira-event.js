@@ -166,6 +166,10 @@ function notifyPeople(flint, jiraEvent, notifyList, author, eventName, action, e
           return logger.info('Supressing message to ' + theBot.isDirectTo);
         }
         sendNotification(flint, theBot, jiraEvent, author, eventName, action, elementName, elementValue, cb);
+        // Add instrumentation to find users who are not working in the SPARK or TROPO projects
+        if ((jiraEvent.issue.key.indexOf('TROPO-')) || (jiraEvent.issue.key.indexOf('SPARK-'))) {
+          logger.error(email + ' is working on project ' + jiraEvent.issue.key);
+        }
       }).catch(function(err) {
         logger.error('Unable to get quietMode status for ' + theBot.isDirectTo);
         logger.error(err.message);
@@ -337,6 +341,9 @@ function getAllMentions(str) {
 }
 
 function sendNotification(flint, bot, jiraEvent, author, eventName, action, elementName, elementValue, cb) {
+  if (bot.isDirectTo == jiraEvent.user.emailAddress) {
+    logger.info('Not sending notification of update made by ' + bot.isDirectTo + ' to ' + jiraEvent.user.emailAddress);
+  }
   logger.info('Sending a notification to '+bot.isDirectTo+' about '+jiraEvent.issue.key);
   bot.say({markdown: '<br>' + author +
     eventName + jiraEvent.issue.fields.issuetype.name +
