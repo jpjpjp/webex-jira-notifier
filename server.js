@@ -163,15 +163,16 @@ flint.on('spawn', function(bot){
 
 function updateAdmin(message, listAll=false) {
   try {
-    adminsBot.say(message);
     if (listAll) {
       let count = 0;
+      message += '\n';
       flint.bots.forEach(function(bot) {
-        adminsBot.say({'markdown': "* " + bot.isDirectTo});
+        message += '* ' + bot.isDirectTo + '\n';
         count += 1;
       });
-      adminsBot.say(`For a total of ${count} users.`);
+      message += `For a total of ${count} users.`;
     }
+    adminsBot.say({'markdown': message});
   } catch (e) {
     logger.warn('Unable to spark Admin the news ' + message);
     logger.warn('Reason: ' + e.message);
