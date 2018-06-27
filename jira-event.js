@@ -6,7 +6,7 @@
 
 // When running locally read environment variables from a .env file
 require('dotenv').config();
-logger = require('./logger');
+//logger = require('./logger');
 
 // Only allow users for our email organization user the bot
 let request = null;
