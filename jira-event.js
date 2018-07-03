@@ -26,6 +26,9 @@ if (process.env.JIRA) {
   logger.error('Cannot read Jira credential.  Will not notify watchers');
 }
 
+const JIRA_PROJECTS = process.env.JIRA_PROJECTS;
+const jiraProjects = JIRA_PROJECTS.split(',');
+
 //Determine which event we have.  If its one we care about see if it belongs
 // to someone in a room with our bot
 exports.processJiraEvent = function (jiraEvent, flint, emailOrg, callback=null) {
@@ -36,6 +39,15 @@ exports.processJiraEvent = function (jiraEvent, flint, emailOrg, callback=null) 
     // We'll also notify any watchers of this change 
     //(but only once even if multiple things changed)
     jiraEvent.watchersNotified = false;
+
+    // Is this from one of the proejcts we can access?
+    // jiraEvent.ourProjectIdx == -1 means no.
+    const key = jiraEvent.issue.key;
+    jiraEvent.ourProjectIdx = jiraProjects.indexOf(key.substr(0, key.indexOf('-')));
+    if (jiraEvent.ourProjectIdx == -1) {
+      logger.verbose('Got a webhook for '+ key + 
+        '. Not in our list of projects: ' + JIRA_PROJECTS);
+    }
 
     if ((jiraEvent.webhookEvent === 'jira:issue_updated') &&
         ((jiraEvent.issue_event_type_name === 'issue_commented') ||
@@ -167,7 +179,7 @@ function notifyPeople(flint, jiraEvent, notifyList, author, eventName, action, e
         }
         sendNotification(flint, theBot, jiraEvent, author, eventName, action, elementName, elementValue, cb);
         // Add instrumentation to find users who are not working in the SPARK or TROPO projects
-        if ((jiraEvent.issue.key.indexOf('TROPO-')) && (jiraEvent.issue.key.indexOf('SPARK-'))) {
+        if (jiraEvent.ourProjectIdx == -1) {
           logger.error(email + ' is working on project ' + jiraEvent.issue.key);
         }
       }).catch(function(err) {
@@ -193,6 +205,11 @@ function notifyWatchers(flint, jiraEvent, notifyList, author, cb) {
       return logger.debug('Already notified potential watchers for event %s:%s',
         jiraEvent.issue_event_type_name, jiraEvent.issue_event_type_name);
     }
+    if (jiraEvent.ourProjectIdx == -1) {
+      return logger.debug('Don\'t have permission to check watchers for %s:%s',
+        jiraEvent.issue_event_type_name, jiraEvent.issue_event_type_name);
+    }
+
     jiraEvent.watchersNotified = true;
     if ((jiraEvent.issue.fields.watches.watchCount) && (jiraEvent.issue.fields.watches.self)) {
       //TODO, process the watcher list
