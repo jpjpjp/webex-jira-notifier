@@ -363,9 +363,9 @@ function sendNotification(flint, bot, jiraEvent, author, eventName, action, elem
     return;
   }
   logger.info('Sending a notification to '+bot.isDirectTo+' about '+jiraEvent.issue.key);
-  bot.say({markdown: '<br>' + author +
-    eventName + jiraEvent.issue.fields.issuetype.name +
-    ': **' + jiraEvent.issue.fields.summary + '**' + action});
+  let msg =  author + eventName + jiraEvent.issue.fields.issuetype.name +
+    ': **' + jiraEvent.issue.fields.summary + '**' + action + '\n\n';
+
   if ((elementName) || (elementValue)) {
     // Try replacing newlines with <br > to keep all the text in one block
     if (elementName) {
@@ -374,9 +374,10 @@ function sendNotification(flint, bot, jiraEvent, author, eventName, action, elem
     if (elementValue) {
       elementValue = elementValue.replace(/(?:\r\n\r\n|\r\n|\r|\n)/g, '<br />');
     }
-    bot.say({markdown: '> ' + elementName + elementValue});
+    msg += '>' + elementName + elementValue + '\n\n';
   }
-  bot.say('https://jira-eng-gpk2.cisco.com/jira/browse/' + jiraEvent.issue.key);
+  msg += 'https://jira-eng-gpk2.cisco.com/jira/browse/' + jiraEvent.issue.key;
+  bot.say({markdown: msg});
   if (cb) {cb(null, bot);}  
 }
 
