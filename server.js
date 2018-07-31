@@ -68,8 +68,8 @@ if (!process.env.SPARK_API_URL) {
 var botUserInfo = {
   _id: null,
   askedExit: false,
-  watchersMsgs: true,
-  newFunctionalityMsg: false,
+  watcherMsgs: true,
+  newFunctionalityMsg: true, // New users don't need the "new functionality" message
   trackTickets: []
 };
 
