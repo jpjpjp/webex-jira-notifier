@@ -234,8 +234,9 @@ function notifyWatchers(flint, jiraEvent, notifyList, author, cb) {
           //'bearer' : bearerToken
         }
       }).then(function(resp) {
-        // Uncomment afters seeing some data
-        //let watcherNews = null;
+        if(!resp.hasOwnProperty('watchers')){
+          throw new Error('Did not get expected response from Jira watcher lookup.  This usually happens due to login failure and redirection.');
+        }
         resp.watchers.forEach(function(watcher) {
           let email = watcher.emailAddress;
           if (notifyList.indexOf(watcher.key) > -1) {
