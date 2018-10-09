@@ -177,7 +177,7 @@ function notifyPeople(flint, jiraEvent, notifyList, author, eventName, action, e
         if (userConfig.askedExit) {
           return logger.info('Supressing message to ' + theBot.isDirectTo);
         }
-        sendNotification(flint, theBot, jiraEvent, author, eventName, action, elementName, elementValue, cb);
+        sendNotification(flint, theBot, jiraEvent, author, eventName, action, elementName, elementValue, userConfig, cb);
         // Add instrumentation to find users who are not working in the SPARK or TROPO projects
         if (jiraEvent.ourProjectIdx == -1) {
           logger.error(email + ' is working on project ' + jiraEvent.issue.key);
@@ -186,7 +186,7 @@ function notifyPeople(flint, jiraEvent, notifyList, author, eventName, action, e
         logger.error('Unable to get quietMode status for ' + theBot.isDirectTo);
         logger.error(err.message);
         logger.error('Erring on the side of notifying them.');
-        sendNotification(flint, theBot, jiraEvent, author, eventName, action, elementName, elementValue, cb);
+        sendNotification(flint, theBot, jiraEvent, author, eventName, action, elementName, elementValue, null, cb);
       });
     } else {
       logger.verbose('No bot found for potential recipient:' + email);
@@ -253,7 +253,7 @@ function notifyWatchers(flint, jiraEvent, notifyList, author, cb) {
               watcherNews = (!watcherNews) ? getWatcherNews(jiraEvent) : watcherNews;
               sendNotification(flint, theBot, jiraEvent, author,
                 watcherNews.description, ' that you are watching.', 
-                "", watcherNews.change, cb);
+                "", watcherNews.change, userConfig, cb);
             }).catch(function(err) {
               logger.error('Unable to get quietMode status for ' + theBot.isDirectTo);
               logger.error(err.message);
@@ -261,7 +261,7 @@ function notifyWatchers(flint, jiraEvent, notifyList, author, cb) {
               watcherNews = (watcherNews === {}) ? getWatcherNews(jiraEvent) : watcherNews;
               sendNotification(flint, theBot, jiraEvent, author,
                 watcherNews.description, ' that you are watching.', 
-                '', watcherNews.change, cb);
+                '', watcherNews.change, null, cb);
             });
           } else {
             logger.verbose('No bot found for potential recipient:' + email);
@@ -358,8 +358,9 @@ function getAllMentions(str) {
   return mentions;
 }
 
-function sendNotification(flint, bot, jiraEvent, author, eventName, action, elementName, elementValue, cb) {
-  if (bot.isDirectTo == jiraEvent.user.emailAddress) {
+function sendNotification(flint, bot, jiraEvent, author, eventName, action, elementName, elementValue, userConfig, cb) {
+  if ((bot.isDirectTo == jiraEvent.user.emailAddress) && 
+      ((!userConfig) || (!userConfig.hasOwnProperty('notifySelf')) || (!userConfig.notifySelf))) {
     logger.info('Not sending notification of update made by ' + bot.isDirectTo + ' to ' + jiraEvent.user.emailAddress);
     return;
   }
