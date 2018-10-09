@@ -69,6 +69,7 @@ var botUserInfo = {
   _id: null,
   askedExit: false,
   watcherMsgs: true,
+  notifySelf: false,
   newFunctionalityMsg: true, // New users don't need the "new functionality" message
   trackTickets: []
 };
@@ -200,10 +201,13 @@ function postInstructions(bot, status_only=false, instructions_only=false) {
         bot.isDirectTo + " and notify you so you can check out the ticket immediately.  " +
         "I'll also notify you of changes to any tickets you are watching." +
         '\n\nIf the watcher messages make me too "chatty", but you want to '+
-        'keep getting notified for mentions and assignments just type **no watchers**\n\n'+
-        '\nIf you want the watcher messages back, type **yes watchers**'+
+        'keep getting notified for mentions and assignments just type **no watchers**. '+
+        'If you want the watcher messages back, type **yes watchers**.'+
+        '\n\nBy default, I won\'t notify you about changes you have made, but if you want to '+
+        'see them just type **yes notifyself**. '+
+        'If you want to turn that behavior off, type **no notifyself**.'+
         "\n\nYou can also type the command **shut up** to get me to stop sending any messages. " +
-        "\nIf you ever want me to start notifying you again, type **come back**." +
+        "If you ever want me to start notifying you again, type **come back**." +
         "\n\nIf you aren't sure if I'm giving you notifications, just type **status**" +
         "\n\nQuestions or feedback?   Join the Ask JiraNotification Bot space here: https://eurl.io/#Hy4f7zOjG");
   }
@@ -219,6 +223,11 @@ function postInstructions(bot, status_only=false, instructions_only=false) {
             msg += "\n* Watched Ticket Changed Notifications are **enabled**.";
           } else {
             msg += "\n* Watched Ticket Changed Notifications are **disabled**.";
+          }
+          if (userConfig.notifySelf) {
+            msg += "\n* Notifications for changes to tickets that you have made are **enabled**.";
+          } else {
+            msg += "\n* Notifications for changes to tickets that you have made are **disabled**.";
           }
         }
         if (status_only) {
@@ -320,6 +329,51 @@ function toggleWatcherMsg(bot, mCollection, state) {
     });
 }
 
+function toggleNotifySelf(bot, mCollection, state) {
+  bot.recall('user_config')
+    .then(function(userConfig) {
+      if (userConfig.askedExit) {
+        bot.say('You curently have all notifications turned off.\n\n'+
+          'Type **come back** to enable notifications and then you can '+
+          'fine tune your notification status.');
+        return postInstructions(bot, /*status_only=*/true);
+      }
+      if ((!userConfig.hasOwnProperty('notifySelf') && (state === false)) ||
+          (!userConfig.notifySelf) && (state === false)) {
+        bot.say('I am not notifying you about changes to Jira tickets made by you.');
+        return postInstructions(bot, /*status_only=*/true);
+      }
+      if ((userConfig.notifySelf) && (state === true)) {
+        bot.say('I\'m already notifying you about changes to Jira tickets made by you.');
+        return postInstructions(bot, /*status_only=*/true);
+      }
+      if (mCollection) {
+        mCollection.update({'_id':bot.isDirectTo}, {$set:{'notifySelf':state}}, {w:1}, function(err/*, result*/) {
+          if (err) {
+            logger.error("Can't communicate with db:" + err.message);
+            return bot.say("Hmmn. I seem to have a database problem.   Please ask again later.");
+          }
+          userConfig.notifySelf = state;
+          bot.store('user_config', userConfig);
+          if (state === true) {
+            bot.say("OK. I will notify you about changes to tickets made by you.  If you want to turn them off again just type **no notifyself**.");
+          } else {
+            bot.say("OK. I won't notify you about changes to tickets made by you.  If you want to turn them on again just type **yes notifyself**.");
+          }
+          postInstructions(bot, /*status_only=*/true);
+        });
+      } else {
+        logger.error('Unable to store exit request for ' + bot.isDirectTo + ' because DB never properly set up.');
+        bot.say("Hmmn. I seem to have a database problem.   Please ask again later.");
+      }
+    })
+    .catch(function(err) {
+      logger.error('Unable to get notifySelf status for ' + bot.isDirectTo);
+      logger.error(err.message);
+      bot.say("Hmmn. I seem to have a database problem.   Please ask again later.");
+    });
+}
+
 /****
 ## Process incoming messages
 ****/
@@ -344,8 +398,22 @@ flint.hears(no_watcher_words, function(bot/*, trigger*/) {
 
 var yes_watcher_words = /^\/?(yes watcher)s?( |.|$)/i;
 flint.hears(yes_watcher_words, function(bot/*, trigger*/) {
-  logger.verbose('Processing Disable Watcher Notifications Request for ' + bot.isDirectTo);
+  logger.verbose('Processing Enable Watcher Notifications Request for ' + bot.isDirectTo);
   toggleWatcherMsg(bot, mCollection, true); 
+  responded = true;
+});
+
+var no_notifyself_words = /^\/?(no notify ?self)( |.|$)/i;
+flint.hears(no_notifyself_words, function(bot/*, trigger*/) {
+  logger.verbose('Processing Disable Notifications Made by user Request for ' + bot.isDirectTo);
+  toggleNotifySelf(bot, mCollection, false); 
+  responded = true;
+});
+
+var yes_notifyself_words = /^\/?(yes notify ?self)( |.|$)/i;
+flint.hears(yes_notifyself_words, function(bot/*, trigger*/) {
+  logger.verbose('Processing Enable Notifications Made by user Request for ' + bot.isDirectTo);
+  toggleNotifySelf(bot, mCollection, true); 
   responded = true;
 });
 
