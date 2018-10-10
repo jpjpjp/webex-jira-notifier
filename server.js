@@ -4,8 +4,10 @@ Jira ticket and/or if it is assigned to them.
 */
 /*jshint esversion: 6 */  // Help out our linter
 
-var Flint = require('node-flint');
-var webhook = require('node-flint/webhook');
+// var Flint = require('node-flint');
+// var webhook = require('node-flint/webhook');
+var Flint = require('./tmp_node_flint');
+var webhook = require('./tmp_node_flint/webhook');
 var express = require('express');
 var bodyParser = require('body-parser');
 var app = express();
