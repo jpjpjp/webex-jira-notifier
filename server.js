@@ -477,6 +477,8 @@ flint.hears(/(^| )jpsNodeBot|.*( |.|$)/i, function(bot, trigger) {
 app.post('/', webhook(flint));
 var server = app.listen(config.port, function () {
   logger.info('Flint listening on port %s', config.port);
+  // Temporary debugging of flint webhook info
+  logger.verbose('Expecting webhook name of: %s', flint.webhook.name);
 });
 
 // Basic liveness test
