@@ -98,12 +98,16 @@ logger.info("Starting flint, please wait...");
 
 flint.on("initialized", function() {
   logger.info("Flint initialized successfully! [Press CTRL-C to quit]");
+  // Temporary debugging of flint webhook info
+  logger.verbose('Expecting webhook name of: %s', flint.webhook.name);
 });
 
 
 flint.on('spawn', function(bot){
   // An instance of the bot has been added to a room
   logger.verbose('new bot spawned in room: %s', bot.room.id);
+  // Temporary debugging of flint webhook info
+  logger.verbose('Expecting webhook name of: %s', flint.webhook.name);
 
   // Say hello to the room
   if(bot.isGroup) {
