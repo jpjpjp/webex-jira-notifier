@@ -201,13 +201,14 @@ function notifyPeople(flint, jiraEvent, notifyList, author, eventName, action, e
 function notifyWatchers(flint, jiraEvent, notifyList, author, cb) {
   if (!request) {return;}
   try {
+    let jiraKey = jiraEvent.issue ? jiraEvent.issue.key : '';
     if (jiraEvent.watchersNotified) {
-      return logger.debug('Already notified potential watchers for event %s:%s',
-        jiraEvent.issue_event_type_name, jiraEvent.issue_event_type_name);
+      return logger.debug('Already notified potential watchers for %s event %s:%s',
+        jiraKey, jiraEvent.issue_event_type_name, jiraEvent.issue_event_type_name);
     }
     if (jiraEvent.ourProjectIdx == -1) {
-      return logger.debug('Don\'t have permission to check watchers for %s:%s',
-        jiraEvent.issue_event_type_name, jiraEvent.issue_event_type_name);
+      return logger.debug('Don\'t have permission to check watchers for %s',
+        jiraKey);
     }
 
     jiraEvent.watchersNotified = true;
@@ -321,8 +322,9 @@ function getWatcherNews(jiraEvent) {
 
 function getNewsFromChangelong(jiraEvent, change) {
   if (!jiraEvent.changelog) {
-    logger.error('No changelong for eventtype:%s, issue_type:%s', 
-      jiraEvent.issue_event_type_name, jiraEvent.issue_event_type_name);
+    let jiraKey = jiraEvent.issue ? jiraEvent.issue.key : '';
+    logger.error('No changelong for %s eventtype:%s, issue_type:%s', 
+      jiraKey, jiraEvent.issue_event_type_name, jiraEvent.issue_event_type_name);
     createTestCase(null, jiraEvent, 'no-changelog');
     return change;
   };
@@ -340,8 +342,9 @@ function getNewsFromChangelong(jiraEvent, change) {
     }
   }
   if (!change) {
-    logger.error('Unable to find a changed field for eventtype:%s, issue_type:%s', 
-      jiraEvent.issue_event_type_name, jiraEvent.issue_event_type_name);
+    let jiraKey = jiraEvent.issue ? jiraEvent.issue.key : '';
+    logger.error('Unable to find a changed field for %s eventtype:%s, issue_type:%s', 
+      jiraKey, jiraEvent.issue_event_type_name, jiraEvent.issue_event_type_name);
     createTestCase(null, jiraEvent, 'no-change');
   }
   return change;
