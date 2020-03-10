@@ -14,6 +14,15 @@
             "program": "${workspaceFolder}/server.js"
         },
         {
+          "name": "External terminal",
+          "type": "node",
+          "request": "launch",
+          "env": {"DEBUG":"flint"},
+          "protocol": "inspector",
+          "console": "externalTerminal",
+          "program": "${workspaceFolder}/server.js"
+      },
+      {
             "name": "Launch Test",
             "type": "node",
             "request": "launch",
