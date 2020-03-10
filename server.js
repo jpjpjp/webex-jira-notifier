@@ -4,10 +4,8 @@ Jira ticket and/or if it is assigned to them.
 */
 /*jshint esversion: 6 */  // Help out our linter
 
-// var Flint = require('node-flint');
-// var webhook = require('node-flint/webhook');
-var Flint = require('./tmp_node_flint');
-var webhook = require('./tmp_node_flint/webhook');
+var Flint = require('../flint');
+var webhook = require('../flint/webhook');
 var express = require('express');
 var bodyParser = require('body-parser');
 var app = express();
@@ -28,9 +26,10 @@ if (process.env.EMAIL_ORG) {
 
 // Set the config vars for the environment we are running in
 var config = {};
-if ((process.env.WEBHOOK) && (process.env.TOKEN) && (process.env.PORT)) {
-  config.webhookUrl = process.env.WEBHOOK;
+//if ((process.env.WEBHOOK) && (process.env.TOKEN) && (process.env.PORT)) {
+if (process.env.TOKEN) {
   config.token = process.env.TOKEN;
+  config.webhookUrl = process.env.WEBHOOK;
   config.port = process.env.PORT;
 } else {
   logger.error('Cannot start server.  Missing required environment varialbles WEBHOOK and TOKEN');
@@ -100,17 +99,12 @@ logger.info("Starting flint, please wait...");
 
 flint.on("initialized", function() {
   logger.info("Flint initialized successfully! [Press CTRL-C to quit]");
-  // Temporary debugging of flint webhook info
-  logger.verbose('Expecting webhook name of: %s', flint.webhook.name);
 });
 
 
 flint.on('spawn', function(bot){
   // An instance of the bot has been added to a room
   logger.verbose('new bot spawned in room: %s', bot.room.id);
-  // Temporary debugging of flint webhook info
-  logger.verbose('Expecting webhook name of: %s', flint.webhook.name);
-
   // Say hello to the room
   if(bot.isGroup) {
     bot.say("Hi! Sorry, I only work in one on one rooms at the moment.  Goodbye.");
@@ -463,7 +457,8 @@ flint.hears(/(^| )jpsNodeBot|.*( |.|$)/i, function(bot, trigger) {
   if (!responded) {
     bot.say('Don\'t know how to respond to "' + text +'"'+
       '.  Enter **help** for info on what I do understand.');
-    logger.warn('Bot did not know how to respond to: '+text);
+    logger.warn('Bot did not know how to respond to: '+text+
+                ', from '+bot.isDirectTo);
   }
   responded = false;
   logger.verbose("Got a message to my bot:" + text);
@@ -479,8 +474,6 @@ flint.hears(/(^| )jpsNodeBot|.*( |.|$)/i, function(bot, trigger) {
 app.post('/', webhook(flint));
 var server = app.listen(config.port, function () {
   logger.info('Flint listening on port %s', config.port);
-  // Temporary debugging of flint webhook info
-  logger.verbose('Expecting webhook name of: %s', flint.webhook.name);
 });
 
 // Basic liveness test
@@ -494,7 +487,8 @@ app.post('/jira', function (req, res) {
   try {
     jiraEvent = req.body;
     if (typeof jiraEvent.webhookEvent !== 'undefined') {
-      logger.info('Processing incoming Jira Event %s:%s', jiraEvent.webhookEvent, jiraEvent.issue_event_type_name);
+      let jiraKey = jiraEvent.issue ? jiraEvent.issue.key : '';
+      logger.info('Processing incoming Jira %s Event %s:%s', jiraKey, jiraEvent.webhookEvent, jiraEvent.issue_event_type_name);
       jiraEventHandler.processJiraEvent(jiraEvent, flint, emailOrg);
     }
   } catch (e) {
