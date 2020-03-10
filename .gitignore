@@ -9,6 +9,9 @@ pids
 *.seed
 .DS_Store
 
+# Local notes to myself
+*.txt
+
 # Directory for storing jira events
 JiraEvents
 
