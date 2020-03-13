@@ -6,18 +6,21 @@
 
 // When running locally read environment variables from a .env file
 require('dotenv').config();
-//logger = require('./logger');
+logger = require('./logger');
 
 // Only allow users for our email organization user the bot
 let request = null;
 let basicToken = '';
-if (process.env.JIRA) {
+let jira_url = '';
+let proxy_url = '';
+let jira_url_regexp = null;
+if (process.env.JIRA && process.env.JIRA_URL) {
   // for finding watchers
   request = require('request-promise');
   basicToken = process.env.JIRA;
-  if ((process.env.JIRA_URL) && (process.env.PROXY_URL)) {
+  jira_url = process.env.JIRA_URL;
+  if (process.env.PROXY_URL) {
     // Set variables to get watcher info via a server
-    jira_url = process.env.JIRA_URL;
     jira_url_regexp = new RegExp(jira_url);
     proxy_url = process.env.PROXY_URL;
     logger.info('Will attempt to access Jira via proxy at ' + jira_url);
@@ -31,7 +34,7 @@ const jiraProjects = JIRA_PROJECTS.split(',');
 
 //Determine which event we have.  If its one we care about see if it belongs
 // to someone in a room with our bot
-exports.processJiraEvent = function (jiraEvent, flint, emailOrg, callback=null) {
+exports.processJiraEvent = function (jiraEvent, framework, emailOrg, callback=null) {
   //logJiraEvent(jiraEvent);
   try {
     // We'll build a list of users who are mentioned or assigned
@@ -43,6 +46,10 @@ exports.processJiraEvent = function (jiraEvent, flint, emailOrg, callback=null) 
     // Is this from one of the proejcts we can access?
     // jiraEvent.ourProjectIdx == -1 means no.
     const key = jiraEvent.issue.key;
+    // Debug a particiular story
+    // if (key == 'SPARK-7329') {
+    //   console.log('Found the one I want to debug.');
+    // }
     jiraEvent.ourProjectIdx = jiraProjects.indexOf(key.substr(0, key.indexOf('-')));
     if (jiraEvent.ourProjectIdx == -1) {
       logger.verbose('Got a webhook for '+ key + 
@@ -50,10 +57,12 @@ exports.processJiraEvent = function (jiraEvent, flint, emailOrg, callback=null) 
     }
 
     if ((jiraEvent.webhookEvent === 'jira:issue_updated') &&
-        ((jiraEvent.issue_event_type_name === 'issue_commented') ||
-        (jiraEvent.issue_event_type_name === 'issue_comment_edited'))) {
+        (((jiraEvent.issue_event_type_name === 'issue_commented') ||
+        (jiraEvent.issue_event_type_name === 'issue_comment_edited')) ||
+        ((jiraEvent.issue_event_type_name === 'issue_updated') &&
+        (typeof jiraEvent.comment === 'object')))) {
       toNotifyList = getAllMentions(jiraEvent.comment.body);
-      notifyPeople(flint, jiraEvent, toNotifyList,  // extract mentions
+      notifyPeople(framework, jiraEvent, toNotifyList,  // extract mentions
         jiraEvent.comment.author.displayName,
         ' mentioned you in the Jira ', '', '',
         jiraEvent.comment.body, emailOrg, callback);
@@ -76,28 +85,32 @@ exports.processJiraEvent = function (jiraEvent, flint, emailOrg, callback=null) 
         if (item.field === 'assignee') {
           // See if the user was assigned to this existing ticket
           toNotifyList.push(item.to);
-          notifyPeople(flint, jiraEvent, toNotifyList, jiraEvent.user.displayName, //single user
+          notifyPeople(framework, jiraEvent, toNotifyList, jiraEvent.user.displayName, //single user
             ' assigned existing Jira ', ' to you.', 'Description:',
             jiraEvent.issue.fields.description, emailOrg, callback);
         } else if (item.field === 'description') {
-          // If data was added TO the description See if the user was mentioned
+          // If data was added TO the description see if there are any mentions
           if (item.toString) {
             toNotifyList = getAllMentions(item.toString);
-            notifyPeople(flint, jiraEvent, toNotifyList,  // extract mentions
-              jiraEvent.user.displayName,
-              ' updated the description of Jira ', ' to you.',
-              'Description:', item.toString, emailOrg, callback);  
+            if (toNotifyList.length) {
+              notifyPeople(framework, jiraEvent, toNotifyList,  // extract mentions
+                jiraEvent.user.displayName,
+                ' updated the description of Jira ', ' to you.',
+                'Description:', item.toString, emailOrg, callback);  
+            } else {
+              if (callback) {callback(null);}
+              return notifyWatchers(framework, jiraEvent, toNotifyList, jiraEvent.user.displayName, callback);
+            }
           } else {
             logger.debug('Ignoring delete only update to Description for Jira Event:' + jiraEvent.webhookEvent);
-            if (callback) {return(callback(null));}
+            if (callback) {callback(null);}
+            return notifyWatchers(framework, jiraEvent, toNotifyList, jiraEvent.user.displayName, callback);
           } 
         } else {
           logger.debug('No assignees or mentionees to notify for a change to %s, '+
             'will look for watchers.', item.field);                   
-          // Returning here so we don't "over-notify" the watchers
-          // TODO potential optimization to keep looping and skip watcher notification
-          // actually this might already be happening!
-          return notifyWatchers(flint, jiraEvent, toNotifyList, jiraEvent.user.displayName, callback);
+          if (callback) {callback(null);}
+          return notifyWatchers(framework, jiraEvent, toNotifyList, jiraEvent.user.displayName, callback);
         }
       }
     } else if ((jiraEvent.webhookEvent === 'jira:issue_created') &&
@@ -111,7 +124,7 @@ exports.processJiraEvent = function (jiraEvent, flint, emailOrg, callback=null) 
         } else {
           toNotifyList.push(jiraEvent.issue.fields.assignee);
         }
-        notifyPeople(flint, jiraEvent, toNotifyList,  //one name
+        notifyPeople(framework, jiraEvent, toNotifyList,  //one name
           jiraEvent.user.displayName,
           ' created a Jira ', ' and assigned it to you.',
           'Description:', jiraEvent.issue.fields.description, 
@@ -120,7 +133,7 @@ exports.processJiraEvent = function (jiraEvent, flint, emailOrg, callback=null) 
       if (jiraEvent.issue.fields.description) {
         // See if the user was assigned to this existing ticket
         toNotifyList = getAllMentions(jiraEvent.issue.fields.description);
-        notifyPeople(flint, jiraEvent, toNotifyList,  // extract mentions
+        notifyPeople(framework, jiraEvent, toNotifyList,  // extract mentions
           jiraEvent.user.displayName,
           ' created a Jira ', ' and mentioned to you in it.',
           'Description:', jiraEvent.issue.fields.description, 
@@ -131,14 +144,14 @@ exports.processJiraEvent = function (jiraEvent, flint, emailOrg, callback=null) 
         logger.error('Got an issue deleted with no assignee');
         e = new Error('DeletedWithNoAssignee');
         createTestCase(e, jiraEvent, 'no-assignee');
-        notifyWatchers(flint, jiraEvent, [],  //no one was "notified"
+        notifyWatchers(framework, jiraEvent, [],  //no one was "notified"
           jiraEvent.user.displayName, callback);
         if (callback) {(callback(e));}
         return;
       }
       // Someone deleted a ticket that was assigned to the user
       toNotifyList.push(jiraEvent.issue.fields.assignee.name);
-      notifyPeople(flint, jiraEvent, toNotifyList,  //one name
+      notifyPeople(framework, jiraEvent, toNotifyList,  //one name
         jiraEvent.user.displayName,
         ' deleted a Jira ', ' that was assigned to you.',
         'Description:', jiraEvent.issue.fields.description, 
@@ -147,7 +160,7 @@ exports.processJiraEvent = function (jiraEvent, flint, emailOrg, callback=null) 
       logger.debug('No notifications for Jira Event '+jiraEvent.webhookEvent+
         ':'+jiraEvent.issue_event_type_name+'. Checking for watchers...');
       if (callback) {(callback(null, null));}
-      notifyWatchers(flint, jiraEvent, [],  //no one was "notified"
+      notifyWatchers(framework, jiraEvent, [],  //no one was "notified"
         jiraEvent.user.displayName, callback);
     }
   } catch (e) {
@@ -158,26 +171,26 @@ exports.processJiraEvent = function (jiraEvent, flint, emailOrg, callback=null) 
 };
 
 // Check the event against our users.  If we get a hit, send a spark message
-function notifyPeople(flint, jiraEvent, notifyList, author, eventName, action, elementName, elementValue, emailOrg, cb) {
+function notifyPeople(framework, jiraEvent, notifyList, author, eventName, action, elementName, elementValue, emailOrg, cb) {
   // if (!notifyList.length) {
   //   if (!jiraEvent.watchersNotified) {
   //     logger.verbose('No one to notify for Jira Event:' + jiraEvent.webhookEvent +
   //                 '. Will check for watchers...');
-  //     return notifyWatchers(flint, jiraEvent, notifyList, author, cb);
+  //     return notifyWatchers(framework, jiraEvent, notifyList, author, cb);
   //   } else {
   //     return;
   //   }
   // }
   notifyList.forEach(function(user) {
     let email = user + '@' + emailOrg;
-    let bot = flint.bots.find(function(bot) {return(bot.isDirectTo === email);});
+    let bot = framework.bots.find(function(bot) {return(bot.isDirectTo === email);});
     if (bot) {
       let theBot = bot;
-      theBot.recall('user_config').then(function(userConfig) {
+      theBot.recall('userConfig').then(function(userConfig) {
         if (userConfig.askedExit) {
           return logger.info('Supressing message to ' + theBot.isDirectTo);
         }
-        sendNotification(flint, theBot, jiraEvent, author, eventName, action, elementName, elementValue, userConfig, cb);
+        sendNotification(framework, theBot, jiraEvent, author, eventName, action, elementName, elementValue, userConfig, cb);
         // Add instrumentation to find users who are not working in the SPARK or TROPO projects
         if (jiraEvent.ourProjectIdx == -1) {
           logger.error(email + ' is working on project ' + jiraEvent.issue.key);
@@ -186,7 +199,7 @@ function notifyPeople(flint, jiraEvent, notifyList, author, eventName, action, e
         logger.error('Unable to get quietMode status for ' + theBot.isDirectTo);
         logger.error(err.message);
         logger.error('Erring on the side of notifying them.');
-        sendNotification(flint, theBot, jiraEvent, author, eventName, action, elementName, elementValue, null, cb);
+        sendNotification(framework, theBot, jiraEvent, author, eventName, action, elementName, elementValue, null, cb);
       });
     } else {
       logger.verbose('No bot found for potential recipient:' + email);
@@ -194,11 +207,11 @@ function notifyPeople(flint, jiraEvent, notifyList, author, eventName, action, e
       if (cb) {return(cb(null, null));}
     }
   });
-  notifyWatchers(flint, jiraEvent, notifyList, author, cb);
+  notifyWatchers(framework, jiraEvent, notifyList, author, cb);
 }
 
 // Check the event against our watchers.  If we get a hit, send a spark message
-function notifyWatchers(flint, jiraEvent, notifyList, author, cb) {
+function notifyWatchers(framework, jiraEvent, notifyList, author, cb) {
   if (!request) {return;}
   try {
     let jiraKey = jiraEvent.issue ? jiraEvent.issue.key : '';
@@ -244,15 +257,15 @@ function notifyWatchers(flint, jiraEvent, notifyList, author, cb) {
             logger.verbose("Skipping watcher:"+email+". Already notified");
             return;
           }
-          let bot = flint.bots.find(function(bot) {return (bot.isDirectTo === email);});
+          let bot = framework.bots.find(function(bot) {return (bot.isDirectTo === email);});
           if (bot) {
             let theBot = bot;
-            theBot.recall('user_config').then(function(userConfig) {
+            theBot.recall('userConfig').then(function(userConfig) {
               if ((userConfig.askedExit) || (userConfig.watcherMsgs === false)) {
                 return logger.verbose('Supressing message to ' + theBot.isDirectTo);
               }
               watcherNews = (!watcherNews) ? getWatcherNews(jiraEvent) : watcherNews;
-              sendNotification(flint, theBot, jiraEvent, author,
+              sendNotification(framework, theBot, jiraEvent, author,
                 watcherNews.description, ' that you are watching.', 
                 "", watcherNews.change, userConfig, cb);
             }).catch(function(err) {
@@ -260,7 +273,7 @@ function notifyWatchers(flint, jiraEvent, notifyList, author, cb) {
               logger.error(err.message);
               logger.error('Erring on the side of notifying them.');
               watcherNews = (watcherNews === {}) ? getWatcherNews(jiraEvent) : watcherNews;
-              sendNotification(flint, theBot, jiraEvent, author,
+              sendNotification(framework, theBot, jiraEvent, author,
                 watcherNews.description, ' that you are watching.', 
                 '', watcherNews.change, null, cb);
             });
@@ -361,7 +374,7 @@ function getAllMentions(str) {
   return mentions;
 }
 
-function sendNotification(flint, bot, jiraEvent, author, eventName, action, elementName, elementValue, userConfig, cb) {
+function sendNotification(framework, bot, jiraEvent, author, eventName, action, elementName, elementValue, userConfig, cb) {
   if ((bot.isDirectTo == jiraEvent.user.emailAddress) && 
       ((!userConfig) || (!userConfig.hasOwnProperty('notifySelf')) || (!userConfig.notifySelf))) {
     logger.info('Not sending notification of update made by ' + bot.isDirectTo + ' to ' + jiraEvent.user.emailAddress);
@@ -383,6 +396,12 @@ function sendNotification(flint, bot, jiraEvent, author, eventName, action, elem
   }
   msg += 'https://jira-eng-gpk2.cisco.com/jira/browse/' + jiraEvent.issue.key;
   bot.say({markdown: msg});
+  // Store the key of the last notification in case the user wants to reply
+  let lastNotifiedIssue = {
+    storyUrl: jiraEvent.issue.self, 
+    storyKey:jiraEvent.issue.key
+  };
+  bot.store('lastNotifiedIssue', lastNotifiedIssue);
   if (cb) {cb(null, bot);}  
 }
 
