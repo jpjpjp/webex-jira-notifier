@@ -30,6 +30,15 @@ Bot.prototype.recall = function (key) {
   });
 };
 
+// jiraEventHandler will call bot.store to save info about the last notification
+// This is not currently used in the tests
+Bot.prototype.store = function () {
+  return new Promise(function (resolve) {
+    resolve(true);
+  });
+};
+
+
 // jiraEventHandler will call bot.say to send a result to a Spark user
 Bot.prototype.say = function () {
   // say can take one or two args.   We only care about the second for our cannonical result
@@ -87,15 +96,18 @@ function TestCase(file, action, author, subject, result) {
 var testCases = [];
 /**/
 /* Quick way to test a problem issue */
-// testCases.push(new TestCase('./jira-event-test-cases/1519807348530-jira:issue_updated-issue_updated.error',
-//                 'error', '', '',
-//                 [''], 1));
-/* Specify Test Cases
-/* @mention a user who is not using the bot */
-//testCases.push(new TestCase('./jira-event-test-cases/comment-dorin-medash-jira:issue_updated-issue_commented.json',
-//                'comments', 'dorin', 'medash', [''], 1));
+/* A ticket with watchers gets a new comment and some watchers are mentioned */
+// testCases.push(new TestCase('./jira-event-test-cases/1522952583499-jira:issue_updated-issue_commented.json',
+//   'comments', 'jshipher', 'without any mentions',
+//   [
+//     '', '',   // There are two mentioned people not using the bot
+//     `{"markdown":"JP Shipherd mentioned you in the Jira Task: **Test Task -- please ignore -- to be deleted**\\n\\n>Testing behavior when a new notification WITH mentions is added to a ticket with watchers.<br /> <br />[~jalumbau], [~shraban], [~hadougla] note that I'm testing this in my own dev environment at the moment.  You won't see updates from the bot until I push it to deployment.   Will post when that happens.\\n\\nhttps://jira-eng-gpk2.cisco.com/jira/browse/SPARK-7329"}`,
+//     `{"markdown":"JP Shipherd commented on a Jira Task: **Test Task -- please ignore -- to be deleted** that you are watching.\\n\\n>Testing behavior when a new notification WITH mentions is added to a ticket with watchers.<br /> <br />[~jalumbau], [~shraban], [~hadougla] note that I'm testing this in my own dev environment at the moment.  You won't see updates from the bot until I push it to deployment.   Will post when that happens.\\n\\nhttps://jira-eng-gpk2.cisco.com/jira/browse/SPARK-7329"}`
+//   ]));
 
-
+/* 
+ *  This is the full set of test cases
+ */
 /* A ticket's description was changed no one was mentioned but there are some watchers using the bot */
 testCases.push(new TestCase('./jira-event-test-cases/1522969970738-jira:issue_updated-issue_updated.json',
   'edited the', 'charlin', 'description',

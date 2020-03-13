@@ -46,6 +46,10 @@ exports.processJiraEvent = function (jiraEvent, framework, emailOrg, callback=nu
     // Is this from one of the proejcts we can access?
     // jiraEvent.ourProjectIdx == -1 means no.
     const key = jiraEvent.issue.key;
+    // Debug a particiular story
+    // if (key == 'SPARK-7329') {
+    //   console.log('Found the one I want to debug.');
+    // }
     jiraEvent.ourProjectIdx = jiraProjects.indexOf(key.substr(0, key.indexOf('-')));
     if (jiraEvent.ourProjectIdx == -1) {
       logger.verbose('Got a webhook for '+ key + 
@@ -53,8 +57,10 @@ exports.processJiraEvent = function (jiraEvent, framework, emailOrg, callback=nu
     }
 
     if ((jiraEvent.webhookEvent === 'jira:issue_updated') &&
-        ((jiraEvent.issue_event_type_name === 'issue_commented') ||
-        (jiraEvent.issue_event_type_name === 'issue_comment_edited'))) {
+        (((jiraEvent.issue_event_type_name === 'issue_commented') ||
+        (jiraEvent.issue_event_type_name === 'issue_comment_edited')) ||
+        ((jiraEvent.issue_event_type_name === 'issue_updated') &&
+        (typeof jiraEvent.comment === 'object')))) {
       toNotifyList = getAllMentions(jiraEvent.comment.body);
       notifyPeople(framework, jiraEvent, toNotifyList,  // extract mentions
         jiraEvent.comment.author.displayName,
@@ -390,6 +396,10 @@ function sendNotification(framework, bot, jiraEvent, author, eventName, action, 
   }
   msg += 'https://jira-eng-gpk2.cisco.com/jira/browse/' + jiraEvent.issue.key;
   bot.say({markdown: msg});
+  // Store the key of the last notification in case the user wants to reply
+  userConfig.lastStoryUrl = jiraEvent.issue.self; 
+  userConfig.lastStoryKey = jiraEvent.issue.key;
+  bot.store('user_config', userConfig);
   if (cb) {cb(null, bot);}  
 }
 
