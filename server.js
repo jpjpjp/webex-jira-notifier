@@ -19,6 +19,16 @@ logger = require('./logger');
 
 // Helper classes for dealing with Jira Webhook payload
 var jiraEventHandler = require("./jira-event.js");
+let jira = {};
+try {
+  // Create the object for interacting with Jira
+  var JiraConnector = require('./jira-connector.js');
+  jira = new JiraConnector();
+} catch (err) {
+  logger.error('Initialization Failure: ' + err.message);
+  process.exit(-1);
+}
+
 
 // EMAIL_ORG environment is the email domain for our jira
 // Only those users are allowed to use our bot
@@ -519,6 +529,31 @@ framework.hears('/showadmintheusers', function (bot/*, trigger*/) {
   responded = true;
 });
 
+var reply_words = /^\/?reply/i;
+framework.hears(reply_words, function (bot, trigger) {
+  logger.verbose('Processing reply request from ' + bot.isDirectTo);
+  if (trigger.message.parentId) {
+    // Handle threaded replies in the catch-all handler
+    return;
+  }
+  bot.recall('user_config')
+    .then((userConfig) => {
+      if ((userConfig) && (userConfig.lastStoryUrl)) {
+        let comment = trigger.args.slice(1).join(" ");
+        jira.addComment(userConfig.lastStoryUrl, userConfig.lastStoryKey,
+          comment, bot, bot.isDirectTo);
+      } else {
+        bot.say('Sorry, cannot find last notification to reply to. ' +
+          'Please click the link above and update directly in jira.');
+      }
+    }).catch((e) => {
+      logger.warn('Failure in reply handler: '+e.message);
+      bot.say('Sorry, cannot find last notification to reply to. ' +
+      'Please click the link above and update directly in jira.');
+    });
+  responded = true;
+});
+
 var help_words = /^\/?help/i;
 framework.hears(help_words, function (bot/*, trigger*/) {
   logger.verbose('Processing help Request for ' + bot.isDirectTo);
@@ -529,11 +564,16 @@ framework.hears(help_words, function (bot/*, trigger*/) {
 // Respond to unexpected input
 framework.hears(/.*/, function (bot, trigger) {
   if (!responded) {
-    let text = trigger.text;
-    bot.say('Don\'t know how to respond to "' + text + '"' +
-      '.  Enter **help** for info on what I do understand.');
-    logger.info('Bot did not know how to respond to: ' + text +
-      ', from ' + bot.isDirectTo);
+    if (trigger.message.parentId) {
+      // Handle threaded replies as a request to post a comment
+      jira.postCommentToParent(bot, trigger);
+    } else {
+      let text = trigger.text;
+      bot.say('Don\'t know how to respond to "' + text + '"' +
+        '.  Enter **help** for info on what I do understand.');
+      logger.info('Bot did not know how to respond to: ' + text +
+        ', from ' + bot.isDirectTo);
+    }
   }
   responded = false;
 });
@@ -548,8 +588,7 @@ app.get('/', function (req, res) {
 });
 
 // Jira webbhook
-//app.post('/jira', function (req, res) {
-app.post('/', function (req, res) {
+app.post('/jira', function (req, res) {
   let jiraEvent = {};
   try {
     jiraEvent = req.body;
