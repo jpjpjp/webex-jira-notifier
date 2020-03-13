@@ -186,7 +186,7 @@ function notifyPeople(framework, jiraEvent, notifyList, author, eventName, actio
     let bot = framework.bots.find(function(bot) {return(bot.isDirectTo === email);});
     if (bot) {
       let theBot = bot;
-      theBot.recall('user_config').then(function(userConfig) {
+      theBot.recall('userConfig').then(function(userConfig) {
         if (userConfig.askedExit) {
           return logger.info('Supressing message to ' + theBot.isDirectTo);
         }
@@ -260,7 +260,7 @@ function notifyWatchers(framework, jiraEvent, notifyList, author, cb) {
           let bot = framework.bots.find(function(bot) {return (bot.isDirectTo === email);});
           if (bot) {
             let theBot = bot;
-            theBot.recall('user_config').then(function(userConfig) {
+            theBot.recall('userConfig').then(function(userConfig) {
               if ((userConfig.askedExit) || (userConfig.watcherMsgs === false)) {
                 return logger.verbose('Supressing message to ' + theBot.isDirectTo);
               }
@@ -397,9 +397,11 @@ function sendNotification(framework, bot, jiraEvent, author, eventName, action, 
   msg += 'https://jira-eng-gpk2.cisco.com/jira/browse/' + jiraEvent.issue.key;
   bot.say({markdown: msg});
   // Store the key of the last notification in case the user wants to reply
-  userConfig.lastStoryUrl = jiraEvent.issue.self; 
-  userConfig.lastStoryKey = jiraEvent.issue.key;
-  bot.store('user_config', userConfig);
+  let lastNotifiedIssue = {
+    storyUrl: jiraEvent.issue.self, 
+    storyKey:jiraEvent.issue.key
+  };
+  bot.store('lastNotifiedIssue', lastNotifiedIssue);
   if (cb) {cb(null, bot);}  
 }
 

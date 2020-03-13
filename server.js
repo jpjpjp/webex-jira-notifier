@@ -56,49 +56,39 @@ if ((process.env.TOKEN) && (process.env.PORT)) {
   return;
 }
 
-
-// We maintain user config info in an online Mongo database.
-// This could easily be replaced with some other static storage.
-var mCollection = null;
-// TODO: Have a different env for offline mode vs. emulator mode
-// Currently we only set this environment variable when running tests
-// against our WEBEX emulator
-if (!process.env.SPARK_API_URL) {
-  // Keep track about "stuff" I learn from the users in a hosted Mongo DB
-  var mongo_client = require('mongodb').MongoClient;
-  var mConfig = {};
-  if ((process.env.MONGO_USER) && (process.env.MONGO_PW)) {
-    mConfig.mongoUser = process.env.MONGO_USER;
-    mConfig.mongoPass = process.env.MONGO_PW;
-    mConfig.mongoUrl = process.env.MONGO_URL;
-    mConfig.mongoDb = process.env.MONGO_DB;
-  } else {
-    logger.error('Cannot find required environent variables MONGO_USER, MONGO_PW, MONGO_URL, MONGO_DB');
-    return;
-  }
-  var mongo_collection_name = "cjnMongoCollection";
-  var mongoUri = 'mongodb://' + mConfig.mongoUser + ':' + mConfig.mongoPass + '@' + mConfig.mongoUrl + mConfig.mongoDb + '?ssl=true&replicaSet=Cluster0-shard-0&authSource=admin';
-
-  mongo_client.connect(mongoUri, function (err, db) {
-    if (err) {return logger.error('Error connecting to Mongo ' + err.message);}
-    db.collection(mongo_collection_name, function (err, collection) {
-      if (err) {return logger.error('Error getting Mongo collection  ' + err.message);}
-      mCollection = collection;
-      mongo_client_ready = true;
-      logger.info('Database connection for persistent storage is ready.');
-    });
-  });
+// This bot uses the framework's Mongo persistent storage driver
+// Read in the configuration and get it ready to initialize
+var mConfig = {};
+if (process.env.MONGO_URI) {
+  mConfig.mongoUri = process.env.MONGO_URI;
+  if (process.env.MONGO_BOT_STORE) {mConfig.storageCollectionName = process.env.MONGO_BOT_STORE;}
+  if (process.env.MONGO_BOT_METRICS) {mConfig.metricsCollectionName = process.env.MONGO_BOT_METRICS;}
+  if (process.env.MONGO_SINGLE_INSTANCE_MODE) {mConfig.singleInstance = true;}
+  // Setup our default persistent config storage
+  // That will be assigned to any newly created bots
+  config.initBotStorageData = {
+    userConfig: {
+      askedExit: false,
+      watcherMsgs: true,
+      notifySelf: false
+    },
+    newFunctionalityMsg: true, // New users don't need the "new functionality" message
+    trackTickets: []
+  };
+} else {
+  console.error('The mongo storage driver requires the following environment variables:\n' +
+    '* MONGO_URI -- mongo connection URL see https://docs.mongodb.com/manual/reference/connection-string' +
+    '\n\nThe following optional environment variables will also be used if set:\n' +
+    '* MONGO_BOT_STORE -- name of collection for bot storage elements (will be created if does not exist).  Will use "webexBotFramworkStorage" if not set\n' +
+    '* MONGO_BOT_METRICS -- name of a collection to write bot metrics to (will be created if does not exist). bot.writeMetric() calls will fail if not set\n' +
+    '* MONGO_INIT_STORAGE -- stringified object assigned as the default startup config if non exists yet\n' +
+    '* MONGO_SINGLE_INSTANCE_MODE -- Optimize lookups speeds when only a single bot server instance is running\n\n' +
+    'Also note, the mongodb module v3.4 or higher must be available (this is not included in the framework\'s default dependencies)');
+  logger.error('Running without having these set will mean that there will be no persistent storage \n' +
+    'across server restarts, and that no metrics will be written.  Generally this is a bad thing for production, \n' +
+    ' but may be expected in developement.  If you meant this, please disregard warnings about ' +
+    ' failed calls to bot.recall() and bot.writeMetric()');
 }
-
-// Default configureation object for the "stuff" I learn from the users 
-var botUserInfo = {
-  _id: null,
-  askedExit: false,
-  watcherMsgs: true,
-  notifySelf: false,
-  newFunctionalityMsg: true, // New users don't need the "new functionality" message
-  trackTickets: []
-};
 
 // The admin user or 'admin space' gets extra notifications about bot 
 // usage and feedback. This allows someone to keep an eye on our bots
@@ -123,9 +113,29 @@ if (process.env.BOT_EMAIL) {botEmail = process.env.BOT_EMAIL;}
 
 // init the Webex Bot framework for node developers
 var framework = new Framework(config);
-framework.start();
+//framework.start();
 framework.messageFormat = 'markdown';
 logger.info("Starting framework, please wait...");
+if (typeof mConfig.mongoUri === 'string') {
+  // Initialize our mongo storage driver and the the bot framework.
+  //let MongoStore = require('webex-node=bot-framework/storage/mongo');
+  let MongoStore = require('./node_modules/webex-node-bot-framework/storage/mongo.js');
+  let mongoStore = new MongoStore(mConfig);
+  mongoStore.initialize()
+    .then(() => framework.storageDriver(mongoStore))
+    .then(() => framework.start())
+    .catch((e) => {
+      logger.error(`Initialization with mongo storage failed: ${e.message}`);
+      process.exit(-1);
+    });
+} else {
+  framework.start()
+    .catch((e) => {
+      logger.error(`Framework.start() failed: ${e.message}.  Exiting`);
+      process.exit(-1);
+    });
+}
+
 
 framework.on("initialized", function () {
   logger.info("framework initialized successfully! [Press CTRL-C to quit]");
@@ -170,6 +180,11 @@ framework.on('spawn', function (bot, id, addedById) {
       logger.info(`Bot object spawn() in existing room: "${bot.room.title}" ` +
         `where activity has occured since our server started`);
     }
+    // Check if this existing user needs to see the new functionality message
+    // bot.recall('newFunctionalityMsg').catch(() => {
+    //   // This user hasn't gotten the new functionality message yet
+    //   sayNewFunctionalityMessage(bot);
+    // });
   } else {
     logger.info(`Our bot was added to a new room: ${bot.room.title}`);
     if (adminsBot) {
@@ -181,56 +196,15 @@ framework.on('spawn', function (bot, id, addedById) {
       logger.info(`Leaving Group Space: ${bot.room.title}`);
       bot.say("Hi! Sorry, I only work in one-on-one rooms at the moment.  Goodbye.");
       bot.exit();
+      if (adminsBot) {
+        adminsBot.say(`${botName} left the group space "${bot.room.title}"`)
+          .catch((e) => logger.error(`Failed to update to Admin about a new space our bot left. Error:${e.message}`));
+      }
       return;
     }
+    postInstructions(bot, /*status_only=*/false, /*instructions_only=*/true);
+    bot.store('userEmail', bot.isDirectTo);
   }
-
-  // Lets set up this new user
-  newUser = botUserInfo;
-  if (mCollection) {
-    mCollection.findOne({'_id': bot.isDirectTo}, function (err, reply) {
-      if (err) {return console.log("Can't communicate with db:" + err.message);}
-      if (reply !== null) {
-        logger.debug('User config exists in DB, so this is an existing room.  Bot has restarted.');
-        newUser = reply;
-        if (!newUser.hasOwnProperty('newFunctionalityMsg')) {
-          sayNewFunctionalityMessage(bot);
-          newUser.newFunctionalityMsg = true;
-          newUser.watcherMsgs = true;
-          mCollection.replaceOne({'_id': bot.isDirectTo}, newUser, {w: 1}, function (err) {
-            if (err) {return console.log("Can't add new user " + bot.isDirectTo + " to db:" + err.message);}
-          });
-        }
-      } else {
-        if (!addedById) {
-          logger.warn('Found bot in existing room: "' + bot.room.title + ", but did not find " +
-            "saved config for user.   There may be a problem with persistent storage.  Will create a new config.");
-        } else {
-          logger.info("This is a new room.  Storing data about this user");
-        }
-        newUser._id = bot.isDirectTo;
-        mCollection.insert(newUser, {w: 1}, function (err) {
-          if (err) {return console.log("Can't add new user " + bot.isDirectTo + " to db:" + err.message);}
-        });
-        postInstructions(bot, /*status_only=*/false, /*instructions_only=*/true);
-        updateAdmin(bot.isDirectTo + ' created a space with TropoJiraNotifier Bot');
-      }
-      // Set the user specific configuration in this just spwaned instance of the  bot
-      logger.debug('Setting these user configurations in the bot object');
-      logger.debug(newUser);
-      bot.store('user_config', newUser);
-    });
-  } else {  // not using persistent data store
-    if (process.env.SPARK_API_URL) {
-      // If we are in emulator mode just use memory store
-      postInstructions(bot, /*status_only=*/false, /*instructions_only=*/true);
-      updateAdmin(bot.isDirectTo + ' created a space with TropoJiraNotifier Bot');
-      bot.store('user_config', newUser);
-    } else {
-      logger.error("Can't access persistent data so many not have correct settings for user " + bot.isDirectTo);
-    }
-  }
-  return;
 });
 
 function sayNewFunctionalityMessage(bot) {
@@ -252,8 +226,10 @@ function postInstructions(bot, status_only = false, instructions_only = false) {
   if (!status_only) {
     bot.say("I will look for Jira tickets that are assigned to, or that mention " +
       bot.isDirectTo + " and notify you so you can check out the ticket immediately.  " +
-      "I'll also notify you of changes to any tickets you are watching." +
-      '\n\nIf the watcher messages make me too "chatty", but you want to ' +
+      "\n\nIf you'd like to comment on a ticket I notified you about you can post " +
+      "a threaded reply and I'll update the ticket with your message as a comment." +
+      "\n\nI'll also notify you of changes to any tickets you are watching. " +
+      'If the watcher messages make me too "chatty", but you want to ' +
       'keep getting notified for mentions and assignments just type **no watchers**. ' +
       'If you want the watcher messages back, type **yes watchers**.' +
       '\n\nBy default, I won\'t notify you about changes you have made, but if you want to ' +
@@ -265,7 +241,7 @@ function postInstructions(bot, status_only = false, instructions_only = false) {
       "\n\nQuestions or feedback?   Join the Ask JiraNotification Bot space here: https://eurl.io/#Hy4f7zOjG");
   }
   if (!instructions_only) {
-    bot.recall('user_config')
+    bot.recall('userConfig')
       .then(function (userConfig) {
         let msg = '';
         if (userConfig.askedExit) {
@@ -301,130 +277,104 @@ function postInstructions(bot, status_only = false, instructions_only = false) {
 ## Helper methods for per-user notification level control
 ****/
 
-function setAskedExit(bot, mCollection, exitStatus) {
-  bot.recall('user_config')
-    .then(function (userConfig) {
-      if ((userConfig.askedExit) && (exitStatus === true)) {
-        return bot.say('Notifications are already **disabled**.');
-      }
-      if ((!userConfig.askedExit) && (exitStatus === false)) {
-        return bot.say('Notifications are already **enabled**.');
-      }
-      if (mCollection) {
-        mCollection.update({'_id': bot.isDirectTo}, {$set: {'askedExit': exitStatus}}, {w: 1}, function (err/*, result*/) {
-          if (err) {
-            logger.error("Can't communicate with db:" + err.message);
-            return bot.say("Hmmn. I seem to have a database problem.   Please ask again later.");
-          }
-          userConfig.askedExit = exitStatus;
-          bot.store('user_config', userConfig);
-          if (exitStatus === true) {
-            bot.say("OK.   I won't give you any more updates.  If you want to turn them on again just type **come back**.");
-          } else {
-            bot.say("OK.   I'll start giving you updates.  If you want to turn them off again just type **shut up**.");
-          }
-          postInstructions(bot, /*status_only=*/true);
-        });
-      } else {
-        logger.error('Unable to store exit request for ' + bot.isDirectTo + ' because DB never properly set up.');
-        bot.say("Hmmn. I seem to have a database problem.   Please ask again later.");
-      }
-    })
-    .catch(function (err) {
-      logger.error('Unable to get quietMode status for ' + bot.isDirectTo);
-      logger.error(err.message);
-      bot.say("Hmmn. I seem to have a database problem.   Please ask again later.");
+function setAskedExit(bot, exitStatus) {
+  bot.recall('userConfig').then((userConfig) => {
+    if ((userConfig.askedExit) && (exitStatus === true)) {
+      return bot.say('Notifications are already **disabled**.');
+    }
+    if ((!userConfig.askedExit) && (exitStatus === false)) {
+      return bot.say('Notifications are already **enabled**.');
+    }
+    if (exitStatus === true) {
+      bot.say("OK.   I won't give you any more updates.  If you want to turn them on again just type **come back**.");
+    } else {
+      bot.say("OK.   I'll start giving you updates.  If you want to turn them off again just type **shut up**.");
+    }
+
+    userConfig.askedExit = exitStatus;
+    bot.store('userConfig', userConfig).then(() => {
+      postInstructions(bot, /*status_only=*/true);
+    }).catch (function (err) {
+      logger.error(`setAskedExit: Unable to store new exit status for ${bot.isDirectTo}: ${err.message}`);
+      bot.say("Hmmn. I seem to have a database problem.   You may need to ask again later.");
     });
+  }).catch((err) => {
+    logger.error(`setAskedExit: Unable to get askedExit state for ${bot.isDirectTo}: ${err.message}`);
+    bot.say("Hmmn. I seem to have a database problem.   Please ask again later.");
+  });
+
 }
 
-function toggleWatcherMsg(bot, mCollection, state) {
-  bot.recall('user_config')
-    .then(function (userConfig) {
-      if (userConfig.askedExit) {
-        bot.say('You curently have all notifications turned off.\n\n' +
-          'Type **come back** to enable notifications and then you can ' +
-          'fine tune your watcher notification status.');
-        return postInstructions(bot, /*status_only=*/true);
-      }
-      if ((!userConfig.hasOwnProperty('watcherMsgs')) ||
-        (userConfig.watcherMsgs) && (state === true)) {
-        bot.say('Watched Ticket Notifications are already enabled.');
-        return postInstructions(bot, /*status_only=*/true);
-      }
-      if ((!userConfig.watcherMsgs) && (state === false)) {
-        bot.say('Watched Ticket Notifications are already disabled.');
-        return postInstructions(bot, /*status_only=*/true);
-      }
-      if (mCollection) {
-        mCollection.update({'_id': bot.isDirectTo}, {$set: {'watcherMsgs': state}}, {w: 1}, function (err/*, result*/) {
-          if (err) {
-            logger.error("Can't communicate with db:" + err.message);
-            return bot.say("Hmmn. I seem to have a database problem.   Please ask again later.");
-          }
-          userConfig.watcherMsgs = state;
-          bot.store('user_config', userConfig);
-          if (state === true) {
-            bot.say("OK. I will notify you about changes to tickets you are watching.  If you want to turn them off again just type **no watchers**.");
-          } else {
-            bot.say("OK. I won't notify you about changes to tickets you are watching.  If you want to turn them on again just type **yes watchers**.");
-          }
-          postInstructions(bot, /*status_only=*/true);
-        });
-      } else {
-        logger.error('Unable to store exit request for ' + bot.isDirectTo + ' because DB never properly set up.');
-        bot.say("Hmmn. I seem to have a database problem.   Please ask again later.");
-      }
-    })
-    .catch(function (err) {
-      logger.error('Unable to get watcherMsgs status for ' + bot.isDirectTo);
-      logger.error(err.message);
+function toggleWatcherMsg(bot, state) {
+  bot.recall('userConfig').then(function (userConfig) {
+    if (userConfig.askedExit) {
+      bot.say('You curently have all notifications turned off.\n\n' +
+        'Type **come back** to enable notifications and then you can ' +
+        'fine tune your watcher notification status.');
+      return postInstructions(bot, /*status_only=*/true);
+    }
+    if ((!userConfig.hasOwnProperty('watcherMsgs')) ||
+      (userConfig.watcherMsgs) && (state === true)) {
+      bot.say('Watched Ticket Notifications are already enabled.');
+      return postInstructions(bot, /*status_only=*/true);
+    }
+    if ((!userConfig.watcherMsgs) && (state === false)) {
+      bot.say('Watched Ticket Notifications are already disabled.');
+      return postInstructions(bot, /*status_only=*/true);
+    }
+
+    if (state === true) {
+      bot.say("OK. I will notify you about changes to tickets you are watching.  If you want to turn them off again just type **no watchers**.");
+    } else {
+      bot.say("OK. I won't notify you about changes to tickets you are watching.  If you want to turn them on again just type **yes watchers**.");
+    }
+    userConfig.watcherMsgs = state;
+    bot.store('userConfig', userConfig).then(() => {
+      postInstructions(bot, /*status_only=*/true);
+    }).catch (function (err) {
+      logger.error(`toggleWatcherMsg: Unable to watcherMsg=${state} for ${bot.isDirectTo}: ${err.message}`);
       bot.say("Hmmn. I seem to have a database problem.   Please ask again later.");
     });
+  }).catch(function (err) {
+    logger.error(`toggleWatcherMsg: Unable get current watcherMsg state for ${bot.isDirectTo}: ${err.message}`);
+    bot.say("Hmmn. I seem to have a database problem.   Please ask again later.");
+  });
 }
 
-function toggleNotifySelf(bot, mCollection, state) {
-  bot.recall('user_config')
-    .then(function (userConfig) {
-      if (userConfig.askedExit) {
-        bot.say('You curently have all notifications turned off.\n\n' +
-          'Type **come back** to enable notifications and then you can ' +
-          'fine tune your notification status.');
-        return postInstructions(bot, /*status_only=*/true);
-      }
-      if ((!userConfig.hasOwnProperty('notifySelf') && (state === false)) ||
-        (!userConfig.notifySelf) && (state === false)) {
-        bot.say('I am not notifying you about changes to Jira tickets made by you.');
-        return postInstructions(bot, /*status_only=*/true);
-      }
-      if ((userConfig.notifySelf) && (state === true)) {
-        bot.say('I\'m already notifying you about changes to Jira tickets made by you.');
-        return postInstructions(bot, /*status_only=*/true);
-      }
-      if (mCollection) {
-        mCollection.update({'_id': bot.isDirectTo}, {$set: {'notifySelf': state}}, {w: 1}, function (err/*, result*/) {
-          if (err) {
-            logger.error("Can't communicate with db:" + err.message);
-            return bot.say("Hmmn. I seem to have a database problem.   Please ask again later.");
-          }
-          userConfig.notifySelf = state;
-          bot.store('user_config', userConfig);
-          if (state === true) {
-            bot.say("OK. I will notify you about changes to tickets made by you.  If you want to turn them off again just type **no notifyself**.");
-          } else {
-            bot.say("OK. I won't notify you about changes to tickets made by you.  If you want to turn them on again just type **yes notifyself**.");
-          }
-          postInstructions(bot, /*status_only=*/true);
-        });
-      } else {
-        logger.error('Unable to store exit request for ' + bot.isDirectTo + ' because DB never properly set up.');
-        bot.say("Hmmn. I seem to have a database problem.   Please ask again later.");
-      }
-    })
-    .catch(function (err) {
-      logger.error('Unable to get notifySelf status for ' + bot.isDirectTo);
-      logger.error(err.message);
+function toggleNotifySelf(bot, state) {
+  bot.recall('userConfig').then(function (userConfig) {
+    if (userConfig.askedExit) {
+      bot.say('You curently have all notifications turned off.\n\n' +
+        'Type **come back** to enable notifications and then you can ' +
+        'fine tune your notification status.');
+      return postInstructions(bot, /*status_only=*/true);
+    }
+    if ((!userConfig.hasOwnProperty('notifySelf') && (state === false)) ||
+      (!userConfig.notifySelf) && (state === false)) {
+      bot.say('I am not notifying you about changes to Jira tickets made by you.');
+      return postInstructions(bot, /*status_only=*/true);
+    }
+    if ((userConfig.notifySelf) && (state === true)) {
+      bot.say('I\'m already notifying you about changes to Jira tickets made by you.');
+      return postInstructions(bot, /*status_only=*/true);
+    }
+
+    if (state === true) {
+      bot.say("OK. I will notify you about changes to tickets made by you.  If you want to turn them off again just type **no notifyself**.");
+    } else {
+      bot.say("OK. I won't notify you about changes to tickets made by you.  If you want to turn them on again just type **yes notifyself**.");
+    }
+    userConfig.notifySelf = state;
+    bot.store('userConfig', userConfig).then(() => {
+      postInstructions(bot, /*status_only=*/true);
+    }).catch (function (err) {
+      logger.error(`toggleNotifySelf: Unable to set  notifySelf=${state} for ${bot.isDirectTo}: ${err.message}`);
       bot.say("Hmmn. I seem to have a database problem.   Please ask again later.");
     });
+  }).catch (function (err) {
+    logger.error(`toggleNotifySelf: Unable to get current notifySelf state for ${bot.isDirectTo}: ${err.message}`);
+    bot.say("Hmmn. I seem to have a database problem.   Please ask again later.");
+  });
 }
 
 function updateAdmin(message, listAll = false) {
@@ -482,35 +432,35 @@ framework.hears(status_words, function (bot/*, trigger*/) {
 var no_watcher_words = /^\/?(no watcher)s?( |.|$)/i;
 framework.hears(no_watcher_words, function (bot/*, trigger*/) {
   logger.verbose('Processing Disable Watcher Notifications Request for ' + bot.isDirectTo);
-  toggleWatcherMsg(bot, mCollection, false);
+  toggleWatcherMsg(bot, false);
   responded = true;
 });
 
 var yes_watcher_words = /^\/?(yes watcher)s?( |.|$)/i;
 framework.hears(yes_watcher_words, function (bot/*, trigger*/) {
   logger.verbose('Processing Enable Watcher Notifications Request for ' + bot.isDirectTo);
-  toggleWatcherMsg(bot, mCollection, true);
+  toggleWatcherMsg(bot, true);
   responded = true;
 });
 
 var no_notifyself_words = /^\/?(no notify ?self)( |.|$)/i;
 framework.hears(no_notifyself_words, function (bot/*, trigger*/) {
   logger.verbose('Processing Disable Notifications Made by user Request for ' + bot.isDirectTo);
-  toggleNotifySelf(bot, mCollection, false);
+  toggleNotifySelf(bot, false);
   responded = true;
 });
 
 var yes_notifyself_words = /^\/?(yes notify ?self)( |.|$)/i;
 framework.hears(yes_notifyself_words, function (bot/*, trigger*/) {
   logger.verbose('Processing Enable Notifications Made by user Request for ' + bot.isDirectTo);
-  toggleNotifySelf(bot, mCollection, true);
+  toggleNotifySelf(bot, true);
   responded = true;
 });
 
 var exit_words = /^\/?(exit|goodbye|mute|leave|shut( |-)?up)( |.|$)/i;
 framework.hears(exit_words, function (bot/*, trigger*/) {
   logger.verbose('Processing Exit Request for ' + bot.isDirectTo);
-  setAskedExit(bot, mCollection, true);
+  setAskedExit(bot, true);
   updateAdmin(bot.isDirectTo + ' asked me to turn off notifications');
   responded = true;
 });
@@ -518,7 +468,7 @@ framework.hears(exit_words, function (bot/*, trigger*/) {
 var return_words = /^\/?(talk to me|return|un( |-)?mute|come( |-)?back)( |.|$)/i;
 framework.hears(return_words, function (bot/*, trigger*/) {
   logger.verbose('Processing Return Request for ' + bot.isDirectTo);
-  setAskedExit(bot, mCollection, false);
+  setAskedExit(bot, false);
   updateAdmin(bot.isDirectTo + ' asked me to start notifying them again');
   responded = true;
 });
@@ -536,20 +486,21 @@ framework.hears(reply_words, function (bot, trigger) {
     // Handle threaded replies in the catch-all handler
     return;
   }
-  bot.recall('user_config')
-    .then((userConfig) => {
-      if ((userConfig) && (userConfig.lastStoryUrl)) {
+  bot.recall('lastNotifiedIssue')
+    .then((lastNotifiedIssue) => {
+      if ((lastNotifiedIssue) && (lastNotifiedIssue.storyUrl)) {
         let comment = trigger.args.slice(1).join(" ");
-        jira.addComment(userConfig.lastStoryUrl, userConfig.lastStoryKey,
+        jira.addComment(lastNotifiedIssue.storyUrl,
+          lastNotifiedIssue.storyKey,
           comment, bot, bot.isDirectTo);
       } else {
         bot.say('Sorry, cannot find last notification to reply to. ' +
           'Please click the link above and update directly in jira.');
       }
     }).catch((e) => {
-      logger.warn('Failure in reply handler: '+e.message);
+      logger.warn('Failure in reply handler: ' + e.message);
       bot.say('Sorry, cannot find last notification to reply to. ' +
-      'Please click the link above and update directly in jira.');
+        'Please click the link above and update directly in jira.');
     });
   responded = true;
 });
