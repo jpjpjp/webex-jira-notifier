@@ -171,7 +171,6 @@ class JiraConnector {
     };
     request(options).then((resp) => {
       // Add logic to check for a 204?
-      console.log(resp);
       logger.debug(`Posted a comment to jira issue ${key} on behalf of ${email}`);
     }).catch(e => {
       logger.warn(`Failed to post comment for ${email}: ${e.message}`);
@@ -194,20 +193,20 @@ class JiraConnector {
       'Please click the link above and update directly in jira.';
     if (!trigger.message.parentId) {
       logger.warn(`In postCommentToParent but message from ${userEmail}is not a reply`);
-      return bot.reply(trigger, errMsg);
+      return bot.reply(trigger.message, errMsg);
     }
     // Fetch the parent message to see if we can get the issue key
     bot.webex.messages.get(trigger.message.parentId).then((message) => {
       if (message.personId !== bot.person.id) {
         throw new Error(`In postCommentToParent but parent of message from ${userEmail} was not posted by the bot.`);
       }
+      // TODO clean up this regexp -- its too loose...
       let keys = message.text.match(/([^/]*)$/);
       if (!keys || !keys.length) {
         throw new Error(`In postCommentToParent due to request from ${userEmail}, but unable to find issue key in parent message.`);
       }
       issueKey = keys[0];
-      let myKeyAr = [issueKey];
-      return this.lookupByKey(trigger.person.emails[0], myKeyAr);
+      return this.lookupByKey(trigger.person.emails[0], [issueKey]);
     }).then((issues) => {
       if (!issues || !(issues.length) || !(issues[0].self)) {
         throw new Error(`In postCommentToParent failed to find jira issue with ${issueKey}`);
@@ -215,7 +214,7 @@ class JiraConnector {
       return this.addComment(issues[0].self, issues[0].key, trigger.message.text, bot, userEmail);
     }).catch((e) => {
       logger.warn(e.message);
-      return bot.reply(trigger, errMsg);
+      return bot.reply(trigger.message, errMsg);
     });
   }
 
