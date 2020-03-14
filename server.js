@@ -47,6 +47,7 @@ var config = {};
 if ((process.env.TOKEN) && (process.env.PORT)) {
   config.token = process.env.TOKEN;
   config.port = process.env.PORT;
+  config.maxStartupSpaces = 1000;
   if (process.env.WEBHOOK) {
     // If no webhook url is set we will attempt to get events via websocket
     config.webhookUrl = process.env.WEBHOOK;
