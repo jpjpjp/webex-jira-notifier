@@ -14,6 +14,7 @@ let basicToken = '';
 let jira_url = '';
 let proxy_url = '';
 let jira_url_regexp = null;
+
 if (process.env.JIRA && process.env.JIRA_URL) {
   // for finding watchers
   request = require('request-promise');
@@ -212,7 +213,7 @@ function notifyPeople(framework, jiraEvent, notifyList, author, eventName, actio
 
 // Check the event against our watchers.  If we get a hit, send a spark message
 function notifyWatchers(framework, jiraEvent, notifyList, author, cb) {
-  if (!request) {return;}
+  if ((!request) || (process.env.SKIP_WATCHERS)) {return;}
   try {
     let jiraKey = jiraEvent.issue ? jiraEvent.issue.key : '';
     if (jiraEvent.watchersNotified) {
