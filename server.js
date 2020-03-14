@@ -264,7 +264,7 @@ function postInstructions(bot, status_only = false, instructions_only = false) {
           msg += '\n\nType **help** to learn how to change your Notification state.';
         }
         bot.say(msg);
-        logger.debug('Status for ' + bot.isDirectTo + ': ' + userConfig);
+        logger.debug('Status for ' + bot.isDirectTo + ': ' + JSON.stringify(userConfig, null, 2));
       })
       .catch(function (err) {
         logger.error('Unable to get askedExit status for ' + bot.isDirectTo);
