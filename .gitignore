@@ -38,3 +38,5 @@ mongo.json
 config-prodbot.json
 mongo-prodbot.json
 
+# Script for migrating pre-framework app version config data
+migrate_configs.js
