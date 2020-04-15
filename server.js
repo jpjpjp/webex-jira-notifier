@@ -112,6 +112,9 @@ if (process.env.ADMIN_SPACE_ID) {
 if (process.env.BOTNAME) {botName = process.env.BOTNAME;}
 if (process.env.BOT_EMAIL) {botEmail = process.env.BOT_EMAIL;}
 
+// Configure an HTTPS proxy if one is specified
+if (process.env.HTTPS_PROXY) {config.httpsProxy = process.env.HTTPS_PROXY;}
+
 // init the Webex Bot framework for node developers
 var framework = new Framework(config);
 //framework.start();
