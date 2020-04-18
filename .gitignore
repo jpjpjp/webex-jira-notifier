@@ -13,7 +13,8 @@ pids
 *.txt
 
 # Directory for storing jira events
-JiraEvents
+JiraEvents/*
+pre-2018-jira-event-test-cases/*
 
 # Local error events to be investigated
 jira-event-test-cases/*.error
@@ -40,3 +41,5 @@ mongo-prodbot.json
 
 # Script for migrating pre-framework app version config data
 migrate_configs.js
+jira-notifier-login.pem
+post-watched-update-to-localhost.sh
