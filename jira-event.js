@@ -8,35 +8,47 @@
 require('dotenv').config();
 logger = require('./logger');
 
-// Only allow users for our email organization user the bot
+// Configure Access to Jira to find watcher and other info
 let request = null;
-let basicToken = '';
 let jira_url = '';
 let proxy_url = '';
 let jira_url_regexp = null;
+let jiraProjects = null;
+let watcherOptions = {
+  "json": true,
+  headers: {
+    'Authorization': 'Basic '
+  }
+};
 
-if (process.env.JIRA && process.env.JIRA_URL) {
-  // for finding watchers
+// Set up Authorization header
+if ((process.env.JIRA_USER) && (process.env.JIRA_PW)) {
   request = require('request-promise');
-  basicToken = process.env.JIRA;
-  jira_url = process.env.JIRA_URL;
-  if (process.env.PROXY_URL) {
-    // Set variables to get watcher info via a server
+  watcherOptions.headers.Authorization +=
+    new Buffer.from(process.env.JIRA_USER + ':' +
+      process.env.JIRA_PW).toString('base64');
+
+  if ((process.env.PROXY_URL) && (prcoess.env.JIRA_URL)) {
+    // Set variables to get access jira via proxy
+    jira_url = process.env.JIRA_URL;
     jira_url_regexp = new RegExp(jira_url);
     proxy_url = process.env.PROXY_URL;
-    logger.info('Will attempt to access Jira via proxy at ' + jira_url);
+    logger.info('Will attempt to access Jira at ' + proxy_url +
+      'in order in order to proxy requests to ' + jira_url);
+  }
+  if (process.env.JIRA_PROJECTS) {
+    // Only access specified jira projects if this is specified
+    jiraProjects = process.env.JIRA_PROJECTS.split(',');
   }
 } else {
   logger.error('Cannot read Jira credential.  Will not notify watchers');
 }
 
-const JIRA_PROJECTS = process.env.JIRA_PROJECTS;
-const jiraProjects = JIRA_PROJECTS.split(',');
 
 //Determine which event we have.  If its one we care about see if it belongs
 // to someone in a room with our bot
-exports.processJiraEvent = function (jiraEvent, framework, emailOrg, callback=null) {
-  //logJiraEvent(jiraEvent);
+exports.processJiraEvent = function (jiraEvent, framework, emailOrg, callback = null) {
+  logJiraEvent(jiraEvent);
   try {
     // We'll build a list of users who are mentioned or assigned
     let toNotifyList = [];
@@ -51,38 +63,43 @@ exports.processJiraEvent = function (jiraEvent, framework, emailOrg, callback=nu
     // if (key == 'SPARK-7329') {
     //   console.log('Found the one I want to debug.');
     // }
-    jiraEvent.ourProjectIdx = jiraProjects.indexOf(key.substr(0, key.indexOf('-')));
-    if (jiraEvent.ourProjectIdx == -1) {
-      logger.verbose('Got a webhook for '+ key + 
-        '. Not in our list of projects: ' + JIRA_PROJECTS);
+
+    if (jiraProjects) {
+      // Ensure this event is associated with one of our allowd projects
+      // If not, we can notify mentioned users, but not watchers or owners
+      jiraEvent.ourProjectIdx = jiraProjects.indexOf(key.substr(0, key.indexOf('-')));
+      if (jiraEvent.ourProjectIdx == -1) {
+        logger.verbose('Got a webhook for ' + key +
+          '. Not in our list of projects: ' + process.env.JIRA_PROJECTS);
+      }
     }
 
     if ((jiraEvent.webhookEvent === 'jira:issue_updated') &&
-        (((jiraEvent.issue_event_type_name === 'issue_commented') ||
+      (((jiraEvent.issue_event_type_name === 'issue_commented') ||
         (jiraEvent.issue_event_type_name === 'issue_comment_edited')) ||
         ((jiraEvent.issue_event_type_name === 'issue_updated') &&
-        (typeof jiraEvent.comment === 'object')))) {
+          (typeof jiraEvent.comment === 'object')))) {
       toNotifyList = getAllMentions(jiraEvent.comment.body);
       notifyPeople(framework, jiraEvent, toNotifyList,  // extract mentions
         jiraEvent.comment.author.displayName,
         ' mentioned you in the Jira ', '', '',
         jiraEvent.comment.body, emailOrg, callback);
     } else if ((jiraEvent.webhookEvent === 'jira:issue_updated') &&
-              (jiraEvent.issue_event_type_name === 'issue_updated') || 
-              (jiraEvent.issue_event_type_name === 'issue_work_started') || 
-              (jiraEvent.issue_event_type_name === 'issue_assigned')) {
+      (jiraEvent.issue_event_type_name === 'issue_updated') ||
+      (jiraEvent.issue_event_type_name === 'issue_work_started') ||
+      (jiraEvent.issue_event_type_name === 'issue_assigned')) {
       // Loop through the changed elements to see if one was that assignation
       if ((!jiraEvent.changelog) || (!jiraEvent.changelog.items.length)) {
         logger.error('Expected a changelog for %s:%s but did not find one!' +
-          ' No one will be notified', jiraEvent.webhookEvent, 
-        jiraEvent.issue_event_type_name);
-        createTestCase(null, jiraEvent, 'no-changelog');   
+          ' No one will be notified', jiraEvent.webhookEvent,
+          jiraEvent.issue_event_type_name);
+        createTestCase(null, jiraEvent, 'no-changelog');
         if (callback) {callback(e);}
-        return;     
+        return;
       }
       for (var i = 0, len = jiraEvent.changelog.items.length; i < len; i++) {
         var item = jiraEvent.changelog.items[i];
-        logger.debug('Looking at changlong issue:', i);         
+        logger.debug('Looking at changlong issue:', i);
         if (item.field === 'assignee') {
           // See if the user was assigned to this existing ticket
           toNotifyList.push(item.to);
@@ -97,7 +114,7 @@ exports.processJiraEvent = function (jiraEvent, framework, emailOrg, callback=nu
               notifyPeople(framework, jiraEvent, toNotifyList,  // extract mentions
                 jiraEvent.user.displayName,
                 ' updated the description of Jira ', ' to you.',
-                'Description:', item.toString, emailOrg, callback);  
+                'Description:', item.toString, emailOrg, callback);
             } else {
               if (callback) {callback(null);}
               return notifyWatchers(framework, jiraEvent, toNotifyList, jiraEvent.user.displayName, callback);
@@ -106,29 +123,29 @@ exports.processJiraEvent = function (jiraEvent, framework, emailOrg, callback=nu
             logger.debug('Ignoring delete only update to Description for Jira Event:' + jiraEvent.webhookEvent);
             if (callback) {callback(null);}
             return notifyWatchers(framework, jiraEvent, toNotifyList, jiraEvent.user.displayName, callback);
-          } 
+          }
         } else {
-          logger.debug('No assignees or mentionees to notify for a change to %s, '+
-            'will look for watchers.', item.field);                   
+          logger.debug('No assignees or mentionees to notify for a change to %s, ' +
+            'will look for watchers.', item.field);
           if (callback) {callback(null);}
           return notifyWatchers(framework, jiraEvent, toNotifyList, jiraEvent.user.displayName, callback);
         }
       }
     } else if ((jiraEvent.webhookEvent === 'jira:issue_created') &&
-          (jiraEvent.issue_event_type_name === 'issue_created')) {
+      (jiraEvent.issue_event_type_name === 'issue_created')) {
       // This assignee logic is based on a manufactured payload. Should create new test cases when we can
       // Assign users in the create dialog
-      if (jiraEvent.issue.fields.assignee) {   
+      if (jiraEvent.issue.fields.assignee) {
         // Jira webhook payload seems to populate assignee differently on different projects...
         if (jiraEvent.issue.fields.assignee.name) {
-          toNotifyList.push(jiraEvent.issue.fields.assignee.name);     
+          toNotifyList.push(jiraEvent.issue.fields.assignee.name);
         } else {
           toNotifyList.push(jiraEvent.issue.fields.assignee);
         }
         notifyPeople(framework, jiraEvent, toNotifyList,  //one name
           jiraEvent.user.displayName,
           ' created a Jira ', ' and assigned it to you.',
-          'Description:', jiraEvent.issue.fields.description, 
+          'Description:', jiraEvent.issue.fields.description,
           emailOrg, callback);
       }
       if (jiraEvent.issue.fields.description) {
@@ -137,7 +154,7 @@ exports.processJiraEvent = function (jiraEvent, framework, emailOrg, callback=nu
         notifyPeople(framework, jiraEvent, toNotifyList,  // extract mentions
           jiraEvent.user.displayName,
           ' created a Jira ', ' and mentioned to you in it.',
-          'Description:', jiraEvent.issue.fields.description, 
+          'Description:', jiraEvent.issue.fields.description,
           emailOrg, callback);
       }
     } else if (jiraEvent.webhookEvent === 'jira:issue_deleted') {
@@ -155,11 +172,11 @@ exports.processJiraEvent = function (jiraEvent, framework, emailOrg, callback=nu
       notifyPeople(framework, jiraEvent, toNotifyList,  //one name
         jiraEvent.user.displayName,
         ' deleted a Jira ', ' that was assigned to you.',
-        'Description:', jiraEvent.issue.fields.description, 
+        'Description:', jiraEvent.issue.fields.description,
         emailOrg, callback);
     } else {
-      logger.debug('No notifications for Jira Event '+jiraEvent.webhookEvent+
-        ':'+jiraEvent.issue_event_type_name+'. Checking for watchers...');
+      logger.debug('No notifications for Jira Event ' + jiraEvent.webhookEvent +
+        ':' + jiraEvent.issue_event_type_name + '. Checking for watchers...');
       if (callback) {(callback(null, null));}
       notifyWatchers(framework, jiraEvent, [],  //no one was "notified"
         jiraEvent.user.displayName, callback);
@@ -167,7 +184,7 @@ exports.processJiraEvent = function (jiraEvent, framework, emailOrg, callback=nu
   } catch (e) {
     logger.error('Caught Error in JiraEvent Handler:' + e);
     createTestCase(e, jiraEvent, 'caught-error');
-    if (callback) {return(callback(e));}
+    if (callback) {return (callback(e));}
   }
 };
 
@@ -182,12 +199,12 @@ function notifyPeople(framework, jiraEvent, notifyList, author, eventName, actio
   //     return;
   //   }
   // }
-  notifyList.forEach(function(user) {
+  notifyList.forEach(function (user) {
     let email = user + '@' + emailOrg;
-    let bot = framework.bots.find(function(bot) {return(bot.isDirectTo === email);});
+    let bot = framework.bots.find(function (bot) {return (bot.isDirectTo === email);});
     if (bot) {
       let theBot = bot;
-      theBot.recall('userConfig').then(function(userConfig) {
+      theBot.recall('userConfig').then(function (userConfig) {
         if (userConfig.askedExit) {
           return logger.info('Supressing message to ' + theBot.isDirectTo);
         }
@@ -196,7 +213,7 @@ function notifyPeople(framework, jiraEvent, notifyList, author, eventName, actio
         if (jiraEvent.ourProjectIdx == -1) {
           logger.error(email + ' is working on project ' + jiraEvent.issue.key);
         }
-      }).catch(function(err) {
+      }).catch(function (err) {
         logger.error('Unable to get quietMode status for ' + theBot.isDirectTo);
         logger.error(err.message);
         logger.error('Erring on the side of notifying them.');
@@ -205,7 +222,7 @@ function notifyPeople(framework, jiraEvent, notifyList, author, eventName, actio
     } else {
       logger.verbose('No bot found for potential recipient:' + email);
       // Test framework wants to no if a user who was mentioned or assigned does NOT get a message
-      if (cb) {return(cb(null, null));}
+      if (cb) {return (cb(null, null));}
     }
   });
   notifyWatchers(framework, jiraEvent, notifyList, author, cb);
@@ -238,44 +255,37 @@ function notifyWatchers(framework, jiraEvent, notifyList, author, cb) {
       if (jira_url_regexp) {
         watcherUrl = watcherUrl.replace(jira_url_regexp, proxy_url);
       }
-      logger.debug('Looking for watcher info: '+watcherUrl);
-      logger.debug('Will send '+watcherNews.description+', changes:'+watcherNews.change);
+      logger.debug('Looking for watcher info: ' + watcherUrl);
+      logger.debug('Will send ' + watcherNews.description + ', changes:' + watcherNews.change);
 
-      request.get(watcherUrl, {
-        "json": true,
-        headers: {
-          'Authorization': 'Basic ' + basicToken
-          // If I ever switch to OAuth
-          //'bearer' : bearerToken
-        }
-      }).then(function(resp) {
-        if(!resp.hasOwnProperty('watchers')){
+      request.get(watcherUrl, watcherOptions).then(function (resp) {
+        if (!resp.hasOwnProperty('watchers')) {
           throw new Error('Did not get expected response from Jira watcher lookup.  This usually happens due to login failure and redirection.');
         }
-        resp.watchers.forEach(function(watcher) {
+        resp.watchers.forEach(function (watcher) {
           let email = watcher.emailAddress;
           if (notifyList.indexOf(watcher.key) > -1) {
-            logger.verbose("Skipping watcher:"+email+". Already notified");
+            logger.verbose("Skipping watcher:" + email + ". Already notified");
             return;
           }
-          let bot = framework.bots.find(function(bot) {return (bot.isDirectTo === email);});
+          let bot = framework.bots.find(function (bot) {return (bot.isDirectTo === email);});
           if (bot) {
             let theBot = bot;
-            theBot.recall('userConfig').then(function(userConfig) {
+            theBot.recall('userConfig').then(function (userConfig) {
               if ((userConfig.askedExit) || (userConfig.watcherMsgs === false)) {
                 return logger.verbose('Supressing message to ' + theBot.isDirectTo);
               }
               watcherNews = (!watcherNews) ? getWatcherNews(jiraEvent) : watcherNews;
               sendNotification(framework, theBot, jiraEvent, author,
-                watcherNews.description, ' that you are watching.', 
+                watcherNews.description, ' that you are watching.',
                 "", watcherNews.change, userConfig, cb);
-            }).catch(function(err) {
+            }).catch(function (err) {
               logger.error('Unable to get quietMode status for ' + theBot.isDirectTo);
               logger.error(err.message);
               logger.error('Erring on the side of notifying them.');
               watcherNews = (watcherNews === {}) ? getWatcherNews(jiraEvent) : watcherNews;
               sendNotification(framework, theBot, jiraEvent, author,
-                watcherNews.description, ' that you are watching.', 
+                watcherNews.description, ' that you are watching.',
                 '', watcherNews.change, null, cb);
             });
           } else {
@@ -283,7 +293,7 @@ function notifyWatchers(framework, jiraEvent, notifyList, author, cb) {
             // Test framework does NOT want to be notified of potential watchers who don't get a message so no callback
           }
         });
-      }).catch(function(err) {
+      }).catch(function (err) {
         logger.warn('Unable to get any watcher info from %s, :%s',
           jiraEvent.issue.fields.watches.self, err.message);
       });
@@ -291,7 +301,7 @@ function notifyWatchers(framework, jiraEvent, notifyList, author, cb) {
       logger.verbose('No watchers of this issue to notify');
     }
   } catch (err) {
-    logger.error('Error processing watchers: '+err.message);
+    logger.error('Error processing watchers: ' + err.message);
   }
 }
 
@@ -303,8 +313,8 @@ function getWatcherNews(jiraEvent) {
   };
   //let changedField = '';
 
-  if ((jiraEvent.changelog) && (jiraEvent.changelog.items[0]) && 
-        (jiraEvent.changelog.items[0].field)) {
+  if ((jiraEvent.changelog) && (jiraEvent.changelog.items[0]) &&
+    (jiraEvent.changelog.items[0].field)) {
     changedField = jiraEvent.changelog.items[0].field;
   }
 
@@ -330,14 +340,14 @@ function getWatcherNews(jiraEvent) {
   } else {
     logger.error('Using generic watcherNews for %s:%s_%s', jiraEvent.timestamp, jiraEvent.webhookEvent, jiraEvent.issue_event_type_name);
     createTestCase(null, jiraEvent, 'no-type-handler');
-  } 
+  }
   return watcherNews;
 }
 
 function getNewsFromChangelong(jiraEvent, change) {
   if (!jiraEvent.changelog) {
     let jiraKey = jiraEvent.issue ? jiraEvent.issue.key : '';
-    logger.error('No changelong for %s eventtype:%s, issue_type:%s', 
+    logger.error('No changelong for %s eventtype:%s, issue_type:%s',
       jiraKey, jiraEvent.issue_event_type_name, jiraEvent.issue_event_type_name);
     createTestCase(null, jiraEvent, 'no-changelog');
     return change;
@@ -346,18 +356,18 @@ function getNewsFromChangelong(jiraEvent, change) {
     let item = jiraEvent.changelog.items[i];
     if (item.field) {
       if (change) {change += ', and ';}
-      change += 'updated field:'+item.field;
+      change += 'updated field:' + item.field;
       if ((item.field != 'description') && (item.fromString)) {
-        change += ' from:"'+item.fromString+'"';
+        change += ' from:"' + item.fromString + '"';
       }
       if (item.toString) {
-        change += ' to:"'+jiraEvent.changelog.items[0].toString+'"';
+        change += ' to:"' + jiraEvent.changelog.items[0].toString + '"';
       }
     }
   }
   if (!change) {
     let jiraKey = jiraEvent.issue ? jiraEvent.issue.key : '';
-    logger.error('Unable to find a changed field for %s eventtype:%s, issue_type:%s', 
+    logger.error('Unable to find a changed field for %s eventtype:%s, issue_type:%s',
       jiraKey, jiraEvent.issue_event_type_name, jiraEvent.issue_event_type_name);
     createTestCase(null, jiraEvent, 'no-change');
   }
@@ -369,27 +379,27 @@ function getNewsFromChangelong(jiraEvent, change) {
 function getAllMentions(str) {
   let mentionsRegEx = /\[~(\w+)\]/g;
   let mentions = [];
-  str.replace(mentionsRegEx, function(match, username) {
+  str.replace(mentionsRegEx, function (match, username) {
     mentions.push(username);
   });
   return mentions;
 }
 
 function sendNotification(framework, bot, jiraEvent, author, eventName, action, elementName, elementValue, userConfig, cb) {
-  if ((bot.isDirectTo == jiraEvent.user.emailAddress) && 
-      ((!userConfig) || (!userConfig.hasOwnProperty('notifySelf')) || (!userConfig.notifySelf))) {
+  if ((bot.isDirectTo == jiraEvent.user.emailAddress) &&
+    ((!userConfig) || (!userConfig.hasOwnProperty('notifySelf')) || (!userConfig.notifySelf))) {
     logger.info('Not sending notification of update made by ' + bot.isDirectTo + ' to ' + jiraEvent.user.emailAddress);
     return;
   }
-  logger.info('Sending a notification to '+bot.isDirectTo+' about '+jiraEvent.issue.key);
-  let msg =  author + eventName + jiraEvent.issue.fields.issuetype.name +
+  logger.info('Sending a notification to ' + bot.isDirectTo + ' about ' + jiraEvent.issue.key);
+  let msg = author + eventName + jiraEvent.issue.fields.issuetype.name +
     ': **' + jiraEvent.issue.fields.summary + '**' + action + '\n\n';
 
   if ((elementName) || (elementValue)) {
     // Try replacing newlines with <br > to keep all the text in one block
     if (elementName) {
       elementName = elementName.replace(/(?:\r\n\r\n|\r\n|\r|\n)/g, '<br />');
-    } 
+    }
     if (elementValue) {
       elementValue = elementValue.replace(/(?:\r\n\r\n|\r\n|\r|\n)/g, '<br />');
     }
@@ -399,37 +409,37 @@ function sendNotification(framework, bot, jiraEvent, author, eventName, action, 
   bot.say({markdown: msg});
   // Store the key of the last notification in case the user wants to reply
   let lastNotifiedIssue = {
-    storyUrl: jiraEvent.issue.self, 
-    storyKey:jiraEvent.issue.key
+    storyUrl: jiraEvent.issue.self,
+    storyKey: jiraEvent.issue.key
   };
   bot.store('lastNotifiedIssue', lastNotifiedIssue);
-  if (cb) {cb(null, bot);}  
+  if (cb) {cb(null, bot);}
 }
 
 // Dump the Jira Event to a file to see what the contents are
 var fs = require('fs');
 function logJiraEvent(jiraEvent) {  // eslint-disable-line no-unused-vars
   fs.writeFile("./JiraEvents/" + jiraEvent.timestamp + '-' + jiraEvent.webhookEvent + '-' +
-    jiraEvent.issue_event_type_name + ".json", JSON.stringify(jiraEvent, null, 4), (err) => {
-    if (err) {
-      logger.error('Error writing jira event to disk:' + err);
-    }
-  });
+    ".json", JSON.stringify(jiraEvent, null, 4), (err) => {
+      if (err) {
+        logger.error('Error writing jira event to disk:' + err);
+      }
+    });
 }
 
-function createTestCase(e, jiraEvent, changedField='') {
+function createTestCase(e, jiraEvent, changedField = '') {
   fs.writeFile("./jira-event-test-cases/" + jiraEvent.timestamp + '-' + jiraEvent.webhookEvent + '-' +
-    jiraEvent.issue_event_type_name  + '-' + changedField + ".error", JSON.stringify(jiraEvent, null, 4), (err) => {
-    if (err) {
-      logger.error('Error writing jira event to disk:' + err);
-    }
-    if (e) {
-      fs.appendFile("./jira-event-test-cases/" + jiraEvent.timestamp + '-' + jiraEvent.webhookEvent + '-' +
-        jiraEvent.issue_event_type_name + "_"+ e.message+".error", JSON.stringify(e, null, 4), (err) => {
-        if (err) {
-          logger.error('Error writing jira event to disk:' + err);
-        }
-      });
-    }
-  });
+    jiraEvent.issue_event_type_name + '-' + changedField + ".error", JSON.stringify(jiraEvent, null, 4), (err) => {
+      if (err) {
+        logger.error('Error writing jira event to disk:' + err);
+      }
+      if (e) {
+        fs.appendFile("./jira-event-test-cases/" + jiraEvent.timestamp + '-' + jiraEvent.webhookEvent + '-' +
+          jiraEvent.issue_event_type_name + "_" + e.message + ".error", JSON.stringify(e, null, 4), (err) => {
+            if (err) {
+              logger.error('Error writing jira event to disk:' + err);
+            }
+          });
+      }
+    });
 }
