@@ -16,13 +16,13 @@ let jira_url = jiraConnector.getJiraUrl();
 // Set regular expressions to discover the type of events we are getting
 const commentEvent = new RegExp(/^comment_/);
 const issueEvent = new RegExp(/^jira:issue_/);
-const oldStyleComment = new RegExp(/^issue_comment_/);
+const issueEventWithComment = new RegExp(/^issue_comment/);
 
 
 //Determine which event we have.  If its one we care about see if it belongs
 // to someone in a room with our bot
 exports.processJiraEvent = function (jiraEvent, framework, cb = null) {
-  //logJiraEvent(jiraEvent);
+  logJiraEvent(jiraEvent);
   try {
     // We'll also notify any watchers of this change 
     //(but only once even if multiple things changed)
@@ -30,6 +30,11 @@ exports.processJiraEvent = function (jiraEvent, framework, cb = null) {
     jiraEvent.watchersNotified = false;
 
     if (commentEvent.test(jiraEvent.webhookEvent)) {
+      if (process.env.USE_ISSUE_UPDATED_FOR_COMMENTS) {
+        logger.info(`Ignoring webhookEvent: "${jiraEvent.webhookEvent}, ` +
+          `Will use issue_updated event instead.`);
+        return;
+      }
       logger.info(`Processing incoming Jira comment event: ${jiraEvent.webhookEvent}`);
       return processCommentEvent(jiraEvent, framework, cb);
     } else if (issueEvent.test(jiraEvent.webhookEvent)) {
@@ -46,21 +51,24 @@ exports.processJiraEvent = function (jiraEvent, framework, cb = null) {
 
 function processIssueEvent(jiraEvent, framework, cb) {
   try {
-    // Some jira systems generate both issue and comment events for new comments
-    // Lets ignore the old style issue events although these are more efficient
-    // TODO -- add a switch to choose to use these and ignore the others
-    if ((jiraEvent.webhookEvent === 'jira:issue_updated') &&
-      (oldStyleComment.test(jiraEvent.issue_event_type_name))) {
-        logger.verbose(`Igoring old style issue_updated for a ` +
-          `${jiraEvent.issue_event_type_name} for ${jiraEvent.issue.key}`);
-        return;
-    }
-
     let msgElements = {};
     let event = jiraEvent.issue_event_type_name.substr("issue_".length,
       jiraEvent.webhookEvent.length);
     let user = jiraEvent.user;
     let issue = jiraEvent.issue;
+    let toNotifyList = [];
+
+    // If this is an issue event typ comment_created/updated event we may ignore it or
+    // process it depending on how we are configured...
+    if ((jiraEvent.webhookEvent === 'jira:issue_updated') &&
+      (issueEventWithComment.test(jiraEvent.issue_event_type_name))) {
+      if (!process.env.USE_ISSUE_UPDATED_FOR_COMMENTS) {
+        logger.verbose(`Igoring issue_updated for a ` +
+        `${jiraEvent.issue_event_type_name} for ${jiraEvent.issue.key}.` +
+        `Expecting a new comment_[created/deleted] event instead`);
+        return;
+      }
+    }
 
     // TODO figure out how/if this is still relevent
     // The new module pretty much REQUIRES full access to Jira to work
@@ -84,20 +92,34 @@ function processIssueEvent(jiraEvent, framework, cb) {
     // See if there are watchers for this issue and fetch them while we look for mentions
     let watcherPromise = jiraConnector.lookupWatcherInfoFromIssue(issue);
 
-    // While waiting for that, scan the description for mentions...
-    let toNotifyList = getAllMentions(issue.fields.description);
-    // And start building the Bot notification message elements
+    // While waiting for the watchers set up the msgElements and notify
+    // the assignee and anyone mentioned
     msgElements = {
       author: user.displayName,
       authorEmail: user.emailAddress,
       issueKey: issue.key,
       issueType: issue.fields.issuetype.name,
       issueSummary: jiraEvent.issue.fields.summary,
-      subject: "issue",
-      action: event,
-      body: convertNewlines(issue.fields.description),
       issueSelf: issue.self
     };
+
+
+    if ((jiraEvent.webhookEvent === 'jira:issue_updated') &&
+    (issueEventWithComment.test(jiraEvent.issue_event_type_name))) {
+      // Configure notifylist and msgElements with the comment body
+      toNotifyList = getAllMentions(jiraEvent.comment.body);
+      msgElements.subject = "comment";
+      msgElements.action = (jiraEvent.issue_event_type_name === 'issue_commented') ?
+        "created" : "updated";
+      msgElements.body = convertNewlines(jiraEvent.comment.body);
+    } else {
+      // Configure notifylist and msgElements with the issue summary
+      toNotifyList = getAllMentions(issue.fields.description);
+      msgElements.subject = "issue";
+      msgElements.action = event;
+      msgElements.body = convertNewlines(issue.fields.description);
+    }
+
     if (issue.fields.assignee) {
       msgElements.assignee = issue.fields.assignee.name;
       if (toNotifyList.indexOf(msgElements.assignee) === -1) {
@@ -105,7 +127,7 @@ function processIssueEvent(jiraEvent, framework, cb) {
       }
     }
     // Handle some more complex events
-    if ((event === 'created') && (issue.fields.assignee)) {
+    if ((msgElements.subject === "issue") && (event === 'created') && (issue.fields.assignee)) {
       // Discover assigned to when issue was assigned when it was created
       msgElements.action = 'assigned';
       msgElements.assignee = issue.fields.assignee.name;
@@ -126,6 +148,8 @@ function processIssueEvent(jiraEvent, framework, cb) {
         msgElements.updatedTo = jiraEvent.changelog.items[0].toString;
       }
     }
+  
+    // Notify assignee and mentioned users...
     notifyMentioned(framework, msgElements, toNotifyList, cb);
 
     // Wait for and process the watchers (if any)
@@ -193,13 +217,13 @@ function processCommentEvent(jiraEvent, framework, cb) {
     }).then((watcherInfo) => {
       return processWatcherInfo(framework, watcherInfo, toNotifyList, msgElements, cb);
     }).catch((e) => {
-      logger.error(`proccessCommentEvent() got error: "${e.message}". ` +
+      logger.error(`processCommentEvent() got error: "${e.message}". ` +
         `May have only notified people mentioned in the comment or none at all.`);
       createTestCase(e, jiraEvent, 'caught-error');
     });
 
   } catch (e) {
-    logger.error(`proccessCommentEvent(): caught error: ${e.message}`);
+    logger.error(`processCommentEvent(): caught error: ${e.message}`);
     createTestCase(e, jiraEvent, 'caught-error');
     if (cb) {return (cb(e));}
   }

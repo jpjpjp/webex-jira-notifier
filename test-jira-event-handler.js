@@ -136,76 +136,7 @@ testCases.push(new TestCase('./jira-event-test-cases/issue_created_and_assigned.
     `{"markdown":"JP Shipherd assigned JIRA Admin to a Jira Epic you are mentioned in: **Test Epic 2 -- ignore**.\\n\\nThis is (hopefully the last) test epic you will be assigned by [~jshipher]. <br />Please disregard and apologies for the noise.\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-41"}`,
     `{"markdown":"You were assigned to a Jira Epic by JP Shipherd: **Test Epic 2 -- ignore**.\\n\\nThis is (hopefully the last) test epic you will be assigned by [~jshipher]. <br />Please disregard and apologies for the noise.\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-41"}`
   ]));
- 
-/* A ticket assigned to jp with watchers gets a new multiline comment and no one is mentioned */
-testCases.push(new TestCase('./jira-event-test-cases/comment_created_multiline.json',
-  'comments', 'jshipher', 'without any mentions',
-  [
-    `{"markdown":"JP Shipherd created a comment on a Jira Task: **testing 1 2 3** that you are assigned to.\\n\\nThis is a new comment that<br />Spans multiple lines<br />The end.\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`,
-    `{"markdown":"JP Shipherd created a comment on a Jira Task: **testing 1 2 3** that you are watching.\\n\\nThis is a new comment that<br />Spans multiple lines<br />The end.\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`
-  ]));
 
-/* A ticket assigned to jp with watchers gets an updated comment (without any mentions) */
-testCases.push(new TestCase('./jira-event-test-cases/comment_updated_multiline.json',
-  'updates a commment', 'jshipher', 'without any mentions',
-  [
-    `{"markdown":"JP Shipherd updated a comment on a Jira Task: **testing 1 2 3** that you are assigned to.\\n\\nThis is an edited comment that<br />Spans multiple lines<br />The end.\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`,
-    `{"markdown":"JP Shipherd updated a comment on a Jira Task: **testing 1 2 3** that you are watching.\\n\\nThis is an edited comment that<br />Spans multiple lines<br />The end.\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`
-  ]));
-
-/* A ticket assigned to jp with watchers gets a new comment with a watcher mentioned */
-testCases.push(new TestCase('./jira-event-test-cases/comment_created_mention_watcher.json',
-  'comments and', 'jshipher', 'mentions a watcher',
-  [
-    `{"markdown":"JP Shipherd created a comment on a Jira Task: **testing 1 2 3** that you are watching.\\n\\nThis is a comment with a mention of someone who is also a watcher [~jshipher].  \\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`,
-    `{"markdown":"JP Shipherd created a comment on a Jira Task: **testing 1 2 3** that you are assigned to.\\n\\nThis is a comment with a mention of someone who is also a watcher [~jshipher].  \\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`
-  ]));
-
-/* A ticket assigned to jp with watchers gets an updated comment with a watcher mentioned */
-testCases.push(new TestCase('./jira-event-test-cases/comment_updated_mention_watcher.json',
-  'updates a commment', 'jshipher', 'and mentions a watcher',
-  [
-    `{"markdown":"JP Shipherd updated a comment on a Jira Task: **testing 1 2 3** that you are watching.\\n\\nThis is a comment with a mention of someone who is also a watcher [~jshipher].  (Edit -- feel free to ignore)\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`,
-    `{"markdown":"JP Shipherd updated a comment on a Jira Task: **testing 1 2 3** that you are assigned to.\\n\\nThis is a comment with a mention of someone who is also a watcher [~jshipher].  (Edit -- feel free to ignore)\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`
-  ]));
-
-/* A ticket assigned to jp with watchers gets a new comment with a non watcher bot user mentioned */
-testCases.push(new TestCase('./jira-event-test-cases/comment_created_mention_non_watcher_bot_user.json',
-  'comments', 'jshipher', 'and mentions a non watcher bot user',
-  [
-    `{"markdown":"You were mentioned in a comment created by JP Shipherd on a Jira Task: **testing 1 2 3**.\\n\\nThis is a comment with a mention of someone who is also a watcher [~dmarsico].  \\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`,
-    `{"markdown":"JP Shipherd created a comment on a Jira Task: **testing 1 2 3** that you are assigned to.\\n\\nThis is a comment with a mention of someone who is also a watcher [~dmarsico].  \\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`,
-    `{"markdown":"JP Shipherd created a comment on a Jira Task: **testing 1 2 3** that you are watching.\\n\\nThis is a comment with a mention of someone who is also a watcher [~dmarsico].  \\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`
-  ]));
-
-/* A ticket assigned to jp with watchers gets an updated comment with a watcher mentioned */
-// // This test uses a non-existing user.  May need to get rid of it.
-testCases.push(new TestCase('./jira-event-test-cases/comment_updated_mention_non_watcher_bot_user.json',
-  'updates a commment', 'jshipher', 'and mentions a non watcher bot user',
-  [
-    `{"markdown":"You were mentioned in a comment updated by JP Shipherd on a Jira Task: **testing 1 2 3**.\\n\\nThis is a comment with a mention of someone who is also a watcher [~dmarsico].  (Edit -- feel free to ignore)\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`,
-    `{"markdown":"JP Shipherd updated a comment on a Jira Task: **testing 1 2 3** that you are assigned to.\\n\\nThis is a comment with a mention of someone who is also a watcher [~dmarsico].  (Edit -- feel free to ignore)\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`,
-    `{"markdown":"JP Shipherd updated a comment on a Jira Task: **testing 1 2 3** that you are watching.\\n\\nThis is a comment with a mention of someone who is also a watcher [~dmarsico].  (Edit -- feel free to ignore)\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`
-  ]));
-
-/* A ticket assigned to jp with watchers gets a new comment with a non watcher non bot user mentioned */
-testCases.push(new TestCase('./jira-event-test-cases/comment_created_mention_nonwatcher.json',
-  'comments', 'jshipher', 'and mentions a non watcher non bot user',
-  [
-    ``,
-    `{"markdown":"JP Shipherd created a comment on a Jira Task: **testing 1 2 3** that you are assigned to.\\n\\nThis is a comment that mentions [~ahughley], who is not a watcher.\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`,
-    `{"markdown":"JP Shipherd created a comment on a Jira Task: **testing 1 2 3** that you are watching.\\n\\nThis is a comment that mentions [~ahughley], who is not a watcher.\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`
-  ]));
-
-/* A ticket assigned to jp with watchers gets an updated comment with a non watcher non bot user mentioned */
-testCases.push(new TestCase('./jira-event-test-cases/comment_updated_mention_nonwatcher.json',
-  'updates a commment', 'jshipher', 'and mentions a non watcher non bot user',
-  [
-    ``,
-    `{"markdown":"JP Shipherd updated a comment on a Jira Task: **testing 1 2 3** that you are assigned to.\\n\\nThis is a comment that mentions [~ahughley], who is not a watcher. Please feel free to ignore.\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`,
-    `{"markdown":"JP Shipherd updated a comment on a Jira Task: **testing 1 2 3** that you are watching.\\n\\nThis is a comment that mentions [~ahughley], who is not a watcher. Please feel free to ignore.\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`
-  ]));
-  
 /* A ticket assigned to jp' summary is updated and all mentions are removed */
 testCases.push(new TestCase('./jira-event-test-cases/issue_updated_summary_changed_mention_bot_user_non_watcher.json',
   'updates an issue', 'jshipher', 'and removes mentions',
@@ -227,6 +158,115 @@ testCases.push(new TestCase('./jira-event-test-cases/issue_updated_summary_chang
     ``,
     `{"markdown":"JP Shipherd updated a Jira Story: **Test Story** that you are assigned to.\\n\\nThis is a story<br />The summary mentions a user [~jshipher]<br />This summary update mentions another user [~alexjoh] (please disregard any notifications.   This is just a test)\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-39"}`
   ]));
+
+
+if (!process.env.USE_ISSUE_UPDATED_FOR_COMMENTS) {
+ 
+/* A ticket assigned to jp with watchers gets a new multiline comment and no one is mentioned */
+  testCases.push(new TestCase('./jira-event-test-cases/comment_created_multiline.json',
+    'comments', 'jshipher', 'without any mentions',
+    [
+      `{"markdown":"JP Shipherd created a comment on a Jira Task: **testing 1 2 3** that you are assigned to.\\n\\nThis is a new comment that<br />Spans multiple lines<br />The end.\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`,
+      `{"markdown":"JP Shipherd created a comment on a Jira Task: **testing 1 2 3** that you are watching.\\n\\nThis is a new comment that<br />Spans multiple lines<br />The end.\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`
+    ]));
+
+  /* A ticket assigned to jp with watchers gets an updated comment (without any mentions) */
+  testCases.push(new TestCase('./jira-event-test-cases/comment_updated_multiline.json',
+    'updates a commment', 'jshipher', 'without any mentions',
+    [
+      `{"markdown":"JP Shipherd updated a comment on a Jira Task: **testing 1 2 3** that you are assigned to.\\n\\nThis is an edited comment that<br />Spans multiple lines<br />The end.\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`,
+      `{"markdown":"JP Shipherd updated a comment on a Jira Task: **testing 1 2 3** that you are watching.\\n\\nThis is an edited comment that<br />Spans multiple lines<br />The end.\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`
+    ]));
+
+  /* A ticket assigned to jp with watchers gets a new comment with a watcher mentioned */
+  testCases.push(new TestCase('./jira-event-test-cases/comment_created_mention_watcher.json',
+    'comments and', 'jshipher', 'mentions a watcher',
+    [
+      `{"markdown":"JP Shipherd created a comment on a Jira Task: **testing 1 2 3** that you are watching.\\n\\nThis is a comment with a mention of someone who is also a watcher [~jshipher].  \\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`,
+      `{"markdown":"JP Shipherd created a comment on a Jira Task: **testing 1 2 3** that you are assigned to.\\n\\nThis is a comment with a mention of someone who is also a watcher [~jshipher].  \\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`
+    ]));
+
+  /* A ticket assigned to jp with watchers gets an updated comment with a watcher mentioned */
+  testCases.push(new TestCase('./jira-event-test-cases/comment_updated_mention_watcher.json',
+    'updates a commment', 'jshipher', 'and mentions a watcher',
+    [
+      `{"markdown":"JP Shipherd updated a comment on a Jira Task: **testing 1 2 3** that you are watching.\\n\\nThis is a comment with a mention of someone who is also a watcher [~jshipher].  (Edit -- feel free to ignore)\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`,
+      `{"markdown":"JP Shipherd updated a comment on a Jira Task: **testing 1 2 3** that you are assigned to.\\n\\nThis is a comment with a mention of someone who is also a watcher [~jshipher].  (Edit -- feel free to ignore)\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`
+    ]));
+
+  /* A ticket assigned to jp with watchers gets a new comment with a non watcher bot user mentioned */
+  testCases.push(new TestCase('./jira-event-test-cases/comment_created_mention_non_watcher_bot_user.json',
+    'comments', 'jshipher', 'and mentions a non watcher bot user',
+    [
+      `{"markdown":"You were mentioned in a comment created by JP Shipherd on a Jira Task: **testing 1 2 3**.\\n\\nThis is a comment with a mention of someone who is also a watcher [~dmarsico].  \\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`,
+      `{"markdown":"JP Shipherd created a comment on a Jira Task: **testing 1 2 3** that you are assigned to.\\n\\nThis is a comment with a mention of someone who is also a watcher [~dmarsico].  \\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`,
+      `{"markdown":"JP Shipherd created a comment on a Jira Task: **testing 1 2 3** that you are watching.\\n\\nThis is a comment with a mention of someone who is also a watcher [~dmarsico].  \\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`
+    ]));
+
+  /* A ticket assigned to jp with watchers gets an updated comment with a watcher mentioned */
+  // // This test uses a non-existing user.  May need to get rid of it.
+  testCases.push(new TestCase('./jira-event-test-cases/comment_updated_mention_non_watcher_bot_user.json',
+    'updates a commment', 'jshipher', 'and mentions a non watcher bot user',
+    [
+      `{"markdown":"You were mentioned in a comment updated by JP Shipherd on a Jira Task: **testing 1 2 3**.\\n\\nThis is a comment with a mention of someone who is also a watcher [~dmarsico].  (Edit -- feel free to ignore)\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`,
+      `{"markdown":"JP Shipherd updated a comment on a Jira Task: **testing 1 2 3** that you are assigned to.\\n\\nThis is a comment with a mention of someone who is also a watcher [~dmarsico].  (Edit -- feel free to ignore)\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`,
+      `{"markdown":"JP Shipherd updated a comment on a Jira Task: **testing 1 2 3** that you are watching.\\n\\nThis is a comment with a mention of someone who is also a watcher [~dmarsico].  (Edit -- feel free to ignore)\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`
+    ]));
+
+  /* A ticket assigned to jp with watchers gets a new comment with a non watcher non bot user mentioned */
+  testCases.push(new TestCase('./jira-event-test-cases/comment_created_mention_nonwatcher.json',
+    'comments', 'jshipher', 'and mentions a non watcher non bot user',
+    [
+      ``,
+      `{"markdown":"JP Shipherd created a comment on a Jira Task: **testing 1 2 3** that you are assigned to.\\n\\nThis is a comment that mentions [~ahughley], who is not a watcher.\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`,
+      `{"markdown":"JP Shipherd created a comment on a Jira Task: **testing 1 2 3** that you are watching.\\n\\nThis is a comment that mentions [~ahughley], who is not a watcher.\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`
+    ]));
+
+  /* A ticket assigned to jp with watchers gets an updated comment with a non watcher non bot user mentioned */
+  testCases.push(new TestCase('./jira-event-test-cases/comment_updated_mention_nonwatcher.json',
+    'updates a commment', 'jshipher', 'and mentions a non watcher non bot user',
+    [
+      ``,
+      `{"markdown":"JP Shipherd updated a comment on a Jira Task: **testing 1 2 3** that you are assigned to.\\n\\nThis is a comment that mentions [~ahughley], who is not a watcher. Please feel free to ignore.\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`,
+      `{"markdown":"JP Shipherd updated a comment on a Jira Task: **testing 1 2 3** that you are watching.\\n\\nThis is a comment that mentions [~ahughley], who is not a watcher. Please feel free to ignore.\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`
+    ]));
+
+  /* A ticket assigned to jp with watchers gets a new comment and no one is mentioned */
+  testCases.push(new TestCase('./jira-event-test-cases/comment_created_no_mentions.json',
+    'comments', 'jshipher', 'without any mentions',
+    [
+      `{"markdown":"JP Shipherd created a comment on a Jira Task: **testing 1 2 3** that you are assigned to.\\n\\nAdding a comment to capture both the comment_created and issue_updated event again.\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`,
+      `{"markdown":"JP Shipherd created a comment on a Jira Task: **testing 1 2 3** that you are watching.\\n\\nAdding a comment to capture both the comment_created and issue_updated event again.\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`
+    ]));
+
+  /* A ticket assigned to jp with watchers gets an updated comment and no one is mentioned */
+  testCases.push(new TestCase('./jira-event-test-cases/comment_updated_no_mentions.json',
+    'updates a comments', 'jshipher', 'without any mentions',
+    [
+      `{"markdown":"JP Shipherd updated a comment on a Jira Task: **testing 1 2 3** that you are assigned to.\\n\\nEditing a comment to capture both the comment_edited and issue_updated event again.\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`,
+      `{"markdown":"JP Shipherd updated a comment on a Jira Task: **testing 1 2 3** that you are watching.\\n\\nEditing a comment to capture both the comment_edited and issue_updated event again.\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`
+    ]));
+
+} else {
+  // Use issue_updated with type comment_updated/deleted style instead
+  
+/* A ticket assigned to jp with watchers gets a new comment and no one is mentioned */
+  testCases.push(new TestCase('./jira-event-test-cases//issue_updated_new_comment_no_mentions.json',
+    'comments', 'jshipher', 'without any mentions',
+    [
+      `{"markdown":"JP Shipherd created a comment on a Jira Task: **testing 1 2 3** that you are assigned to.\\n\\nAdding a comment to capture both the comment_created and issue_updated event again.\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`,
+      `{"markdown":"JP Shipherd created a comment on a Jira Task: **testing 1 2 3** that you are watching.\\n\\nAdding a comment to capture both the comment_created and issue_updated event again.\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`
+    ]));
+
+  /* A ticket assigned to jp with watchers gets an updated comment and no one is mentioned */
+  testCases.push(new TestCase('./jira-event-test-cases//issue_updated_edited_comment_no_mentions.json',
+    'updates a comments', 'jshipher', 'without any mentions',
+    [
+      `{"markdown":"JP Shipherd updated a comment on a Jira Task: **testing 1 2 3** that you are assigned to.\\n\\nEditing a comment to capture both the comment_edited and issue_updated event again.\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`,
+      `{"markdown":"JP Shipherd updated a comment on a Jira Task: **testing 1 2 3** that you are watching.\\n\\nEditing a comment to capture both the comment_edited and issue_updated event again.\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`
+    ]));
+
+}
   
 
 // Run the Tests
