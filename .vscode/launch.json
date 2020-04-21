@@ -29,6 +29,7 @@
             "request": "launch",
             "env": {"DEBUG":"framework",
                     "VERBOSE":"true",
+                    "TEST_TIMER_MULTIPLIER": "500500500",
                     "LOG_LEVEL": "0"},
             "protocol": "inspector",
             "outputCapture": "std",
