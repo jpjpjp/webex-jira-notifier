@@ -9,54 +9,9 @@ require('dotenv').config();
 logger = require('./logger');
 let when = require('when');
 
-// Configure Access to Jira to find watcher and other info
-let request = null;
-let jira_url = '';
-let jira_lookup_user_api = '';
-let proxy_url = '';
-let jira_url_regexp = null;
-//let jiraProjects = null;
-let jiraReqOpts = {
-  "json": true,
-  headers: {
-    'Authorization': 'Basic '
-  }
-};
-
-// Set up Authorization header
-if ((process.env.JIRA_USER) && (process.env.JIRA_PW)) {
-  request = require('request-promise');
-  jiraReqOpts.headers.Authorization +=
-    new Buffer.from(process.env.JIRA_USER + ':' +
-      process.env.JIRA_PW).toString('base64');
-
-  if (process.env.JIRA_URL) {
-    jira_url = process.env.JIRA_URL;
-    // Set variables to get access jira via proxy
-    if (process.env.PROXY_URL) {
-      jira_url_regexp = new RegExp(jira_url);
-      proxy_url = process.env.PROXY_URL;
-      logger.info('Will attempt to access Jira at ' + proxy_url +
-        'in order in order to proxy requests to ' + jira_url);
-    }
-  } else {
-    console.error(`Missing environment varialbe JIRA_URL.  Messages will not contain links to stories.`);
-  }
-
-  // Check if our bot is only allowed to access specified jira projects
-  if (process.env.JIRA_PROJECTS) {
-    jiraProjects = process.env.JIRA_PROJECTS.split(',');
-  }
-
-  // Check if our environment overrode the lookup by username path
-  if (process.env.JIRA_LOOKUP_USER_API) {
-    jira_lookup_user_api = JIRA_LOOKUP_USER_API; 
-  } else {
-    jira_lookup_user_api = `${jira_url}/rest/api/2/user`;
-  }
-} else {
-  logger.error('Cannot read Jira credential.  Will not notify watchers');
-}
+let JiraConnector = require('./jira-connector');
+let jiraConnector = new JiraConnector();
+let jira_url = jiraConnector.getJiraUrl();
 
 // Set regular expressions to discover the type of events we are getting
 const commentEvent = new RegExp(/^comment_/);
@@ -92,19 +47,20 @@ exports.processJiraEvent = function (jiraEvent, framework, cb = null) {
 function processIssueEvent(jiraEvent, framework, cb) {
   try {
     // Some jira systems generate both issue and comment events for new comments
-    // Lets ignore the old style issue events
-    if ((jiraEvent.webhookEvent === 'jira:issue_updated') && 
+    // Lets ignore the old style issue events although these are more efficient
+    // TODO -- add a switch to choose to use these and ignore the others
+    if ((jiraEvent.webhookEvent === 'jira:issue_updated') &&
       (oldStyleComment.test(jiraEvent.issue_event_type_name))) {
-      logger.verbose(`Igoring old style issue_updated for a ` +
-        `${jiraEvent.issue_event_type_name} for ${jiraEvent.issue.key}`);
-      return;
+        logger.verbose(`Igoring old style issue_updated for a ` +
+          `${jiraEvent.issue_event_type_name} for ${jiraEvent.issue.key}`);
+        return;
     }
 
     let msgElements = {};
     let event = jiraEvent.issue_event_type_name.substr("issue_".length,
       jiraEvent.webhookEvent.length);
     let user = jiraEvent.user;
-    let issue = jiraEvent.issue;    
+    let issue = jiraEvent.issue;
 
     // TODO figure out how/if this is still relevent
     // The new module pretty much REQUIRES full access to Jira to work
@@ -126,16 +82,7 @@ function processIssueEvent(jiraEvent, framework, cb) {
     // }
 
     // See if there are watchers for this issue and fetch them while we look for mentions
-    let watcherPromise = null;
-    let watches = issue.fields.watches;
-    if (watches && watches.watchCount && watches.self) {
-      // Use a proxy server if configured
-      let watcherUrl = watches.self;
-      if (jira_url_regexp) {
-        watcherUrl = watcherUrl.replace(jira_url_regexp, proxy_url);
-      }
-      watcherPromise = request.get(watcherUrl, jiraReqOpts);
-    }
+    let watcherPromise = jiraConnector.lookupWatcherInfoFromIssue(issue);
 
     // While waiting for that, scan the description for mentions...
     let toNotifyList = getAllMentions(issue.fields.description);
@@ -151,21 +98,25 @@ function processIssueEvent(jiraEvent, framework, cb) {
       body: convertNewlines(issue.fields.description),
       issueSelf: issue.self
     };
+    if (issue.fields.assignee) {
+      msgElements.assignee = issue.fields.assignee.name;
+      if (toNotifyList.indexOf(msgElements.assignee) === -1) {
+        toNotifyList.push(msgElements.assignee);
+      }
+    }
     // Handle some more complex events
     if ((event === 'created') && (issue.fields.assignee)) {
       // Discover assigned to when issue was assigned when it was created
       msgElements.action = 'assigned';
-      msgElements.assignedTo = issue.fields.assignee.name;
-      msgElements.assignedToUser = msgElements.assignedTo;
-      if (!toNotifyList.find((user) => user === msgElements.assignedToUser)) {
-        toNotifyList.push(msgElements.assignedToUser);
+      msgElements.assignee = issue.fields.assignee.name;
+      if (!toNotifyList.find((user) => user === msgElements.assignee)) {
+        toNotifyList.push(msgElements.assignee);
       }
     } else if (event === 'assigned') {
       if (jiraEvent.changelog && jiraEvent.changelog.items) {
-        msgElements.assignedTo = jiraEvent.changelog.items[0].toString;
-        msgElements.assignedToUser = jiraEvent.changelog.items[0].to;
-        if (!toNotifyList.find((user) => user === msgElements.assignedToUser)) {
-          toNotifyList.push(msgElements.assignedToUser);
+        msgElements.assignee = jiraEvent.changelog.items[0].to;
+        if (!toNotifyList.find((user) => user === msgElements.assignee)) {
+          toNotifyList.push(msgElements.assignee);
         }
       }
     } else if (event === 'generic') {
@@ -175,56 +126,37 @@ function processIssueEvent(jiraEvent, framework, cb) {
         msgElements.updatedTo = jiraEvent.changelog.items[0].toString;
       }
     }
-    // msgElements.issueSummary = convertNewlines(issue.fields.summary),
     notifyMentioned(framework, msgElements, toNotifyList, cb);
 
-    // Wait for the watchers (if any)
+    // Wait for and process the watchers (if any)
     if (!watcherPromise) {
       return;
     }
-    return when(watcherPromise).then((watcherObj) => {
-      if (watcherObj) {
-        watchers = watcherObj.watchers;
-        watcherEmails = [];
-        for (let i = 0; i < watchers.length; i++) {
-          if (!toNotifyList.find((user) => user === watchers[i].name)) {
-            watcherEmails.push(watchers[i].emailAddress);
-          }
-        }
-        return when(notifyWatchers(framework, msgElements, watcherEmails, cb));
-      } else {
-        return when(true);
-      }
+    return when(watcherPromise).then((watcherInfo) => {
+      return processWatcherInfo(framework, watcherInfo, toNotifyList, msgElements, cb);
     }).catch((e) => {
       logger.error(`Failed getting watchers associated with issue ${jiraEvent.issue.key}: ` +
         `"${e.message}". Can only notify people mentioned in the description.`);
+      createTestCase(e, jiraEvent, 'caught-error');
     });
+
   } catch (e) {
-    logger.error('Caught Error in JiraEvent Issue Handler:' + e);
+    logger.error(`processIssueEvent() caught error: ${e.message}`);
     createTestCase(e, jiraEvent, 'caught-error');
     if (cb) {return (cb(e));}
   }
 };
 
+
 function processCommentEvent(jiraEvent, framework, cb) {
   try {
     let msgElements = {};
-    // Try to fetch the issue this comment is associated with
-    let issuePromise = null;
     let event = jiraEvent.webhookEvent.substr("comment_".length,
       jiraEvent.webhookEvent.length);
-    let commentUrl = jiraEvent.comment.self;
-    let commentIndex = commentUrl.indexOf('/comment');
-    if (commentIndex > 0) {
-      let issueUrl = commentUrl.substr(0, commentIndex);
-      // Use a proxy server if configured
-      if (jira_url_regexp) {
-        issueUrl = issueUrl.replace(jira_url_regexp, proxy_url);
-      }
-      issuePromise = request.get(issueUrl, jiraReqOpts);
-    } else {
-      issuePromise = Promise.reject(new Error('Could not find issue link in comment webhook payload'));
-    }
+
+    // Try to fetch the issue this comment is associated with
+    let issuePromise = jiraConnector.lookupIssueFromCommentEvent(jiraEvent);
+
     // While waiting for that, scan comment for mentions...
     let toNotifyList = getAllMentions(jiraEvent.comment.body);
     // And start building the Bot notification message elements
@@ -237,18 +169,15 @@ function processCommentEvent(jiraEvent, framework, cb) {
     };
     return when(issuePromise).then((issue) => {
       // See if there are watchers for this issue
-      let watcherPromise = null;
-      let watches = issue.fields.watches;
-      if (watches && watches.watchCount && watches.self) {
-        // Use a proxy server if configured
-        let watcherUrl = watches.self;
-        if (jira_url_regexp) {
-          watcherUrl = watcherUrl.replace(jira_url_regexp, proxy_url);
-        }
-        watcherPromise = request.get(watcherUrl, jiraReqOpts);
-      }
+      let watcherPromise = jiraConnector.lookupWatcherInfoFromIssue(issue);
 
-      // Add to mgs elements with issue details
+      // While waiting, add to msgElements with issue details
+      if (issue.fields.assignee) {
+        msgElements.assignee = issue.fields.assignee.key;
+        if (toNotifyList.indexOf(msgElements.assignee) === -1) {
+          toNotifyList.push(msgElements.assignee);
+        }
+      }
       msgElements.issueType = issue.fields.issuetype.name;
       msgElements.issueSummary = convertNewlines(issue.fields.summary);
       msgElements.issueKey = issue.key;
@@ -261,29 +190,35 @@ function processCommentEvent(jiraEvent, framework, cb) {
       } else {
         return when(null);
       }
-    }).then((watcherObj) => {
-      if (watcherObj) {
-        watchers = watcherObj.watchers;
-        watcherEmails = [];
-        for (let i = 0; i < watchers.length; i++) {
-          if (!toNotifyList.find((user) => user === watchers[i].name)) {
-            watcherEmails.push(watchers[i].emailAddress);
-          }
-        }
-        return when(notifyWatchers(framework, msgElements, watcherEmails, cb));
-      } else {
-        return when(true);
-      }
+    }).then((watcherInfo) => {
+      return processWatcherInfo(framework, watcherInfo, toNotifyList, msgElements, cb);
     }).catch((e) => {
-      logger.error(`Failed getting issue or watchers associated with ${commentUrl}: ` +
-        `"${e.message}". Can only notify people mentioned in the comment.`);
+      logger.error(`proccessCommentEvent() got error: "${e.message}". ` +
+        `May have only notified people mentioned in the comment or none at all.`);
+      createTestCase(e, jiraEvent, 'caught-error');
     });
+
   } catch (e) {
-    logger.error('Caught Error in JiraEvent Comment Handler:' + e);
+    logger.error(`proccessCommentEvent(): caught error: ${e.message}`);
     createTestCase(e, jiraEvent, 'caught-error');
     if (cb) {return (cb(e));}
   }
 };
+
+function processWatcherInfo(framework, watcherInfo, notifiedList, msgElements, cb) {
+  if (watcherInfo) {
+    watchers = watcherInfo.watchers;
+    watcherEmails = [];
+    for (let i = 0; i < watchers.length; i++) {
+      if (!notifiedList.find((user) => user === watchers[i].name)) {
+        watcherEmails.push(watchers[i].emailAddress);
+      }
+    }
+    return when(notifyWatchers(framework, msgElements, watcherEmails, cb));
+  } else {
+    return when(true);
+  }
+}
 
 async function notifyMentioned(framework, msgElements, notifyList, cb) {
   if (!notifyList.length) {
@@ -293,20 +228,15 @@ async function notifyMentioned(framework, msgElements, notifyList, cb) {
   }
   // Lookup the user details for each mention (username)
   let mentionedUserPromises = [];
-  for (let i=0; i<notifyList.length; i++) {
-    url = `${jira_lookup_user_api}?username=${notifyList[i]}`;
-    // Use a proxy server if configured
-    if (jira_url_regexp) {
-      url = url.replace(jira_url_regexp, proxy_url);
-    }
-    mentionedUserPromises.push(request(url, jiraReqOpts));
+  for (let i = 0; i < notifyList.length; i++) {
+    mentionedUserPromises.push(jiraConnector.lookupUser(notifyList[i]));
   }
   let mentionedEmails = [];
   return when.all(mentionedUserPromises).then((users) => {
     // Convert the usernames to emails in order to associate with a bot user
-    for (let i=0; i<users.length; i++) {
+    for (let i = 0; i < users.length; i++) {
       mentionedEmails.push(users[i].emailAddress);
-      if ((msgElements.assignedToUser) && (msgElements.assignedToUser === users[i].name)) {
+      if ((msgElements.assignee) && (msgElements.assignee === users[i].name)) {
         // If this was an assignment and this is the assignee add som extra info
         msgElements.assignedTo = users[i].displayName;
         msgElements.assignedToEmail = users[i].emailAddress;
@@ -348,7 +278,7 @@ function notifyBotUsers(framework, recipientType, msgElements, emails, cb) {
         logger.error('Unable to get quietMode status for ' + theBot.isDirectTo);
         logger.error(err.message);
         logger.error('Erring on the side of notifying them.');
-        sendWebexNotification(theBot, recipientType,userConfig, msgElements, cb);
+        sendWebexNotification(theBot, recipientType, userConfig, msgElements, cb);
       });
     } else {
       logger.verbose('No bot found for potential recipient:' + email);
@@ -367,10 +297,14 @@ function sendWebexNotification(bot, recipientType, userConfig, msgElements, cb) 
   let msg;
   switch (recipientType) {
     case ('mentioned'):
-      msg = buildMentionedMessage(msgElements, bot.isDirectTo);
+      if (msgElements.assignedToEmail === bot.isDirectTo) {
+        msg = buildWatcherOrAssigneeMessage(msgElements, bot.isDirectTo);
+      } else {
+        msg = buildMentionedMessage(msgElements, bot.isDirectTo);
+      }
       break;
     case ('watcher'):
-      msg = buildWatchedMessage(msgElements);
+      msg = buildWatcherOrAssigneeMessage(msgElements, bot.isDirectTo);
       break;
     default:
       logger.error(`Cannot build message for unknown recipeient ` +
@@ -399,7 +333,7 @@ function buildMentionedMessage(msgElements, botEmail) {
         } else if (msgElements.action === 'updated') {
           msg += `updated by ${msgElements.author} on a `;
         } else {
-          logger.warn(`buildWatchedMessage: Unsure how to format message for ` +
+          logger.warn(`buildMentionedMessage: Unsure how to format message for ` +
             `action:${msgElements.action} in ${JSON.stringify(msgElements, 2, 2)}`);
         }
         msg += `Jira ${msgElements.issueType}: **${msgElements.issueSummary}**.` +
@@ -421,24 +355,24 @@ function buildMentionedMessage(msgElements, botEmail) {
         } else if (msgElements.action === 'updated') {
           msg += `updated by ${msgElements.author}: `;
         } else {
-          logger.warn(`buildWatchedMessage: Unsure how to format message for ` +
+          logger.warn(`buildMentionedMessage: Unsure how to format message for ` +
             `action:${msgElements.action} in ${JSON.stringify(msgElements, 2, 2)}`);
         }
         msg += `**${msgElements.issueSummary}**.\n\n${msgElements.body}\n\n`;
         break;
 
       default:
-        logger.warn(`buildWatchedMessage: Unsure how to format message for ` +
+        logger.warn(`buildMentionedMessage: Unsure how to format message for ` +
           `subject:${msgElements.subject} in ${JSON.stringify(msgElements, 2, 2)}`);
     }
     msg += `${jira_url}/browse/${msgElements.issueKey}`;
     return msg;
   } catch (e) {
-    throw new Error(`buildWatchedMessage failed: ${e.message}`);
+    throw new Error(`buildMentionedMessage failed: ${e.message}`);
   }
 }
 
-function buildWatchedMessage(msgElements) {
+function buildWatcherOrAssigneeMessage(msgElements, botEmail) {
   try {
     let msg = ``;
     switch (msgElements.subject) {
@@ -457,23 +391,37 @@ function buildWatchedMessage(msgElements) {
       case ('issue'):
         if ((msgElements.action === 'created') || (msgElements.action === 'updated')) {
           msg = `${msgElements.author} ${msgElements.action} a `;
+        } else if (msgElements.action === 'assigned') {
+          if (msgElements.assignedToEmail === botEmail) {
+            msg = `You were assigned to a Jira ${msgElements.issueType} by ${msgElements.author}: **${msgElements.issueSummary}**.\n\n`;
+          } else {
+            msg = `${msgElements.author} assigned ${msgElements.assignedTo} to a Jira ${msgElements.issueType}: **${msgElements.issueSummary}**.\n\n`;
+          }
+        } else if (msgElements.action === 'status') {
+          msg = `${msgElements.author} changed the status to "${msgElements.updatedTo}" for `;
         } else {
           msg = 'Something happened to a ';
-          logger.warn(`buildWatchedMessage: Unsure how to format message for ` +
+          logger.warn(`buildWatcherOrAssigneeMessage: Unsure how to format message for ` +
             `an issue with msgElments.action=${msgElements.action}.`);
         }
         break;
 
       default:
-        logger.warn(`buildWatchedMessage: Unsure how to format message for ` +
+        logger.warn(`buildWatcherOrAssigneeMessage: Unsure how to format message for ` +
           `subject:${msgElements.subject} in ${JSON.stringify(msgElements, 2, 2)}`);
     }
-    msg += `Jira ${msgElements.issueType}: **${msgElements.issueSummary}**` +
-      ` that you are watching.\n\n${msgElements.body}\n\n`;
-    msg += `${jira_url}/browse/${msgElements.issueKey}`;
+    if (!((msgElements.action === 'assigned') && (msgElements.assignedToEmail === botEmail))) {
+      msg += `Jira ${msgElements.issueType}: **${msgElements.issueSummary}**`;
+      if (msgElements.assignedToEmail === botEmail) {
+        msg += ` that you are assigned to.\n\n`;
+      } else {
+        msg += ` that you are watching.\n\n`;
+      }
+    }
+    msg += `${msgElements.body}\n\n${jira_url}/browse/${msgElements.issueKey}`;
     return msg;
   } catch (e) {
-    throw new Error(`buildWatchedMessage failed: ${e.message}`);
+    throw new Error(`buildWatcherOrAssigneeMessage failed: ${e.message}`);
   }
 }
 
