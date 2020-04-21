@@ -79,11 +79,7 @@ Framework.prototype.debug = function (message) {
 framework = new Framework();
 framework.bots.push(new Bot('jshipher@cisco.com'));
 framework.bots.push(new Bot('atlassian-adm@cisco.com'));
-// framework.bots.push(new Bot('kboone@cisco.com'));
 framework.bots.push(new Bot('dmarsico@cisco.com'));
-// framework.bots.push(new Bot("hadougla@cisco.com"));
-// framework.bots.push(new Bot('hahsiung@cisco.com'));
-let emailOrg = 'cisco.com';
 
 
 // Build the list of cannonical test objects.
@@ -118,7 +114,7 @@ var testCases = [];
 testCases.push(new TestCase('./jira-event-test-cases/issue_created_mention_bot_user.json',
   'creates an issue', 'jshipher', 'and mentions bot user',
   [
-    `{"markdown":"You were mentioned in the description of a Jira Story created by JP Shipherd: **Test Story**.\\n\\nThis is a story<br />The summary mentions a user [~jshipher]\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-39"}`
+    `{"markdown":"You were mentioned in a Jira Story created by JP Shipherd: **Test Story**.\\n\\nThis is a story<br />The summary mentions a user [~jshipher]\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-39"}`
   ]));
 
 /* An issue is assigned to a bot user */
@@ -214,6 +210,28 @@ testCases.push(new TestCase('./jira-event-test-cases/comment_updated_mention_non
     `{"markdown":"JP Shipherd updated a comment on a Jira Task: **testing 1 2 3** that you are watching.\\n\\nThis is a comment that mentions [~ahughley], who is not a watcher. Please feel free to ignore.\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`
   ]));
   
+/* A ticket assigned to jp' summary is updated and all mentions are removed */
+testCases.push(new TestCase('./jira-event-test-cases/issue_updated_summary_changed_mention_bot_user_non_watcher.json',
+  'updates an issue', 'jshipher', 'and removes mentions',
+  [
+    `{"markdown":"JP Shipherd updated a Jira Story: **Test Story** that you are watching.\\n\\nThis is a story<br />The summary update removes all mentioned users.\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-39"}`
+  ]));
+  
+/* A ticket assigned to jp's summary is updated mentions are removed */
+testCases.push(new TestCase('./jira-event-test-cases/issue_updated_summary_changed_removes_mentions.json',
+  'updates an issue', 'jshipher', 'and removes mentions',
+  [
+    `{"markdown":"JP Shipherd updated a Jira Story: **Test Story** that you are watching.\\n\\nThis is a story<br />The summary update removes all mentioned users.\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-39"}`
+  ]));
+  
+/* A ticket assigned to jp's summary is updated and a mention is added */
+testCases.push(new TestCase('./jira-event-test-cases/issue_updated_summary_changed_with_new_mention.json',
+  'updates an issue', 'jshipher', 'adds a mention',
+  [
+    ``,
+    `{"markdown":"You were mentioned in a Jira Story updated by JP Shipherd: **Test Story**.\\n\\nThis is a story<br />The summary mentions a user [~jshipher]<br />This summary update mentions another user [~alexjoh] (please disregard any notifications.   This is just a test)\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-39"}`
+  ]));
+  
 
 // Run the Tests
 var verbose = false;
@@ -291,8 +309,9 @@ function checkTestResult(framework, test, testNum) {
 
     if (!bot) {
       if (foundResult('', test)) {
-        reportSuccess(test, 'Test %d (Result %d of %d) Passed.  Got expected non-notification', 
-          testNum, test.resultsSeen, test.numExpectedResults);
+        reportSuccess(test, 
+          `Test ${testNum} (Result ${test.resultsSeen} of ${test.numExpectedResults}) Passed.  ` +
+          'Got expected non-notification');
       } else {
         console.error('Test %d (Result %d of %d) Failed.', testNum, test.resultsSeen, test.numExpectedResults);
         showExpected('jiraEventHander did not callback with a bot.', test);
@@ -305,7 +324,9 @@ function checkTestResult(framework, test, testNum) {
       resultFound = true;
       // Whitespace got me down, just removed it for this comparison
       if (foundResult(bot.jiraEventMessage, test)) {
-        reportSuccess(test, 'Test %d (Result %d of %d) Passed. Got expected notification.', testNum, test.resultsSeen, test.numExpectedResults);
+        reportSuccess(test, 
+          `Test ${testNum} (Result ${test.resultsSeen} of ${test.numExpectedResults}) Passed.  ` +
+          'Got expected notification');
       } else {
         console.error('Test %d (Result %d of %d) Failed.', testNum, test.resultsSeen, test.numExpectedResults);
         showExpected(`Got\n${bot.jiraEventMessage}`, test);
@@ -314,7 +335,8 @@ function checkTestResult(framework, test, testNum) {
     }
     if (!resultFound) {
       if (!test.result) {
-        reportSuccess(test, 'Test %d (Result %d of %d) Passed.', testNum, test.resultsSeen, test.numExpectedResults);
+        reportSuccess(test, 
+          `Test ${testNum} (Result ${test.resultsSeen} of ${test.numExpectedResults}) Passed.`);
       } else {
         console.error('Test %d (Result %d of %d) Failed.', testNum, test.resultsSeen, test.numExpectedResults);
         showExpected('Got no result', test);
