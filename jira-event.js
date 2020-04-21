@@ -138,7 +138,7 @@ function processIssueEvent(jiraEvent, framework, cb) {
     }
 
     // While waiting for that, scan the description for mentions...
-    toNotifyList = getAllMentions(issue.fields.description);
+    let toNotifyList = getAllMentions(issue.fields.description);
     // And start building the Bot notification message elements
     msgElements = {
       author: user.displayName,
@@ -208,7 +208,6 @@ function processIssueEvent(jiraEvent, framework, cb) {
 
 function processCommentEvent(jiraEvent, framework, cb) {
   try {
-    let toNotifyList = [];
     let msgElements = {};
     // Try to fetch the issue this comment is associated with
     let issuePromise = null;
@@ -227,7 +226,7 @@ function processCommentEvent(jiraEvent, framework, cb) {
       issuePromise = Promise.reject(new Error('Could not find issue link in comment webhook payload'));
     }
     // While waiting for that, scan comment for mentions...
-    toNotifyList = getAllMentions(jiraEvent.comment.body);
+    let toNotifyList = getAllMentions(jiraEvent.comment.body);
     // And start building the Bot notification message elements
     msgElements = {
       author: jiraEvent.comment.author.displayName,
@@ -408,7 +407,7 @@ function buildMentionedMessage(msgElements, botEmail) {
         break;
 
       case ('issue'):
-        msg += `You were mentioned in the description of a Jira ${msgElements.issueType} `;
+        msg += `You were mentioned in a Jira ${msgElements.issueType} `;
         if (msgElements.action === 'assigned') {
           if (msgElements.assignedToEmail === botEmail) {
             msg = `You were assigned to a Jira ${msgElements.issueType} by ${msgElements.author}: `;
@@ -453,6 +452,16 @@ function buildWatchedMessage(msgElements) {
         //   logger.warn(`buildWatchedMessage: Unsure how to format message for ` +
         //     `action:${msgElements.action} in ${JSON.stringify(msgElements, 2, 2)}`);
         // }
+        break;
+
+      case ('issue'):
+        if ((msgElements.action === 'created') || (msgElements.action === 'updated')) {
+          msg = `${msgElements.author} ${msgElements.action} a `;
+        } else {
+          msg = 'Something happened to a ';
+          logger.warn(`buildWatchedMessage: Unsure how to format message for ` +
+            `an issue with msgElments.action=${msgElements.action}.`);
+        }
         break;
 
       default:
