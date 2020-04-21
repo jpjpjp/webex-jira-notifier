@@ -80,7 +80,7 @@ framework = new Framework();
 framework.bots.push(new Bot('jshipher@cisco.com'));
 framework.bots.push(new Bot('atlassian-adm@cisco.com'));
 // framework.bots.push(new Bot('kboone@cisco.com'));
-// framework.bots.push(new Bot('lizlau@cisco.com'));
+framework.bots.push(new Bot('dmarsico@cisco.com'));
 // framework.bots.push(new Bot("hadougla@cisco.com"));
 // framework.bots.push(new Bot('hahsiung@cisco.com'));
 let emailOrg = 'cisco.com';
@@ -94,202 +94,126 @@ function TestCase(file, action, author, subject, result) {
   this.subject = subject;
   this.result = result;
   this.resultsSeen = 0;
+  this.numExpectedResults = result.length;
+  this.numPassed = 0;
+  this.numSeenErrors = 0;
 }
 var testCases = [];
 /**/
 /* Quick way to test a problem issue */
-/* A ticket with watchers gets a new comment and some watchers are mentioned */
-// testCases.push(new TestCase('./jira-event-test-cases/1522952583499-jira:issue_updated-issue_commented.json',
-//   'comments', 'jshipher', 'without any mentions',
+/* A ticket assigned to jp with watchers gets a new comment with a non watcher non bot user mentioned */
+// testCases.push(new TestCase('./jira-event-test-cases/comment_created_mention_nonwatcher.json',
+//   'comments', 'jshipher', 'and mentions a non watcher non bot user',
 //   [
-//     '', '',   // There are two mentioned people not using the bot
-//     `{"markdown":"JP Shipherd mentioned you in the Jira Task: **Test Task -- please ignore -- to be deleted**\\n\\n>Testing behavior when a new notification WITH mentions is added to a ticket with watchers.<br /> <br />[~jalumbau], [~shraban], [~hadougla] note that I'm testing this in my own dev environment at the moment.  You won't see updates from the bot until I push it to deployment.   Will post when that happens.\\n\\nhttps://jira-eng-gpk2.cisco.com/jira/browse/SPARK-7329"}`,
-//     `{"markdown":"JP Shipherd commented on a Jira Task: **Test Task -- please ignore -- to be deleted** that you are watching.\\n\\n>Testing behavior when a new notification WITH mentions is added to a ticket with watchers.<br /> <br />[~jalumbau], [~shraban], [~hadougla] note that I'm testing this in my own dev environment at the moment.  You won't see updates from the bot until I push it to deployment.   Will post when that happens.\\n\\nhttps://jira-eng-gpk2.cisco.com/jira/browse/SPARK-7329"}`
+//     ``,
+//     `{"markdown":"JP Shipherd commented on a Jira Task: **testing 1 2 3** that you are watching.\\n\\nThis is a comment that mentions [~ahughley], who is not a watcher.\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`,
+//     `{"markdown":"JP Shipherd commented on a Jira Task: **testing 1 2 3** that you are watching.\\n\\nThis is a comment that mentions [~ahughley], who is not a watcher.\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`
 //   ]));
 
 /* 
  *  This is the full set of test cases
  */
-/* A ticket assigned to jp with watchers gets a new comment and no one is mentioned */
-testCases.push(new TestCase('./jira-event-test-cases/new-comment_issue_updated.json',
+
+/* A new ticket is created that mentions a bot user */
+testCases.push(new TestCase('./jira-event-test-cases/issue_created_mention_bot_user.json',
+  'creates an issue', 'jshipher', 'and mentions bot user',
+  [
+    `{"markdown":"You were mentioned in the description of a Jira Story created by JP Shipherd: **Test Story**.\\n\\nThis is a story<br />The summary mentions a user [~jshipher]\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-39"}`
+  ]));
+
+/* An issue is assigned to a bot user */
+testCases.push(new TestCase('./jira-event-test-cases/issue_updated_assign_bot_user.json',
+  'assigned', 'jshipher', 'to abot user',
+  [
+    `{"markdown":"You were assigned to a Jira Story by JP Shipherd: **Test Story**.\\n\\nThis is a story<br />The summary mentions a user [~jshipher]\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-39"}`,
+  ]));
+
+/* An issue's status is changed */
+testCases.push(new TestCase('./jira-event-test-cases/issue_updated_change_status.json',
+  'updated the status', 'jshipher', '',
+  [
+    `{"markdown":"JP Shipherd changed the status to \\"In Progress\\" for Jira Story: **Test Story**.\\n\\nThis is a story<br />The summary mentions a user [~jshipher]\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-39"}`
+  ]));
+
+/* An issue is created and assigned */
+testCases.push(new TestCase('./jira-event-test-cases/issue_created_and_assigned.json',
+  'created', 'jshipher', 'and assigned to a bot user',
+  [
+    `{"markdown":"JP Shipherd assigned JIRA Admin to a Jira Epic you are mentioned in: **Test Epic 2 -- ignore**.\\n\\nThis is (hopefully the last) test epic you will be assigned by [~jshipher]. <br />Please disregard and apologies for the noise.\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-41"}`,
+    `{"markdown":"You were assigned to a Jira Epic by JP Shipherd: **Test Epic 2 -- ignore**.\\n\\nThis is (hopefully the last) test epic you will be assigned by [~jshipher]. <br />Please disregard and apologies for the noise.\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-41"}`
+  ]));
+ 
+/* A ticket assigned to jp with watchers gets a new multiline comment and no one is mentioned */
+testCases.push(new TestCase('./jira-event-test-cases/comment_created_multiline.json',
   'comments', 'jshipher', 'without any mentions',
   [
-    //'', '',   // There are two mentioned people not using the bot
-    `{"markdown":"JP Shipherd commented on a Jira Task: **testing 1 2 3** that you are watching.\\n\\n>This is a new comment.\\n\\nhttps://jira-eng-gpk2.cisco.com/jira/browse/ETP-38"}`,
-    `{"markdown":"JP Shipherd commented on a Jira Task: **testing 1 2 3** that you are watching.\\n\\n>This is a new comment.\\n\\nhttps://jira-eng-gpk2.cisco.com/jira/browse/ETP-38"}`
+    `{"markdown":"JP Shipherd created a comment on a Jira Task: **testing 1 2 3** that you are watching.\\n\\nThis is a new comment that<br />Spans multiple lines<br />The end.\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`,
+    `{"markdown":"JP Shipherd created a comment on a Jira Task: **testing 1 2 3** that you are watching.\\n\\nThis is a new comment that<br />Spans multiple lines<br />The end.\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`
   ]));
 
 /* A ticket assigned to jp with watchers gets an updated comment (without any mentions) */
-testCases.push(new TestCase('./jira-event-test-cases/updated-comment_issue_updated.json',
+testCases.push(new TestCase('./jira-event-test-cases/comment_updated_multiline.json',
   'updates a commment', 'jshipher', 'without any mentions',
   [
-    `{"markdown":"JP Shipherd uppdated a comment on a Jira Task: **testing 1 2 3** that you are watching.\\n\\n>This is an edited comment.\\n\\nhttps://jira-eng-gpk2.cisco.com/jira/browse/ETP-38"}`,
-    `{"markdown":"JP Shipherd uppdated a comment on a Jira Task: **testing 1 2 3** that you are watching.\\n\\n>This is an edited comment.\\n\\nhttps://jira-eng-gpk2.cisco.com/jira/browse/ETP-38"}`
+    `{"markdown":"JP Shipherd updated a comment on a Jira Task: **testing 1 2 3** that you are watching.\\n\\nThis is an edited comment that<br />Spans multiple lines<br />The end.\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`,
+    `{"markdown":"JP Shipherd updated a comment on a Jira Task: **testing 1 2 3** that you are watching.\\n\\nThis is an edited comment that<br />Spans multiple lines<br />The end.\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`
   ]));
 
-// /* A ticket is assigned with mentions in the description */
-// testCases.push(new TestCase('./jira-event-test-cases/issue_update-issue_assigned_to_jp.json',
-//   'assigns to', 'jshipher', 'jshipher',
-//   [
-//     `{"markdown":"JP Shipherd assigned existing Jira Task: **Test Task -- please ignore -- to be deleted** to you.\\\n\\n>Description:[~jalumbau], [~hadougla], just confirming that you are getting notifications from the Jira bot.   Let me know or at mention me in a comment.<br /> <br />I will add you and [~shraban] as watchers to this ticket in an effort to understand how Jira exposes watchers in its webhooks\\n\\nhttps://jira-eng-gpk2.cisco.com/jira/browse/SPARK-7329"}`,
-//   ]));
+/* A ticket assigned to jp with watchers gets a new comment with a watcher mentioned */
+testCases.push(new TestCase('./jira-event-test-cases/comment_created_mention_watcher.json',
+  'comments and', 'jshipher', 'mentions a watcher',
+  [
+    `{"markdown":"You were mentioned in a comment created by JP Shipherd on a Jira Task: **testing 1 2 3**.\\n\\nThis is a comment with a mention of someone who is also a watcher [~jshipher].  \\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`,
+    `{"markdown":"JP Shipherd created a comment on a Jira Task: **testing 1 2 3** that you are watching.\\n\\nThis is a comment with a mention of someone who is also a watcher [~jshipher].  \\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}
+    `
+  ]));
 
-// /* A ticket is created with mentions in the description */
-// testCases.push(new TestCase('./jira-event-test-cases/1522768424337-jira:issue_created-issue_created.json',
-//   'creates', 'jshipher', 'an unassigned ticket',
-//   [
-//     '', '',  // Two users mentioned in description don't have bots
-//     `{"markdown":"JP Shipherd created a Jira Task: **Test Task -- please ignore -- to be deleted** and mentioned to you in it.\\n\\n>Description:[~jalumbau], [~hadougla], just confirming that you are getting notifications from the Jira bot.   Let me know or at mention me in a comment.<br /> <br />I will add you and [~shraban] as watchers to this ticket in an effort to understand how Jira exposes watchers in its webhooks\\n\\nhttps://jira-eng-gpk2.cisco.com/jira/browse/SPARK-7329"}`
-//   ]));
+/* A ticket assigned to jp with watchers gets an updated comment with a watcher mentioned */
+testCases.push(new TestCase('./jira-event-test-cases/comment_updated_mention_watcher.json',
+  'updates a commment', 'jshipher', 'and mentions a watcher',
+  [
+    `{"markdown":"You were mentioned in a comment updated by JP Shipherd on a Jira Task: **testing 1 2 3**.\\n\\nThis is a comment with a mention of someone who is also a watcher [~jshipher].  (Edit -- feel free to ignore)\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`,
+    `{"markdown":"JP Shipherd updated a comment on a Jira Task: **testing 1 2 3** that you are watching.\\n\\nThis is a comment with a mention of someone who is also a watcher [~jshipher].  (Edit -- feel free to ignore)\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`
+  ]));
 
-// /* assign an existing ticket to someone using the bot */
-// /* This is one of our "special users" not using a cisco email address in jira */
-// testCases.push(new TestCase('./jira-event-test-cases/jp-assigns-ralf-issue_updated.json',
-//   'assigns to', 'jshipher', 'raschiff',
-//   [
-//     `{"markdown":"JP Shipherd assigned existing Jira Task: **Test issue -- ignore** to you.\\n\\n>Description:Please delete this later. [~jshipher]\\n\\nhttps://jira-eng-gpk2.cisco.com/jira/browse/SPARKPLAN-360"}`
-//   ]));
+/* A ticket assigned to jp with watchers gets a new comment with a non watcher bot user mentioned */
+// This test uses a non-existing user.  May need to get rid of it.
+testCases.push(new TestCase('./jira-event-test-cases/comment_created_mention_non_watcher_bot_user.json',
+  'comments', 'jshipher', 'and mentions a non watcher bot user',
+  [
+    `{"markdown":"You were mentioned in a comment created by JP Shipherd on a Jira Task: **testing 1 2 3**.\\n\\nThis is a comment with a mention of someone who is also a watcher [~dmarsico].  \\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`,
+    `{"markdown":"JP Shipherd created a comment on a Jira Task: **testing 1 2 3** that you are watching.\\n\\nThis is a comment with a mention of someone who is also a watcher [~dmarsico].  \\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`,
+    `{"markdown":"JP Shipherd created a comment on a Jira Task: **testing 1 2 3** that you are watching.\\n\\nThis is a comment with a mention of someone who is also a watcher [~dmarsico].  \\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`
+  ]));
 
-// /* @mention multiple people who are all using the bot */
-// testCases.push(new TestCase('./jira-event-test-cases/jp-comments-to-ralf-krisboone-issue_commented.json',
-//   'comments mentioning', 'jshipher', 'raschiff and kboone',
-//   [
-//     `{"markdown":"JP Shipherd mentioned you in the Jira Task: **Hopefully the last test ticket for JP**\\n\\n>[~raschiff].    Thanks for your help with all my tickets today.   I'm making a Jira Notifier bot that lets me know immediately when someone assigns a ticket to me or mentions me in the comments or description.   Let me know if you are interested in trying it. [~kboone]\\n\\nhttps://jira-eng-gpk2.cisco.com/jira/browse/TROPO-11576"}`,
-//     `{"markdown":"JP Shipherd mentioned you in the Jira Task: **Hopefully the last test ticket for JP**\\n\\n>[~raschiff].    Thanks for your help with all my tickets today.   I'm making a Jira Notifier bot that lets me know immediately when someone assigns a ticket to me or mentions me in the comments or description.   Let me know if you are interested in trying it. [~kboone]\\n\\nhttps://jira-eng-gpk2.cisco.com/jira/browse/TROPO-11576"}`
-//   ]));
+/* A ticket assigned to jp with watchers gets an updated comment with a watcher mentioned */
+// // This test uses a non-existing user.  May need to get rid of it.
+testCases.push(new TestCase('./jira-event-test-cases/comment_updated_mention_non_watcher_bot_user.json',
+  'updates a commment', 'jshipher', 'and mentions a non watcher bot user',
+  [
+    `{"markdown":"You were mentioned in a comment updated by JP Shipherd on a Jira Task: **testing 1 2 3**.\\n\\nThis is a comment with a mention of someone who is also a watcher [~dmarsico].  (Edit -- feel free to ignore)\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`,
+    `{"markdown":"JP Shipherd updated a comment on a Jira Task: **testing 1 2 3** that you are watching.\\n\\nThis is a comment with a mention of someone who is also a watcher [~dmarsico].  (Edit -- feel free to ignore)\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`,
+    `{"markdown":"JP Shipherd updated a comment on a Jira Task: **testing 1 2 3** that you are watching.\\n\\nThis is a comment with a mention of someone who is also a watcher [~dmarsico].  (Edit -- feel free to ignore)\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`
+  ]));
 
-// /* @mention multiple people only one of whom is using the bot */
-// testCases.push(new TestCase('./jira-event-test-cases/jp-comments-to-ralf-nobody1-issue_commented.json',
-//   'comments mentioning', 'jshipher', 'raschiff and nobody1',
-//   [
-//     '',
-//     `{"markdown":"JP Shipherd mentioned you in the Jira Task: **Hopefully the last test ticket for JP**\\n\\n>[~raschiff].    Thanks for your help with all my tickets today.   I'm making a Jira Notifier bot that lets me know immediately when someone assigns a ticket to me or mentions me in the comments or description.   Let me know if you are interested in trying it. [~nobody1]\\n\\nhttps://jira-eng-gpk2.cisco.com/jira/browse/TROPO-11576"}`
-//   ]));
+/* A ticket assigned to jp with watchers gets a new comment with a non watcher non bot user mentioned */
+testCases.push(new TestCase('./jira-event-test-cases/comment_created_mention_nonwatcher.json',
+  'comments', 'jshipher', 'and mentions a non watcher non bot user',
+  [
+    ``,
+    `{"markdown":"JP Shipherd created a comment on a Jira Task: **testing 1 2 3** that you are watching.\\n\\nThis is a comment that mentions [~ahughley], who is not a watcher.\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`,
+    `{"markdown":"JP Shipherd created a comment on a Jira Task: **testing 1 2 3** that you are watching.\\n\\nThis is a comment that mentions [~ahughley], who is not a watcher.\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`
+  ]));
 
-// /* User using the bot assigns a ticket to themselves */                
-// testCases.push(new TestCase('./jira-event-test-cases/jp-assigns-jp-issue_updated.json',
-//   'assigns to', 'jshipher', 'jshipher',
-//   [
-//     `{"markdown":"JP Shipherd assigned existing Jira Task: **Test issue -- ignore** to you.\\n\\n>Description:Please delete this later. [~jshipher]\\n\\nhttps://jira-eng-gpk2.cisco.com/jira/browse/SPARKPLAN-360"}`
-//   ]));
-
-// /* New comment that @mentions a user using the bot and one that isnt */
-// testCases.push(new TestCase('./jira-event-test-cases/jp-comments-to-jp-issue_commented.json',
-//   'comments mentioning', 'jshipher', 'medash',
-//   [
-//     '',
-//     `{"markdown":"JP Shipherd mentioned you in the Jira Task: **Hopefully the last test ticket for JP**\\n\\n>[~raschiff].    Thanks for your help with all my tickets today.   I'm making a Jira Notifier bot that lets me know immediately when someone assigns a ticket to me or mentions me in the comments or description.   Let me know if you are interested in trying it. [~medash]\\n\\nhttps://jira-eng-gpk2.cisco.com/jira/browse/TROPO-11576"}`
-//   ]));
-
-// /* An updated comment @mentions a user using the bot */                
-// testCases.push(new TestCase('./jira-event-test-cases/jp-updates-comment-to-jp-issue_comment_edited.json',
-//   'comments mentioning', 'jshipher', 'jshipher',
-//   [
-//     `{"markdown":"JP Shipherd mentioned you in the Jira Task: **Test issue -- ignore**\\n\\n>C'mon [~jshipher] what are you waiting for?  Changing this to create an comment updated event.\\n\\nhttps://jira-eng-gpk2.cisco.com/jira/browse/SPARKPLAN-360"}`
-//   ]));
-
-// /* A ticket is deleted that was assigned to a bot user */
-// testCases.push(new TestCase('./jira-event-test-cases/liz-deletes-jps-issue_deleted.json',
-//   'deletes ticket assigned to', 'lizlau', 'jshipher',
-//   [
-//     `{"markdown":"Liz Laub deleted a Jira Task: **Test Issue #2** that was assigned to you.\\n\\n>Description:[~lizlau] will delete this soon.\\n\\nhttps://jira-eng-gpk2.cisco.com/jira/browse/SPARKPLAN-368"}`
-//   ]));
-
-// /* User updates description of ticket mentioning a user using the bot */
-// testCases.push(new TestCase('./jira-event-test-cases/jp-updated-description-issue_updated.json',
-//   'updates description mentioning', 'jshipher', 'jshipher',
-//   [
-//     `{"markdown":"JP Shipherd updated the description of Jira Task: **Test issue -- ignore** to you.\\n\\n>Description:Please delete this later. [~jshipher].  Actually it looks like you will need to ask someone else to do this since you can;t.\\n\\nhttps://jira-eng-gpk2.cisco.com/jira/browse/SPARKPLAN-360"}`
-//   ]));
-
-// /* User creates a new ticket and assigns it a bot user */                
-// testCases.push(new TestCase('./jira-event-test-cases/jp-creates-for-ralf-issue_created.json',
-//   'creates ticket for', 'jshipher', 'raschiff',
-//   [
-//     `{"markdown":"JP Shipherd created a Jira Task: **Test Issue #2** and assigned it to you.\\n\\n>Description:[~lizlau] will delete this soon.\\n\\nhttps://jira-eng-gpk2.cisco.com/jira/browse/SPARKPLAN-368"}`,
-//     `{"markdown":"JP Shipherd created a Jira Task: **Test Issue #2** and mentioned to you in it.\\n\\n>Description:[~lizlau] will delete this soon.\\n\\nhttps://jira-eng-gpk2.cisco.com/jira/browse/SPARKPLAN-368"}`
-//   ]));
-
-// /* Ignore a description update when no NEW text was added to the description */
-// testCases.push(new TestCase('./jira-event-test-cases/eivhaarr-removes-text-from-description-issue_updated.json',
-//   'updates and mentions', 'eivhaarr', 'pmadai',
-//   ['']));
-
-// testCases.push(new TestCase('./jira-event-test-cases/1522952583499-jira:issue_updated-issue_commented.json',
-//   'comments', 'jshipher', 'without any mentions',
-//   [
-//     '', '',   // There are two mentioned people not using the bot
-//     `{"markdown":"JP Shipherd mentioned you in the Jira Task: **Test Task -- please ignore -- to be deleted**\\n\\n>Testing behavior when a new notification WITH mentions is added to a ticket with watchers.<br /> <br />[~jalumbau], [~shraban], [~hadougla] note that I'm testing this in my own dev environment at the moment.  You won't see updates from the bot until I push it to deployment.   Will post when that happens.\\n\\nhttps://jira-eng-gpk2.cisco.com/jira/browse/SPARK-7329"}`,
-//     `{"markdown":"JP Shipherd commented on a Jira Task: **Test Task -- please ignore -- to be deleted** that you are watching.\\n\\n>Testing behavior when a new notification WITH mentions is added to a ticket with watchers.<br /> <br />[~jalumbau], [~shraban], [~hadougla] note that I'm testing this in my own dev environment at the moment.  You won't see updates from the bot until I push it to deployment.   Will post when that happens.\\n\\nhttps://jira-eng-gpk2.cisco.com/jira/browse/SPARK-7329"}`
-//   ]));
-
-// /* A ticket with watchers (one using the bot) gets a new comment (without any mentions) */
-// testCases.push(new TestCase('./jira-event-test-cases/1522952365307-jira:issue_updated-issue_commented.json',
-//   'comments', 'jshipher', 'without any mentions',
-//   [
-//     `{"markdown":"JP Shipherd commented on a Jira Task: **Test Task -- please ignore -- to be deleted** that you are watching.\\n\\n>Testing behavior when a new notification without mentions is added to a ticket with watchers.\\n\\nhttps://jira-eng-gpk2.cisco.com/jira/browse/SPARK-7329"}`
-//   ]));
-
-// /* A ticket is assigned with mentions in the description */
-// testCases.push(new TestCase('./jira-event-test-cases/issue_update-issue_assigned_to_jp.json',
-//   'assigns to', 'jshipher', 'jshipher',
-//   [
-//     `{"markdown":"JP Shipherd assigned existing Jira Task: **Test Task -- please ignore -- to be deleted** to you.\\n\\n>Description:[~jalumbau], [~hadougla], just confirming that you are getting notifications from the Jira bot.   Let me know or at mention me in a comment.<br /> <br />I will add you and [~shraban] as watchers to this ticket in an effort to understand how Jira exposes watchers in its webhooks\\n\\nhttps://jira-eng-gpk2.cisco.com/jira/browse/SPARK-7329"}`
-//   ]));
+/* A ticket assigned to jp with watchers gets an updated comment with a non watcher non bot user mentioned */
+testCases.push(new TestCase('./jira-event-test-cases/comment_updated_mention_nonwatcher.json',
+  'updates a commment', 'jshipher', 'and mentions a non watcher non bot user',
+  [
+    ``,
+    `{"markdown":"JP Shipherd updated a comment on a Jira Task: **testing 1 2 3** that you are watching.\\n\\nThis is a comment that mentions [~ahughley], who is not a watcher. Please feel free to ignore.\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`,
+    `{"markdown":"JP Shipherd updated a comment on a Jira Task: **testing 1 2 3** that you are watching.\\n\\nThis is a comment that mentions [~ahughley], who is not a watcher. Please feel free to ignore.\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`
+  ]));
   
-// /* A ticket is created with mentions in the description */
-// testCases.push(new TestCase('./jira-event-test-cases/1522768424337-jira:issue_created-issue_created.json',
-//   'creates', 'jshipher', 'an unassigned ticket',
-//   [
-//     '', '',  // Two users mentioned in description don't have bots
-//     `{"markdown":"JP Shipherd created a Jira Task: **Test Task -- please ignore -- to be deleted** and mentioned to you in it.\\n\\n>Description:[~jalumbau], [~hadougla], just confirming that you are getting notifications from the Jira bot.   Let me know or at mention me in a comment.<br /> <br />I will add you and [~shraban] as watchers to this ticket in an effort to understand how Jira exposes watchers in its webhooks\\n\\nhttps://jira-eng-gpk2.cisco.com/jira/browse/SPARK-7329"}`
-//   ]));
-
-// /* The status of ticket with watchers using the bot was updated */
-// /* No change to assignments or mentions so only watchers (one using the bot) are notified */
-// testCases.push(new TestCase('./jira-event-test-cases/1522768650390-jira:issue_updated-issue_generic.json',
-//   'changes', 'jshipher', 'status',
-//   ['',  // No assignees or @mentions generate update
-//   // Watcher updates:
-//     `{"markdown":"JP Shipherd updated a Jira Task: **Test Task -- please ignore -- to be deleted** that you are watching.\\n\\n>updated field:status from:\\"New\\" to:\\"In Progress\\"\\n\\nhttps://jira-eng-gpk2.cisco.com/jira/browse/SPARK-7329"}`,
-//   ]));
-
-// /* assign an existing ticket to someone using the bot */
-// /* This is one of our "special users" not using a cisco email address in jira */
-// testCases.push(new TestCase('./jira-event-test-cases/jp-assigns-ralf-issue_updated.json',
-//   'assigns to', 'jshipher', 'raschiff',
-//   [
-//     `{"markdown":"JP Shipherd assigned existing Jira Task: **Test issue -- ignore** to you.\\n\\n>Description:Please delete this later. [~jshipher]\\n\\nhttps://jira-eng-gpk2.cisco.com/jira/browse/SPARKPLAN-360"}`
-//   ]));
-
-// /* @mention multiple people who are not using the bot */
-// testCases.push(new TestCase('./jira-event-test-cases/jp-comments-to-non-bot-users-issue_commented.json',
-//   'comments mentioning', 'jshipher', 'nobody1 and nobody2',
-//   ['', '']));
-
-// /* An updated comment @mentions a user using the bot */                
-// testCases.push(new TestCase('./jira-event-test-cases/jp-updates-comment-to-jp-issue_comment_edited.json',
-//   'comments mentioning', 'jshipher', 'jshipher',
-//   [
-//     `{"markdown":"JP Shipherd mentioned you in the Jira Task: **Test issue -- ignore**\\n\\n>C'mon [~jshipher] what are you waiting for?  Changing this to create an comment updated event.\\n\\nhttps://jira-eng-gpk2.cisco.com/jira/browse/SPARKPLAN-360"}`
-//   ]));
-
-// /* Process a multi-line comment correctly */
-// testCases.push(new TestCase('./jira-event-test-cases/1523460120955-jira:issue_updated-issue_comment_edited.json',
-//   'updates and mentions', 'jshipher', 'jsoliman',
-//   [
-//     '',  // nobody with a bot is assigned or mentioned in the description of this ticket
-//     `{"markdown":"JP Shipherd uppdated a comment on a Jira Task: **Create analysis tool and use it to compare & analyzing pricing api results from middleware and PAPI** that you are watching.\\n\\n>Hi [~jsoliman], I suspect a lot of these differences will go away if you point to the same Billwise instance.   The easiest thing to do is probably have you point your test system to the production instance of billwise.  I have read only access credentials that I can share with you if you ping me on Spark.   Talk to Hancheng and make sure he's OK with that.  If suspect this will make 90% of the differences go away.<br />If you are strongly against pointing to production billwise, I can help you spin up a local instance of the middleware talking to whatever instance of BW you are talking to.   With that said, I think production is better since if there are differences in the data (which their obviously are), there might be a problem that we don't catch.  Either way just ping me on Spark and we'll come up with a plan.<br />Thanks for doing this!\\n\\nhttps://jira-eng-gpk2.cisco.com/jira/browse/TROPO-13333"}`,
-//     `{"markdown":"JP Shipherd uppdated a comment on a Jira Task: **Create analysis tool and use it to compare & analyzing pricing api results from middleware and PAPI** that you are watching.\\n\\n>Hi [~jsoliman], I suspect a lot of these differences will go away if you point to the same Billwise instance.   The easiest thing to do is probably have you point your test system to the production instance of billwise.  I have read only access credentials that I can share with you if you ping me on Spark.   Talk to Hancheng and make sure he's OK with that.  If suspect this will make 90% of the differences go away.<br />If you are strongly against pointing to production billwise, I can help you spin up a local instance of the middleware talking to whatever instance of BW you are talking to.   With that said, I think production is better since if there are differences in the data (which their obviously are), there might be a problem that we don't catch.  Either way just ping me on Spark and we'll come up with a plan.<br />Thanks for doing this!\\n\\nhttps://jira-eng-gpk2.cisco.com/jira/browse/TROPO-13333"}`
-//   ]));
-
-// /* Create a new ticket and assign it to a bot user */
-// testCases.push(new TestCase('./jira-event-test-cases/1523584338774-jira:issue_created-issue_created.json',
-//   'creates and assigns', 'jshipher', 'jshipher',
-//   [
-//     `{"markdown":"JP Shipherd created a Jira Task: **Testing 3** and assigned it to you.\\n\\n>Description:Testing 3\\n\\nhttps://jira-eng-gpk2.cisco.com/jira/browse/OPS-9914"}`
-//   ]));
-
 
 // Run the Tests
 var verbose = false;
@@ -299,76 +223,142 @@ if (process.env.VERBOSE) {
 
 // This no longer works because it depends on each test completing before the next one starts
 // The new processJiraEvent does not complete the call to bot.say before the next test starts
+let expectedCallbacks = 0;
 for (var i = 0, len = testCases.length; i < len; i++) {
   test = testCases[i];
+  expectedCallbacks += test.numExpectedResults;
   //var jiraEvent = require(test.file);
   var jiraEvent = JSON.parse(fs.readFileSync(test.file, "utf8"));
-  jiraEventHandler.processJiraEvent(jiraEvent, framework, emailOrg, checkTestResult(framework, test, i + 1));
+  jiraEventHandler.processJiraEvent(jiraEvent, framework, checkTestResult(framework, test, i + 1));
 }
 
+// Set a timer to interrupt any long running tests.  Check which tests didn't get back expected results
+let timerDuration = expectedCallbacks * 1000;  // Allow 1 seconds per callback (or use environment)
+if (process.env.TEST_TIMER_MULTIPLIER) {
+  timerDuration = expectedCallbacks * parseInt(process.env.TEST_TIMER_MULTIPLIER);
+}
+console.log(`Running ${testCases.length} tests expected to generate ${expectedCallbacks} responses.`);
+console.log(`Set environment VERBOSE=true for more details.`);
+console.log(`Will analyze results in ${timerDuration / 1000} seconds...`); 
+setTimeout(() => {
+  let totalErrors = 0;
+  let totalPassed = 0;
+  for (var i = 0, len = testCases.length; i < len; i++) {
+    test = testCases[i];
+    totalErrors += test.numSeenErrors;
+    totalPassed += test.numPassed;
+    if ((test.result.length) && (test.result.length != test.numSeenErrors)) {
+      for (result of test.result) {
+        console.log(`Test ${i+1}: ${test.author} ${test.action} `+ 
+          `${test.subject}, based on file: ${test.file}, never got expected result:`);
+        console.error(result);
+        totalErrors += 1;
+      } 
+    }
+  }
+
+  console.log(`\nAll tests complete. ${totalPassed} tests passed.`);
+  if (totalErrors) {
+    console.error(`Number of errors seen: ${totalErrors}`);
+  }
+  process.exit();
+}, timerDuration);
+
+// Jira Event will call us back with the message that a bot sent
+// Check to see if matches our expected result
 function checkTestResult(framework, test, testNum) {
   return function jiraEventCallback(err, bot = null) {
     test.resultsSeen += 1;
+    if (verbose) {
+      console.log(`Checking a result for test ${testNum}: ${test.author} ` +
+        `${test.action} ${test.subject}, based on file: ${test.file}`);
+    }
+
     if (err) {
-      console.error('Test %d (Result %d of %d) Failed.', testNum);
-      if (verbose) {
-        console.log('Got error in callback:' + err.message);
-        console.log('Expected\n' + test.result[test.resultsSeen - 1]);
-      }
+      console.error('Test %d (Result %d of %d) Failed.', testNum, test.numExpectedResults);
+      showExpected(`Got error in callback: ${err.message}`, test);
       return;
     }
 
-    //TODO figure out how to properly deal with this
-    if (test.resultsSeen > test.result.length) {
-      console.error('Got an unexpected test result for test: ' + testNum);
-      if ((bot) && (bot.jiraEventMessage)) {
-        console.error(bot.jiraEventMessage);
-      }
+    //TODO figure out how to properly deal with this -- we got more results than expected!
+    if (!test.result.length) {
+      let seenResult = (bot) ? bot.jiraEventMessage : '';
+      console.error(`Already got all ${test.numExpectedResults} expected results for test `
+        `${testNum}. Extra result is: "${seenResult}"`);
+      test.numSeenErrors++;
       return;
     }
 
     if (!bot) {
-      if (test.result[test.resultsSeen - 1]) {
-        console.error('Test %d (Result %d of %d) Failed.', testNum, test.resultsSeen, test.result.length);
+      if (foundResult('', test)) {
+        reportSuccess(test, 'Test %d (Result %d of %d) Passed.  Got expected non-notification', 
+          testNum, test.resultsSeen, test.numExpectedResults);
       } else {
-        console.log('Test %d (Result %d of %d) Passed.  Got expected non-notification', testNum, test.resultsSeen, test.result.length);
-      }
-      if (verbose) {
-        console.log('jiraEventHander did not callback with a bot.');
-        console.log('Expected\n' + test.result[test.resultsSeen - 1]);
+        console.error('Test %d (Result %d of %d) Failed.', testNum, test.resultsSeen, test.numExpectedResults);
+        showExpected('jiraEventHander did not callback with a bot.', test);
       }
       return;
     }
-    if (verbose) {
-      console.log('Checking test file:' + test.file);
-      console.log(test.author + ' ' + test.action + ' ' + test.subject + '...');
-    }
+
     var resultFound = false;
     if (bot.jiraEventMessage) {
       resultFound = true;
       // Whitespace got me down, just removed it for this comparison
-      if (bot.jiraEventMessage.replace(/\s/g, '') === test.result[test.resultsSeen - 1].replace(/\s/g, '')) {
-        console.log('Test %d (Result %d of %d) Passed. Got expected notification.', testNum, test.resultsSeen, test.result.length);
-        //console.log(bot.jiraEventMessage);
+      if (foundResult(bot.jiraEventMessage, test)) {
+        reportSuccess(test, 'Test %d (Result %d of %d) Passed. Got expected notification.', testNum, test.resultsSeen, test.numExpectedResults);
       } else {
-        console.error('Test %d (Result %d of %d) Failed.', testNum, test.resultsSeen, test.result.length);
-        if (verbose) {
-          console.log('Got\n' + bot.jiraEventMessage + 'Expected\n' + test.result[test.resultsSeen - 1]);
-        }
+        console.error('Test %d (Result %d of %d) Failed.', testNum, test.resultsSeen, test.numExpectedResults);
+        showExpected(`Got\n${bot.jiraEventMessage}`, test);
       }
       bot.jiraEventMessage = '';
     }
     if (!resultFound) {
       if (!test.result) {
-        console.log('Test %d (Result %d of %d) Passed.', testNum, test.resultsSeen, test.result.length);
+        reportSuccess(test, 'Test %d (Result %d of %d) Passed.', testNum, test.resultsSeen, test.numExpectedResults);
       } else {
-        console.error('Test %d (Result %d of %d) Failed.', testNum, test.resultsSeen, test.result.length);
-        if (verbose) {
-          console.log('Got no result');
-          console.log('Expected\n' + test.result[test.resultsSeen - 1]);
-        }
+        console.error('Test %d (Result %d of %d) Failed.', testNum, test.resultsSeen, test.numExpectedResults);
+        showExpected('Got no result', test);
       }
     }
   };
 }
 
+
+// Check the bot message against the set of valid results
+// We need to look at all possible values because the order of 
+// messages is not predictable since we are waiting on various
+// jira API calls to give us info about mentioned or watching users
+function foundResult(botMessage, test) {
+  for (let i=0; i<test.result.length; i++) {
+    // Strip whitespace to simply comparison
+    if (botMessage.replace(/\s/g, '') === test.result[i].replace(/\s/g, '')) {
+      // Remove this result from the set of expected result
+      test.result.splice(i, 1);
+      return true;
+    }
+  }
+  return false;
+}
+
+// Function to display progress info
+function reportSuccess(test, msg) {
+  test.numPassed++;
+  if (verbose) { 
+    console.log(msg); 
+  }
+}
+
+
+// Function to display the expected results when a test fails
+function showExpected(msg, test) {
+  test.numSeenErrors += 1;
+  console.error(msg);
+  if (test.result.length == 1) {
+    console.error('Expected\n' + test.result[0]);
+  } else {
+    console.error('Expected one of:');
+    for(let i=0; i<test.result.length; i++) {
+      console.error(`${test.result[i]}`);
+    }
+  }
+}
