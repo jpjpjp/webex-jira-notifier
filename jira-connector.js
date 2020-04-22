@@ -6,8 +6,9 @@
 
 // When running locally read environment variables from a .env file
 require('dotenv').config();
-request = require('request-promise');
-logger = require('./logger');
+const when = require('when');
+const request = require('request-promise');
+const logger = require('./logger');
 
 
 class JiraConnector {
@@ -24,6 +25,7 @@ class JiraConnector {
       //this.jiraProjects = null;
       this.jiraReqOpts = {
         "json": true,
+        method: 'GET',
         headers: {
           'Authorization': 'Basic '
         }
@@ -60,6 +62,13 @@ class JiraConnector {
         } else {
           this.jira_lookup_user_api = `${this.jira_url}/rest/api/2/user`;
         }
+        // Check if our environment overrode the lookup by username path
+        if (process.env.JIRA_LOOKUP_ISSUE_API) {
+          this.jira_lookup_issue_api = JIRA_LOOKUP_ISSUE_API;
+        } else {
+          this.jira_lookup_issue_api = `${this.jira_url}/rest/api/2/search`;
+        }
+
       } else {
         logger.error('Cannot read Jira credential.  Will not notify watchers');
       }
@@ -97,7 +106,35 @@ class JiraConnector {
   getDefaultPutOptions() {
     let options = JSON.parse(JSON.stringify(this.jiraReqOpts));
     options.method = 'PUT';
+    options.headers['Content-Type'] = 'application/json';
     return options;
+  }
+
+  /**
+   * Accessor for default request options for a PUT
+   * For some reason PATCH requries username and password
+   * instead of an Authorization header
+   *
+   * @function getDefaultOptions
+   */
+  getDefaultPostOptions() {
+    let options = JSON.parse(JSON.stringify(this.jiraReqOpts));
+    options.method = 'POST';
+    options.headers['Content-Type'] = 'application/json';
+    return options;
+  }
+
+  /**
+   * Convert url to use proxy if configured
+   *
+   * @function convertForProxy
+   * @param {object} url - url to translate
+   */
+  convertForProxy(url) {
+    if (this.jira_url_regexp) {
+      url = url.replace(this.jira_url_regexp, this.proxy_url);
+    }
+    return url;
   }
 
   /**
@@ -109,10 +146,7 @@ class JiraConnector {
   lookupUser(user) {
     let url = `${this.jira_lookup_user_api}?username=${user}`;
     // Use a proxy server if configured
-    if (this.jira_url_regexp) {
-      url = url.replace(this.jira_url_regexp, this.proxy_url);
-    }
-    return request(url, this.jiraReqOpts);
+    return request(this.convertForProxy(url), this.jiraReqOpts);
   }
 
   /**
@@ -127,10 +161,8 @@ class JiraConnector {
     if (watches && watches.watchCount && watches.self) {
       // Use a proxy server if configured
       let watcherUrl = watches.self;
-      if (this.jira_url_regexp) {
-        watcherUrl = watcherUrl.replace(this.jira_url_regexp, this.proxy_url);
-      }
-      watcherPromise = request.get(watcherUrl, this.jiraReqOpts);
+      watcherPromise = request.get(this.convertForProxy(watcherUrl),
+        this.jiraReqOpts);
     }
     return watcherPromise;
   }
@@ -148,123 +180,105 @@ class JiraConnector {
     if (commentIndex > 0) {
       let issueUrl = commentUrl.substr(0, commentIndex);
       // Use a proxy server if configured
-      if (this.jira_url_regexp) {
-        issueUrl = issueUrl.replace(this.jira_url_regexp, this.proxy_url);
-      }
-      issuePromise = request.get(issueUrl, this.jiraReqOpts);
+      issuePromise = request.get(this.convertForProxy(issueUrl), this.jiraReqOpts);
     } else {
       return Promise.reject(new Error('Could not find issue link in comment webhook payload'));
     }
     return issuePromise;
   }
 
-  // The following came in this module from another project
-  // They have not been tested with the current constructor setup
-  // But could be useful as this builds out to a more general purpose
-  // jira connector module
+  /**
+   * Perform JQL query based on keys
+   *
+   * @function lookupByKey
+   * @param {object} callerName - Log info about the user or space requesting this
+   * @param {array} keys - array of jira key names to fetch
+   */
+  lookupByKey(callerName, keys) {
+    let options = JSON.parse(JSON.stringify(this.getDefaultPostOptions()));
+    options.body = {"jql": ""};
+    options.body.jql = 'key in (' + keys.map(x => '\"' + x + '\"').join(',') + ')';
+    return request.post(this.convertForProxy(this.jira_lookup_issue_api), options)
+      .then(resp => {
+        if (!resp.hasOwnProperty('issues')) {
+          reject(new Error('Did not get expected response from Jira watcher lookup. ' +
+            'This usually happens due to login failure and redirection.'));
+        }
+        logger.debug('lookupByKey method found ' + resp.issues.length + ' issues ' +
+          'for query filter: ' + options.body.jql +
+          ' Requested by user:' + callerName);
+        return when(resp.issues);
+      }).catch(err => {
+        return when.reject(err);
+      });
+  }
 
-  // /**
-  //  * Perform JQL query based on keys
-  //  *
-  //  * @function lookupByKey
-  //  * @param {object} callerName - Log info about the user or space requesting this
-  //  * @param {array} keys - array of jira key names to fetch
-  //  */
-  // lookupByKey(callerName, keys) {
-  //   let self = this;
-  //   return new Promise(function (resolve, reject) {
-  //     let options = JSON.parse(JSON.stringify(self.defaultOptions));
-  //     options.body = {"jql": ""};
-  //     options.body.jql = 'key in (' + keys.map(x => '\"' + x + '\"').join(',') + ')';
-  //     request(options).then(resp => {
-  //       if (!resp.hasOwnProperty('issues')) {
-  //         reject(new Error('Did not get expected response from Jira watcher lookup. ' +
-  //           'This usually happens due to login failure and redirection.'));
-  //       }
-  //       logger.debug('lookupByKey method found ' + resp.issues.length + ' issues ' +
-  //         'for query filter: ' + options.body.jql +
-  //         ' Requested by user:' + callerName);
-  //       resolve(resp.issues);
-  //     }).catch(err => {
-  //       reject(err);
-  //     });
-  //   });
-  // }
+  /**
+   * Add a comment to a jira base on its API url
+   *
+   * @function addComment
+   * @param {string} uri - uri of the jira to update
+   * @param {string} key - jira issue key to comment on
+   * @param {string} comment - comment to enter
+   * @param {object} bot - bot that user asked to comment
+   * @param {string} email - email of user comment is submitted on behalf of
+   */
+  async addComment(uri, key, comment, bot, email) {
+    let fullComment = `${comment}\n\nPosted by ${bot.person.displayName} on behalf of [~${email.split('@', 1)[0]}]`;
+    let options = this.getDefaultPostOptions();
+    delete options.uri;
+    options.url = `${uri}/comment`;
+    options.body = {
+      "body": fullComment
+    };
+    request(options).then((resp) => {
+      // Add logic to check for a 204?
+      logger.debug(`Posted a comment to jira issue ${key} on behalf of ${email}`);
+    }).catch(e => {
+      logger.warn(`Failed to post comment for ${email}: ${e.message}`);
+      bot.say('Sorry, failed to post your comment. ' +
+        'Please click the link above and update directly in jira.');
+    });
+  }
 
-  // /**
-  //  * Add a comment to a jira base on its API url
-  //  *
-  //  * @function addComment
-  //  * @param {string} uri - uri of the jira to update
-  //  * @param {string} key - jira issue key to comment on
-  //  * @param {string} comment - comment to enter
-  //  * @param {object} bot - bot that user asked to comment
-  //  * @param {string} email - email of user comment is submitted on behalf of
-  //  */
-  // async addComment(uri, key, comment, bot, email) {
-  //   let fullComment = `${comment}\n\nPosted by ${bot.person.displayName} on behalf of [~${email.split('@', 1)[0]}]`;
-  //   let options = this.getDefaultPutOptions();
-  //   delete options.uri;
-  //   options.url = uri;
-  //   options.body = {
-  //     "update": {
-  //       "comment": [
-  //         {
-  //           "add": {
-  //             "body": fullComment
-  //           }
-  //         }
-  //       ]
-  //     }
-  //   };
-  //   request(options).then((resp) => {
-  //     // Add logic to check for a 204?
-  //     logger.debug(`Posted a comment to jira issue ${key} on behalf of ${email}`);
-  //   }).catch(e => {
-  //     logger.warn(`Failed to post comment for ${email}: ${e.message}`);
-  //     bot.say('Sorry, failed to post your comment. ' +
-  //       'Please click the link above and update directly in jira.');
-  //   });
-  // }
-
-  // /**
-  //  * Add a comment to a jira base on its API url
-  //  *
-  //  * @function postCommentToParent
-  //  * @param {object} bot - bot that user asked to comment
-  //  * @param {object} trigger - trigger object with info on user message and details
-  //  */
-  // async postCommentToParent(bot, trigger) {
-  //   let userEmail = trigger.person.emails[0];
-  //   let issueKey = '';
-  //   let errMsg = 'Cannot find the an issue to comment on. ' +
-  //     'Please click the link above and update directly in jira.';
-  //   if (!trigger.message.parentId) {
-  //     logger.warn(`In postCommentToParent but message from ${userEmail}is not a reply`);
-  //     return bot.reply(trigger.message, errMsg);
-  //   }
-  //   // Fetch the parent message to see if we can get the issue key
-  //   bot.webex.messages.get(trigger.message.parentId).then((message) => {
-  //     if (message.personId !== bot.person.id) {
-  //       throw new Error(`In postCommentToParent but parent of message from ${userEmail} was not posted by the bot.`);
-  //     }
-  //     // TODO clean up this regexp -- its too loose...
-  //     let keys = message.text.match(/([^/]*)$/);
-  //     if (!keys || !keys.length) {
-  //       throw new Error(`In postCommentToParent due to request from ${userEmail}, but unable to find issue key in parent message.`);
-  //     }
-  //     issueKey = keys[0];
-  //     return this.lookupByKey(trigger.person.emails[0], [issueKey]);
-  //   }).then((issues) => {
-  //     if (!issues || !(issues.length) || !(issues[0].self)) {
-  //       throw new Error(`In postCommentToParent failed to find jira issue with ${issueKey}`);
-  //     }
-  //     return this.addComment(issues[0].self, issues[0].key, trigger.message.text, bot, userEmail);
-  //   }).catch((e) => {
-  //     logger.warn(e.message);
-  //     return bot.reply(trigger.message, errMsg);
-  //   });
-  // }
+  /**
+   * Add a comment to a jira base on its API url
+   *
+   * @function postCommentToParent
+   * @param {object} bot - bot that user asked to comment
+   * @param {object} trigger - trigger object with info on user message and details
+   */
+  async postCommentToParent(bot, trigger) {
+    let userEmail = trigger.person.emails[0];
+    let issueKey = '';
+    let errMsg = 'Cannot find the an issue to comment on. ' +
+      'Please click the link above and update directly in jira.';
+    if (!trigger.message.parentId) {
+      logger.warn(`In postCommentToParent but message from ${userEmail}is not a reply`);
+      return bot.reply(trigger.message, errMsg);
+    }
+    // Fetch the parent message to see if we can get the issue key
+    bot.webex.messages.get(trigger.message.parentId).then((message) => {
+      if (message.personId !== bot.person.id) {
+        throw new Error(`In postCommentToParent but parent of message from ${userEmail} was not posted by the bot.`);
+      }
+      // TODO clean up this regexp -- its too loose...
+      let keys = message.text.match(/([^/]*)$/);
+      if (!keys || !keys.length) {
+        throw new Error(`In postCommentToParent due to request from ${userEmail}, but unable to find issue key in parent message.`);
+      }
+      issueKey = keys[0];
+      return this.lookupByKey(trigger.person.emails[0], [issueKey]);
+    }).then((issues) => {
+      if (!issues || !(issues.length) || !(issues[0].self)) {
+        throw new Error(`In postCommentToParent failed to find jira issue with ${issueKey}`);
+      }
+      return this.addComment(issues[0].self, issues[0].key, trigger.message.text, bot, userEmail);
+    }).catch((e) => {
+      logger.warn(e.message);
+      return bot.reply(trigger.message, errMsg);
+    });
+  }
 
 }
 
