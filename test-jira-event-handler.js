@@ -235,6 +235,7 @@ if (!process.env.USE_ISSUE_UPDATED_FOR_COMMENTS) {
   testCases.push(new TestCase('./jira-event-test-cases/comment_created_no_mentions.json',
     'comments', 'jshipher', 'without any mentions',
     [
+      '',  // There is a watcher who does not have a bot on this ticket
       `{"markdown":"JP Shipherd created a comment on a Jira Task: **testing 1 2 3** that you are assigned to.\\n\\nAdding a comment to capture both the comment_created and issue_updated event again.\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`,
       `{"markdown":"JP Shipherd created a comment on a Jira Task: **testing 1 2 3** that you are watching.\\n\\nAdding a comment to capture both the comment_created and issue_updated event again.\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`
     ]));
@@ -243,6 +244,7 @@ if (!process.env.USE_ISSUE_UPDATED_FOR_COMMENTS) {
   testCases.push(new TestCase('./jira-event-test-cases/comment_updated_no_mentions.json',
     'updates a comments', 'jshipher', 'without any mentions',
     [
+      '',  // There is a watcher who does not have a bot on this ticket
       `{"markdown":"JP Shipherd updated a comment on a Jira Task: **testing 1 2 3** that you are assigned to.\\n\\nEditing a comment to capture both the comment_edited and issue_updated event again.\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`,
       `{"markdown":"JP Shipherd updated a comment on a Jira Task: **testing 1 2 3** that you are watching.\\n\\nEditing a comment to capture both the comment_edited and issue_updated event again.\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`
     ]));
@@ -254,6 +256,7 @@ if (!process.env.USE_ISSUE_UPDATED_FOR_COMMENTS) {
   testCases.push(new TestCase('./jira-event-test-cases//issue_updated_new_comment_no_mentions.json',
     'comments', 'jshipher', 'without any mentions',
     [
+      '',  // There is a watcher who does not have a bot on this ticket
       `{"markdown":"JP Shipherd created a comment on a Jira Task: **testing 1 2 3** that you are assigned to.\\n\\nAdding a comment to capture both the comment_created and issue_updated event again.\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`,
       `{"markdown":"JP Shipherd created a comment on a Jira Task: **testing 1 2 3** that you are watching.\\n\\nAdding a comment to capture both the comment_created and issue_updated event again.\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`
     ]));
@@ -262,6 +265,7 @@ if (!process.env.USE_ISSUE_UPDATED_FOR_COMMENTS) {
   testCases.push(new TestCase('./jira-event-test-cases//issue_updated_edited_comment_no_mentions.json',
     'updates a comments', 'jshipher', 'without any mentions',
     [
+      '',  // There is a watcher who does not have a bot on this ticket
       `{"markdown":"JP Shipherd updated a comment on a Jira Task: **testing 1 2 3** that you are assigned to.\\n\\nEditing a comment to capture both the comment_edited and issue_updated event again.\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`,
       `{"markdown":"JP Shipherd updated a comment on a Jira Task: **testing 1 2 3** that you are watching.\\n\\nEditing a comment to capture both the comment_edited and issue_updated event again.\\n\\nhttps://jira-dev-gpk3.cisco.com/jira/browse/ETP-38"}`
     ]));
@@ -350,7 +354,8 @@ function checkTestResult(framework, test, testNum) {
           'Got expected non-notification');
       } else {
         console.error('Test %d (Result %d of %d) Failed.', testNum, test.resultsSeen, test.numExpectedResults);
-        showExpected('jiraEventHander did not callback with a bot.', test);
+        showExpected('jiraEventHander did not find a bot for an intended recipent' +
+          ', but our expected results do not include an empty response.', test);
       }
       return;
     }
