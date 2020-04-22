@@ -521,6 +521,7 @@ framework.hears(/.*/, function (bot, trigger) {
   if (!responded) {
     if (trigger.message.parentId) {
       // Handle threaded replies as a request to post a comment
+      logger.info(`Posting a comment as a reply in space: "${bot.room.title}"`);
       jira.postCommentToParent(bot, trigger);
     } else {
       let text = trigger.text;
@@ -543,23 +544,38 @@ app.get('/', function (req, res) {
 });
 
 // Jira webbhook
-app.post('/jira', function (req, res) {
+// app.post('/jira', function (req, res) {
+//   let jiraEvent = {};
+//   try {
+//     jiraEvent = req.body;
+//     if (typeof jiraEvent.webhookEvent !== 'undefined') {
+//       let jiraKey = jiraEvent.issue ? jiraEvent.issue.key : '';
+//       logger.info('Processing incoming Jira %s Event %s:%s', jiraKey, jiraEvent.webhookEvent, jiraEvent.issue_event_type_name);
+//       jiraEventHandler.processJiraEvent(jiraEvent, framework, emailOrg);
+//     }
+//   } catch (e) {
+//     logger.warn('Error processing Jira Event Webhook:' + e);
+//     logger.warn('Ignoring: ' + jiraEvent);
+//     res.status(400);
+//   }
+//   res.end();
+// });
+
+// Jira webbhook
+app.post('/new-jira', function (req, res) {
   let jiraEvent = {};
   try {
     jiraEvent = req.body;
     if (typeof jiraEvent.webhookEvent !== 'undefined') {
-      let jiraKey = jiraEvent.issue ? jiraEvent.issue.key : '';
-      logger.info('Processing incoming Jira %s Event %s:%s', jiraKey, jiraEvent.webhookEvent, jiraEvent.issue_event_type_name);
-      jiraEventHandler.processJiraEvent(jiraEvent, framework, emailOrg);
+      jiraEventHandler.processJiraEvent(jiraEvent, framework);
     }
   } catch (e) {
     logger.warn('Error processing Jira Event Webhook:' + e);
-    logger.warn('Ignoring: ' + jiraEvent);
+    logger.warn('Ignoring: ' + JSON.stringify(jiraEvent));
     res.status(400);
   }
   res.end();
 });
-
 // start express server
 var server = app.listen(config.port, function () {
   framework.debug('Framework listening on port %s', config.port);
