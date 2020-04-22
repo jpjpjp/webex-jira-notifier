@@ -4,7 +4,10 @@
 /*jshint esversion: 6 */  // Help out our linter
 
 // Helper classes for dealing with Jira Webhook payload
-var jiraEventHandler = require("./jira-event.js");
+const JiraConnector = require('./jira-connector');
+const jiraConnector = new JiraConnector();
+const JiraEventHandler = require("./jira-event.js");
+const jiraEventHandler = new JiraEventHandler(jiraConnector);
 fs = require('fs');
 
 // Create our own verion of the bot objects that supports our test cases.

@@ -9,47 +9,73 @@ require('dotenv').config();
 logger = require('./logger');
 let when = require('when');
 
-let JiraConnector = require('./jira-connector');
-let jiraConnector = new JiraConnector();
-let jira_url = jiraConnector.getJiraUrl();
-
 // Set regular expressions to discover the type of events we are getting
 const commentEvent = new RegExp(/^comment_/);
 const issueEvent = new RegExp(/^jira:issue_/);
 const issueEventWithComment = new RegExp(/^issue_comment/);
 
+/**
+ * A module for Webex Bots to process webhook events from jira
+ *
+ * @module JiraEventHandler
+ */
+class JiraEventHandler {
+  /**
+   * JiraEventHandler constructor needs a JiraConnector object
+   *
+   * @param {object} jiraConnector -- an instantiated jiraConnector object
+   */
+  constructor(jiraConnector) {
+    /** @private */
+    this.jiraConnector = jiraConnector;
+  }
 
-//Determine which event we have.  If its one we care about see if it belongs
-// to someone in a room with our bot
-exports.processJiraEvent = function (jiraEvent, framework, cb = null) {
-  logJiraEvent(jiraEvent);
-  try {
+  /**
+   * processJiraEvent
+   * 
+   * Called by the Webex Node Bot Framework based application
+   * This inspect the jira event and determines if any instances of
+   * the bot should send messages to the spaces they are in to inform
+   * users of the recent jira event
+   * 
+   * @param {object} jiraEvent - body of the jira webhook received
+   * @param {object} framework - webex bot framework object
+   * @param {function} [cb] - callback used for testing.  If set this will be
+   *                          called each time a possible message recipient is 
+   *                          detected.  If they are a bot user the message
+   *                          is also included. 
+   */
+  processJiraEvent (jiraEvent, framework, cb = null) {
+    logJiraEvent(jiraEvent);
+    try {
     // We'll also notify any watchers of this change 
     //(but only once even if multiple things changed)
     // TODO -- is this needed anymore?
-    jiraEvent.watchersNotified = false;
+      jiraEvent.watchersNotified = false;
 
-    if (commentEvent.test(jiraEvent.webhookEvent)) {
-      if (process.env.USE_ISSUE_UPDATED_FOR_COMMENTS) {
-        logger.info(`Ignoring webhookEvent: "${jiraEvent.webhookEvent}, ` +
+      if (commentEvent.test(jiraEvent.webhookEvent)) {
+        if (process.env.USE_ISSUE_UPDATED_FOR_COMMENTS) {
+          logger.info(`Ignoring webhookEvent: "${jiraEvent.webhookEvent}, ` +
           `Will use issue_updated event instead.`);
+          return;
+        }
+        logger.info(`Processing incoming Jira comment event: ${jiraEvent.webhookEvent}`);
+        return processCommentEvent(jiraEvent, framework, this.jiraConnector, cb);
+      } else if (issueEvent.test(jiraEvent.webhookEvent)) {
+        logger.info(`Processing incoming Jira issue event: "${jiraEvent.issue_event_type_name}", Issue Key: "${jiraEvent.issue.key}"`);
+        return processIssueEvent(jiraEvent, framework, this.jiraConnector, cb);
+      } else {
+        logger.warn(`Ignoring unknown webhookEvent: "${jiraEvent.webhookEvent}`);
         return;
       }
-      logger.info(`Processing incoming Jira comment event: ${jiraEvent.webhookEvent}`);
-      return processCommentEvent(jiraEvent, framework, cb);
-    } else if (issueEvent.test(jiraEvent.webhookEvent)) {
-      logger.info(`Processing incoming Jira issue event: "${jiraEvent.issue_event_type_name}", Issue Key: "${jiraEvent.issue.key}"`);
-      return processIssueEvent(jiraEvent, framework, cb);
-    } else {
-      logger.warn(`Ignoring unknown webhookEvent: "${jiraEvent.webhookEvent}`);
-      return;
+    } catch (e) {
+      logger.error(`processJiraEvent() got exception: ${e.message}`);
     }
-  } catch (e) {
-    logger.error(`processJiraEvent() got exception: ${e.message}`);
   }
-};
+}
+module.exports = JiraEventHandler;
 
-function processIssueEvent(jiraEvent, framework, cb) {
+function processIssueEvent(jiraEvent, framework, jira, cb) {
   try {
     let msgElements = {};
     let event = jiraEvent.issue_event_type_name.substr("issue_".length,
@@ -90,7 +116,7 @@ function processIssueEvent(jiraEvent, framework, cb) {
     // }
 
     // See if there are watchers for this issue and fetch them while we look for mentions
-    let watcherPromise = jiraConnector.lookupWatcherInfoFromIssue(issue);
+    let watcherPromise = jira.lookupWatcherInfoFromIssue(issue);
 
     // While waiting for the watchers set up the msgElements and notify
     // the assignee and anyone mentioned
@@ -150,14 +176,14 @@ function processIssueEvent(jiraEvent, framework, cb) {
     }
   
     // Notify assignee and mentioned users...
-    notifyMentioned(framework, msgElements, toNotifyList, cb);
+    notifyMentioned(framework, msgElements, toNotifyList, jira, cb);
 
     // Wait for and process the watchers (if any)
     if (!watcherPromise) {
       return;
     }
     return when(watcherPromise).then((watcherInfo) => {
-      return processWatcherInfo(framework, watcherInfo, toNotifyList, msgElements, cb);
+      return processWatcherInfo(framework, watcherInfo, toNotifyList, msgElements, jira, cb);
     }).catch((e) => {
       logger.error(`Failed getting watchers associated with issue ${jiraEvent.issue.key}: ` +
         `"${e.message}". Can only notify people mentioned in the description.`);
@@ -172,14 +198,14 @@ function processIssueEvent(jiraEvent, framework, cb) {
 };
 
 
-function processCommentEvent(jiraEvent, framework, cb) {
+function processCommentEvent(jiraEvent, framework, jira, cb) {
   try {
     let msgElements = {};
     let event = jiraEvent.webhookEvent.substr("comment_".length,
       jiraEvent.webhookEvent.length);
 
     // Try to fetch the issue this comment is associated with
-    let issuePromise = jiraConnector.lookupIssueFromCommentEvent(jiraEvent);
+    let issuePromise = jira.lookupIssueFromCommentEvent(jiraEvent);
 
     // While waiting for that, scan comment for mentions...
     let toNotifyList = getAllMentions(jiraEvent.comment.body);
@@ -193,7 +219,7 @@ function processCommentEvent(jiraEvent, framework, cb) {
     };
     return when(issuePromise).then((issue) => {
       // See if there are watchers for this issue
-      let watcherPromise = jiraConnector.lookupWatcherInfoFromIssue(issue);
+      let watcherPromise = jira.lookupWatcherInfoFromIssue(issue);
 
       // While waiting, add to msgElements with issue details
       if (issue.fields.assignee) {
@@ -215,7 +241,8 @@ function processCommentEvent(jiraEvent, framework, cb) {
         return when(null);
       }
     }).then((watcherInfo) => {
-      return processWatcherInfo(framework, watcherInfo, toNotifyList, msgElements, cb);
+      return processWatcherInfo(framework, watcherInfo,
+        toNotifyList,msgElements, jira, cb);
     }).catch((e) => {
       logger.error(`processCommentEvent() got error: "${e.message}". ` +
         `May have only notified people mentioned in the comment or none at all.`);
@@ -229,7 +256,7 @@ function processCommentEvent(jiraEvent, framework, cb) {
   }
 };
 
-function processWatcherInfo(framework, watcherInfo, notifiedList, msgElements, cb) {
+function processWatcherInfo(framework, watcherInfo, notifiedList, msgElements, jira, cb) {
   if (watcherInfo) {
     watchers = watcherInfo.watchers;
     watcherEmails = [];
@@ -238,13 +265,13 @@ function processWatcherInfo(framework, watcherInfo, notifiedList, msgElements, c
         watcherEmails.push(watchers[i].emailAddress);
       }
     }
-    return when(notifyWatchers(framework, msgElements, watcherEmails, cb));
+    return when(notifyWatchers(framework, msgElements, watcherEmails, jira, cb));
   } else {
     return when(true);
   }
 }
 
-async function notifyMentioned(framework, msgElements, notifyList, cb) {
+async function notifyMentioned(framework, msgElements, notifyList, jira, cb) {
   if (!notifyList.length) {
     logger.verbose('No mentioned users to notify for Jira Event: ' +
       `${msgElements.subject}_${msgElements.action}. Will check for watchers...`);
@@ -253,7 +280,7 @@ async function notifyMentioned(framework, msgElements, notifyList, cb) {
   // Lookup the user details for each mention (username)
   let mentionedUserPromises = [];
   for (let i = 0; i < notifyList.length; i++) {
-    mentionedUserPromises.push(jiraConnector.lookupUser(notifyList[i]));
+    mentionedUserPromises.push(jira.lookupUser(notifyList[i]));
   }
   let mentionedEmails = [];
   return when.all(mentionedUserPromises).then((users) => {
@@ -266,23 +293,23 @@ async function notifyMentioned(framework, msgElements, notifyList, cb) {
         msgElements.assignedToEmail = users[i].emailAddress;
       }
     }
-    return notifyBotUsers(framework, "mentioned", msgElements, mentionedEmails, cb);
+    return notifyBotUsers(framework, "mentioned", msgElements, mentionedEmails, jira, cb);
   }).catch((e) => {
     logger.error(`notifyMentioned() caught exception: ${e.message}`);
     return when();
   });
 }
 
-function notifyWatchers(framework, msgElements, watchers, cb) {
+function notifyWatchers(framework, msgElements, watchers, jira, cb) {
   if (!watchers.length) {
     logger.verbose('No watchers to notify for Jira Event: ' +
       `${msgElements.subject}_${msgElements.action}. Will check for watchers...`);
     return;
   }
-  notifyBotUsers(framework, "watcher", msgElements, watchers, cb);
+  notifyBotUsers(framework, "watcher", msgElements, watchers, jira, cb);
 }
 
-function notifyBotUsers(framework, recipientType, msgElements, emails, cb) {
+function notifyBotUsers(framework, recipientType, msgElements, emails, jira, cb) {
   emails.forEach((email) => {
     //let email = user + '@' + emailOrg;
     let bot = framework.bots.find(function (bot) {return (bot.isDirectTo === email);});
@@ -292,7 +319,7 @@ function notifyBotUsers(framework, recipientType, msgElements, emails, cb) {
         if (userConfig.askedExit) {
           return logger.info('Supressing message to ' + theBot.isDirectTo);
         }
-        sendWebexNotification(theBot, recipientType, userConfig, msgElements, cb);
+        sendWebexNotification(theBot, recipientType, userConfig, msgElements, jira, cb);
         // TODO - See if this is still needed given that we now REQUIRE API access to work
         // Add instrumentation to find users who are not working in dissallowed projects
         // if (jiraEvent.ourProjectIdx == -1) {
@@ -302,7 +329,7 @@ function notifyBotUsers(framework, recipientType, msgElements, emails, cb) {
         logger.error('Unable to get quietMode status for ' + theBot.isDirectTo);
         logger.error(err.message);
         logger.error('Erring on the side of notifying them.');
-        sendWebexNotification(theBot, recipientType, userConfig, msgElements, cb);
+        sendWebexNotification(theBot, recipientType, {notifySelf: true}, msgElements, cb);
       });
     } else {
       logger.verbose('No bot found for potential recipient:' + email);
@@ -312,7 +339,7 @@ function notifyBotUsers(framework, recipientType, msgElements, emails, cb) {
   });
 }
 
-function sendWebexNotification(bot, recipientType, userConfig, msgElements, cb) {
+function sendWebexNotification(bot, recipientType, userConfig, msgElements, jira, cb) {
   if ((bot.isDirectTo == msgElements.authorEmail) &&
     ((!userConfig) || (!userConfig.hasOwnProperty('notifySelf')) || (!userConfig.notifySelf))) {
     logger.info('Not sending notification of update made by ' + bot.isDirectTo + ' to ' + msgElements.authorEmai);
@@ -322,13 +349,13 @@ function sendWebexNotification(bot, recipientType, userConfig, msgElements, cb) 
   switch (recipientType) {
     case ('mentioned'):
       if (msgElements.assignedToEmail === bot.isDirectTo) {
-        msg = buildWatcherOrAssigneeMessage(msgElements, bot.isDirectTo);
+        msg = buildWatcherOrAssigneeMessage(msgElements, bot.isDirectTo, jira);
       } else {
-        msg = buildMentionedMessage(msgElements, bot.isDirectTo);
+        msg = buildMentionedMessage(msgElements, bot.isDirectTo, jira);
       }
       break;
     case ('watcher'):
-      msg = buildWatcherOrAssigneeMessage(msgElements, bot.isDirectTo);
+      msg = buildWatcherOrAssigneeMessage(msgElements, bot.isDirectTo, jira);
       break;
     default:
       logger.error(`Cannot build message for unknown recipeient ` +
@@ -346,7 +373,7 @@ function sendWebexNotification(bot, recipientType, userConfig, msgElements, cb) 
   if (cb) {cb(null, bot);}
 }
 
-function buildMentionedMessage(msgElements, botEmail) {
+function buildMentionedMessage(msgElements, botEmail, jira) {
   try {
     let msg = ``;
     switch (msgElements.subject) {
@@ -389,14 +416,14 @@ function buildMentionedMessage(msgElements, botEmail) {
         logger.warn(`buildMentionedMessage: Unsure how to format message for ` +
           `subject:${msgElements.subject} in ${JSON.stringify(msgElements, 2, 2)}`);
     }
-    msg += `${jira_url}/browse/${msgElements.issueKey}`;
+    msg += `${jira.getJiraUrl()}/browse/${msgElements.issueKey}`;
     return msg;
   } catch (e) {
     throw new Error(`buildMentionedMessage failed: ${e.message}`);
   }
 }
 
-function buildWatcherOrAssigneeMessage(msgElements, botEmail) {
+function buildWatcherOrAssigneeMessage(msgElements, botEmail, jira) {
   try {
     let msg = ``;
     switch (msgElements.subject) {
@@ -442,7 +469,7 @@ function buildWatcherOrAssigneeMessage(msgElements, botEmail) {
         msg += ` that you are watching.\n\n`;
       }
     }
-    msg += `${msgElements.body}\n\n${jira_url}/browse/${msgElements.issueKey}`;
+    msg += `${msgElements.body}\n\n${jira.getJiraUrl()}/browse/${msgElements.issueKey}`;
     return msg;
   } catch (e) {
     throw new Error(`buildWatcherOrAssigneeMessage failed: ${e.message}`);

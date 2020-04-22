@@ -18,12 +18,14 @@ logger = require('./logger');
 
 
 // Helper classes for dealing with Jira Webhook payload
-var jiraEventHandler = require("./jira-event.js");
 let jira = {};
+let jiraEventHandler = {};
 try {
   // Create the object for interacting with Jira
   var JiraConnector = require('./jira-connector.js');
   jira = new JiraConnector();
+  const JiraEventHandler = require("./jira-event.js");
+  jiraEventHandler = new JiraEventHandler(jira);
 } catch (err) {
   logger.error('Initialization Failure: ' + err.message);
   process.exit(-1);
