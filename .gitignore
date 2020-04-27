@@ -14,7 +14,11 @@ pids
 
 # Directory for storing jira events
 JiraEvents/*
-pre-2018-jira-event-test-cases/*
+potential-jira-event-test-cases/*
+prod-jira-event-test-cases/*
+sandbox-jira-event-test-cases/*
+simulated-webhooks/*
+
 
 # Local error events to be investigated
 jira-event-test-cases/*.error
@@ -43,3 +47,7 @@ mongo-prodbot.json
 migrate_configs.js
 jira-notifier-login.pem
 post-watched-update-to-localhost.sh
+.DS_Store
+2020-04-24-log1.out
+JiraWebhook.png
+.DS_Store
