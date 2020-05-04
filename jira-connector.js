@@ -33,7 +33,7 @@ class JiraConnector {
 
       // Set up Authorization header
       if ((process.env.JIRA_USER) && (process.env.JIRA_PW)) {
-        this.request = require('request-promise');
+        this.request = request;
         this.jiraReqOpts.headers.Authorization +=
           new Buffer.from(process.env.JIRA_USER + ':' +
             process.env.JIRA_PW).toString('base64');
@@ -68,6 +68,9 @@ class JiraConnector {
         } else {
           this.jira_lookup_issue_api = `${this.jira_url}/rest/api/2/search`;
         }
+
+        // Build an in-memory cache of jira users as we look them up
+        this.jiraUserCache = [];
 
       } else {
         logger.error('Cannot read Jira credential.  Will not notify watchers');
@@ -142,11 +145,53 @@ class JiraConnector {
    *
    * @function lookupUser
    * @param {object} user - email or username to lookup
+   * @returns {Promise.<user>} - a single jira user object
    */
   lookupUser(user) {
+    // Check our local cache first
+    let userObj = this.jiraUserCache.find((u) => (user === u.name));
+    if (userObj) {
+      logger.verbose(`lookupUser: Found cached info on jira user: ${user}`);
+      return when(userObj);
+    }
+
     let url = `${this.jira_lookup_user_api}?username=${user}`;
     // Use a proxy server if configured
-    return request(this.convertForProxy(url), this.jiraReqOpts);
+    logger.verbose(`lookupUser: Fetching info on jira user: ${user}`);
+    return request(this.convertForProxy(url), this.jiraReqOpts)
+      .then((userObj) => {
+        if ((userObj.length)) {
+          return when.reject(new Error(`User search for ${user} at ${url} ` +
+            `returned a list instead of expected user object.`));
+        }
+        // Add to local cache
+        let cachedUser = this.jiraUserCache.find((u) => (userObj.name === u.name));
+        if (typeof cachedUser === 'undefined') {
+          this.jiraUserCache.push(userObj);
+          if (!(this.jiraUserCache.length % 50)) {
+            logger.info(`lookupUser: ${this.jiraUserCache.length} users in memory cache.`);
+          }
+        }
+        return when(userObj);
+      }).catch((e) => {
+      // We are getting a lot of 404s, need to debug why
+      // In the meantime, try to guess at users where we get 404s
+        if ((e.statusCode === 404) && (process.env.DEFAULT_DOMAIN)) {
+          logger.warn(`lookupUser() failed: "${e.message}".  ` +
+            `Guessing user's email address by adding ${process.env.DEFAULT_DOMAIN}.`);
+          let user = e.options.uri.split('=')[1];
+          let userObj = {
+            emailAddress: `${user}@${process.env.DEFAULT_DOMAIN}`,
+            displayName: user,
+            name: user,
+            key: user
+          };
+          return when(userObj);
+        } else {
+          return when.reject(e);
+        }
+      });
+    // pass exceptions on to caller
   }
 
   /**
