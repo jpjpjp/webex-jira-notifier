@@ -46,12 +46,10 @@ class JiraEventHandler {
    *                          is also included. 
    */
   processJiraEvent (jiraEvent, framework, cb = null) {
-    logJiraEvent(jiraEvent);
+    if (process.env.LOG_JIRA_EVENTS === 'true') {
+      logJiraEvent(jiraEvent);
+    }
     try {
-    // We'll also notify any watchers of this change 
-    //(but only once even if multiple things changed)
-    // TODO -- is this needed anymore?
-      jiraEvent.watchersNotified = false;
 
       if (commentEvent.test(jiraEvent.webhookEvent)) {
         if (process.env.USE_ISSUE_UPDATED_FOR_COMMENTS) {
@@ -78,12 +76,10 @@ module.exports = JiraEventHandler;
 function processIssueEvent(jiraEvent, framework, jira, cb) {
   try {
     let msgElements = {};
-    let event = jiraEvent.issue_event_type_name.substr("issue_".length,
-      jiraEvent.webhookEvent.length);
+    let toNotifyList = [];
     let user = jiraEvent.user;
     let issue = jiraEvent.issue;
-    let toNotifyList = [];
-
+    
     // If this is an issue event typ comment_created/updated event we may ignore it or
     // process it depending on how we are configured...
     if ((jiraEvent.webhookEvent === 'jira:issue_updated') &&
@@ -95,6 +91,14 @@ function processIssueEvent(jiraEvent, framework, jira, cb) {
         return;
       }
     }
+
+    // There are some events that we will just ignore:
+    if ((jiraEvent.webhookEvent === 'jira:issue_updated') &&
+    (jiraEvent.issue_event_type_name === 'issue_comment_deleted')) {
+      logger.verbose('Ignoring comment_deleted event');
+      return;
+    }
+
 
     // TODO figure out how/if this is still relevent
     // The new module pretty much REQUIRES full access to Jira to work
@@ -142,36 +146,61 @@ function processIssueEvent(jiraEvent, framework, jira, cb) {
       // Configure notifylist and msgElements with the issue summary
       toNotifyList = getAllMentions(issue.fields.description);
       msgElements.subject = "issue";
-      msgElements.action = event;
+      if (jiraEvent.webhookEvent === 'jira:issue_deleted') {
+        msgElements.action = 'deleted';
+      } else {
+        msgElements.action = jiraEvent.issue_event_type_name.substr(
+          "issue_".length, jiraEvent.webhookEvent.length);;  
+      }
       msgElements.body = convertNewlines(issue.fields.description);
     }
 
     if (issue.fields.assignee) {
-      msgElements.assignee = issue.fields.assignee.name;
+      if (typeof issue.fields.assignee === "object") {
+        msgElements.assignee = issue.fields.assignee.name;
+      } else {
+        msgElements.assignee = issue.fields.assignee; 
+      }
       if (toNotifyList.indexOf(msgElements.assignee) === -1) {
         toNotifyList.push(msgElements.assignee);
       }
     }
     // Handle some more complex events
-    if ((msgElements.subject === "issue") && (event === 'created') && (issue.fields.assignee)) {
-      // Discover assigned to when issue was assigned when it was created
+    if ((msgElements.subject === "issue") && (msgElements.action === 'created') && (issue.fields.assignee)) {
+      // Set action to assigned to when issue was assigned when it was created
       msgElements.action = 'assigned';
-      msgElements.assignee = issue.fields.assignee.name;
-      if (!toNotifyList.find((user) => user === msgElements.assignee)) {
-        toNotifyList.push(msgElements.assignee);
-      }
-    } else if (event === 'assigned') {
+// Perhaps this is not necessary?      
+    // } else if (msgElements.action === 'assigned') {
+    //   if (jiraEvent.changelog && jiraEvent.changelog.items) {
+    //     msgElements.assignee = jiraEvent.changelog.items[0].to;
+    //     if (!toNotifyList.find((user) => user === msgElements.assignee)) {
+    //       toNotifyList.push(msgElements.assignee);
+    //     }
+    //   }
+// Perhaps we can be even more "generic" than this
+//    } else if (msgElements.action === 'generic') {
+    } else if ((jiraEvent.webhookEvent === 'jira:issue_updated') &&
+      (!issueEventWithComment.test(jiraEvent.issue_event_type_name)) &&
+      (msgElements.action !== 'moved')) {
+      // Discover the updated event from the changelog
       if (jiraEvent.changelog && jiraEvent.changelog.items) {
-        msgElements.assignee = jiraEvent.changelog.items[0].to;
-        if (!toNotifyList.find((user) => user === msgElements.assignee)) {
-          toNotifyList.push(msgElements.assignee);
+        msgElements.action = '';
+        if (jiraEvent.changelog.items.length > 1) {
+          // We prefer to notify about a status change if there was more than one
+          let statusItem = jiraEvent.changelog.items.find((item) => item.field === "status");
+          if (statusItem) {
+            msgElements.action = "status";
+            msgElements.updatedTo = statusItem.toString;
+          }
         }
-      }
-    } else if (event === 'generic') {
-      // Discover the generic event from the changelog
-      if (jiraEvent.changelog && jiraEvent.changelog.items) {
-        msgElements.action = jiraEvent.changelog.items[0].field;
-        msgElements.updatedTo = jiraEvent.changelog.items[0].toString;
+        // Otherwise we take the first thing in the changelog
+        if (msgElements.action === '') {
+          msgElements.action = jiraEvent.changelog.items[0].field;
+          if (msgElements.action === 'assignee') {
+            msgElements.action = 'assigned'; 
+          }
+          msgElements.updatedTo = jiraEvent.changelog.items[0].toString;
+        }
       }
     }
   
@@ -185,14 +214,16 @@ function processIssueEvent(jiraEvent, framework, jira, cb) {
     return when(watcherPromise).then((watcherInfo) => {
       return processWatcherInfo(framework, watcherInfo, toNotifyList, msgElements, jira, cb);
     }).catch((e) => {
-      logger.error(`Failed getting watchers associated with issue ${jiraEvent.issue.key}: ` +
-        `"${e.message}". Can only notify people mentioned in the description.`);
-      createTestCase(e, jiraEvent, 'caught-error');
+// Temporarily remove this      
+      // logger.warn(`Failed getting watchers associated with issue ${jiraEvent.issue.key}: ` +
+      //   `"${e.message}". Can only notify the assignee and mentioned users.`);
+      // It may not make sense to create a test case when this happens
+      // createTestCase(e, jiraEvent, 'caught-error');
     });
 
   } catch (e) {
     logger.error(`processIssueEvent() caught error: ${e.message}`);
-    createTestCase(e, jiraEvent, 'caught-error');
+    createTestCase(e, jiraEvent, framework, 'caught-error');
     if (cb) {return (cb(e));}
   }
 };
@@ -246,12 +277,12 @@ function processCommentEvent(jiraEvent, framework, jira, cb) {
     }).catch((e) => {
       logger.error(`processCommentEvent() got error: "${e.message}". ` +
         `May have only notified people mentioned in the comment or none at all.`);
-      createTestCase(e, jiraEvent, 'caught-error');
+      createTestCase(e, jiraEvent, framework, 'caught-error');
     });
 
   } catch (e) {
     logger.error(`processCommentEvent(): caught error: ${e.message}`);
-    createTestCase(e, jiraEvent, 'caught-error');
+    createTestCase(e, jiraEvent, framework, 'caught-error');
     if (cb) {return (cb(e));}
   }
 };
@@ -279,20 +310,23 @@ async function notifyMentioned(framework, msgElements, notifyList, jira, cb) {
   }
   // Lookup the user details for each mention (username)
   let mentionedUserPromises = [];
-  for (let i = 0; i < notifyList.length; i++) {
-    mentionedUserPromises.push(jira.lookupUser(notifyList[i]));
-  }
   let mentionedEmails = [];
-  return when.all(mentionedUserPromises).then((users) => {
+  notifyList.forEach((user) => {
     // Convert the usernames to emails in order to associate with a bot user
-    for (let i = 0; i < users.length; i++) {
-      mentionedEmails.push(users[i].emailAddress);
-      if ((msgElements.assignee) && (msgElements.assignee === users[i].name)) {
+    mentionedUserPromises.push(jira.lookupUser(user).then((userObj) => {
+      mentionedEmails.push(userObj.emailAddress);
+      if ((msgElements.assignee) && (msgElements.assignee === userObj.name)) {
         // If this was an assignment and this is the assignee add som extra info
-        msgElements.assignedTo = users[i].displayName;
-        msgElements.assignedToEmail = users[i].emailAddress;
+        msgElements.assignedTo = userObj.displayName;
+        msgElements.assignedToEmail = userObj.emailAddress;
       }
-    }
+    }).catch((e) => {
+      // User lookup failed, log it and move on.
+      logger.error(`notifyMentioned() caught exception: ${e.message}`);
+    }).finally(() => when(true)));
+  });
+
+  return when.all(mentionedUserPromises).then(() => {
     return notifyBotUsers(framework, "mentioned", msgElements, mentionedEmails, jira, cb);
   }).catch((e) => {
     logger.error(`notifyMentioned() caught exception: ${e.message}`);
@@ -340,9 +374,14 @@ function notifyBotUsers(framework, recipientType, msgElements, emails, jira, cb)
 }
 
 function sendWebexNotification(bot, recipientType, userConfig, msgElements, jira, cb) {
-  if ((bot.isDirectTo == msgElements.authorEmail) &&
+  if ((bot.isDirectTo === msgElements.authorEmail) &&
     ((!userConfig) || (!userConfig.hasOwnProperty('notifySelf')) || (!userConfig.notifySelf))) {
-    logger.info('Not sending notification of update made by ' + bot.isDirectTo + ' to ' + msgElements.authorEmai);
+    logger.info('Not sending notification ' + bot.isDirectTo + ' about their own change.');
+    return;
+  }
+  if ((recipientType === 'watcher') &&
+    ((!userConfig) || (!userConfig.hasOwnProperty('watcherMsgs')) || (!userConfig.watcherMsgs))) {
+    logger.info(bot.isDirectTo + ' has watcher notifications turned off.  Not sending notification.');
     return;
   }
   let msg;
@@ -405,6 +444,8 @@ function buildMentionedMessage(msgElements, botEmail, jira) {
           msg = `${msgElements.author} changed the status to "${msgElements.updatedTo}" for Jira ${msgElements.issueType}: `;
         } else if (msgElements.action === 'updated') {
           msg += `updated by ${msgElements.author}: `;
+        } else if (msgElements.action === 'resolution') {
+          msg = `${msgElements.author} changed the resolution state to "${msgElements.updatedTo}" for Jira ${msgElements.issueType}: `;
         } else {
           logger.warn(`buildMentionedMessage: Unsure how to format message for ` +
             `action:${msgElements.action} in ${JSON.stringify(msgElements, 2, 2)}`);
@@ -440,7 +481,7 @@ function buildWatcherOrAssigneeMessage(msgElements, botEmail, jira) {
         break;
 
       case ('issue'):
-        if ((msgElements.action === 'created') || (msgElements.action === 'updated')) {
+        if ((msgElements.action === 'created') || (msgElements.action === 'updated') || (msgElements.action === 'moved')) {
           msg = `${msgElements.author} ${msgElements.action} a `;
         } else if (msgElements.action === 'assigned') {
           if (msgElements.assignedToEmail === botEmail) {
@@ -450,10 +491,16 @@ function buildWatcherOrAssigneeMessage(msgElements, botEmail, jira) {
           }
         } else if (msgElements.action === 'status') {
           msg = `${msgElements.author} changed the status to "${msgElements.updatedTo}" for `;
+        } else if (msgElements.action === 'resolution') {
+          msg = `${msgElements.author} set the resolution state to "${msgElements.updatedTo}" for `;
+        } else if (msgElements.action === 'description') {
+          msg = `${msgElements.author} updated the description of a `;
+        } else if (msgElements.action === 'deleted') {
+          msg = `${msgElements.author} deleted a `;
         } else {
-          msg = 'Something happened to a ';
-          logger.warn(`buildWatcherOrAssigneeMessage: Unsure how to format message for ` +
-            `an issue with msgElments.action=${msgElements.action}.`);
+          logger.warn(`buildWatcherOrAssigneeMessage: Got an issue with msgElments.action=${msgElements.action},` +
+            ' Will format message with a generic update status');
+          msg = `${msgElements.author} made an update to a `;
         }
         break;
 
@@ -477,11 +524,17 @@ function buildWatcherOrAssigneeMessage(msgElements, botEmail, jira) {
 }
 
 function convertNewlines(text) {
+  if (!text) {
+    return '';
+  }
   return text.replace(/(?:\r\n\r\n|\r\n|\r|\n)/g, '<br />');
 }
 
 // helper function to build a list of all the mentioned users in a description or comment
 function getAllMentions(str) {
+  if (!str) {
+    return [];
+  }
   let mentionsRegEx = /\[~(\w+)\]/g;
   let mentions = [];
   // TODO -- update this to populate with full emails
@@ -495,28 +548,61 @@ function getAllMentions(str) {
 // Dump the Jira Event to a file to see what the contents are
 var fs = require('fs');
 function logJiraEvent(jiraEvent) {  // eslint-disable-line no-unused-vars
-  fs.writeFile("./JiraEvents/" + jiraEvent.timestamp + '-' + jiraEvent.webhookEvent +
-    ".json", JSON.stringify(jiraEvent, null, 4), (err) => {
-    if (err) {
-      logger.error('Error writing jira event to disk:' + err);
-    }
-  });
-}
-
-function createTestCase(e, jiraEvent, changedField = '') {
-  let filename = `./potential-jira-event-test-cases/${jiraEvent.timestamp}` +
-    `-${jiraEvent.webhookEvent}-${changedField}.error`;
-  // TODO what is this "changedField"
+  let filename = buildFilename(`./JiraEvents`, jiraEvent);
   fs.writeFile(filename, JSON.stringify(jiraEvent, null, 4), (err) => {
     if (err) {
       logger.error('Error writing jira event to disk:' + err);
     }
-    if (e) {
+  });
+  logger.info(`Saving ${filename}`);
+}
+
+function createTestCase(e, jiraEvent, framework, changedField = '') {
+  let filename = buildFilename(`./potential-jira-event-test-cases`,
+    jiraEvent, changedField);
+  fs.writeFile(filename, JSON.stringify(jiraEvent, null, 4), (err) => {
+    if (err) {
+      logger.error('createTestCase() Error writing jira event to disk:' + err);
+    }
+    if ((typeof e === 'object') && (Object.keys(e).length !== 0)) {
       fs.appendFile(filename, JSON.stringify(e, null, 4), (err) => {
         if (err) {
           logger.error('Error writing jira event to disk:' + err);
         }
       });
     }
+    if (process.env.ADMIN_EMAIL) {
+      // Message the admin about this 
+      let msg = {
+        toPersonEmail: process.env.ADMIN_EMAIL,
+        // filename,
+        markdown: `Got an error processing event`,
+        files: [ fs.createReadStream(filename) ]
+      };
+      if (e && e.message) {
+        msg.markdown += `: **${e.message}**`;
+      }
+      framework.webex.messages.create(msg)
+        .catch((err) => {
+          logger.error(`Failed to post message to admin about error: ${err.message}`);
+        });
+    }
   });
+}
+
+function buildFilename(path, jiraEvent, changedField = '') {
+  // ToDo - could probably improve handling if certain elements are missing
+  let filename = `${path}/${jiraEvent.timestamp}_`;
+  if ((typeof jiraEvent.issue === 'object') && (jiraEvent.issue.key)){
+    filename += `${jiraEvent.issue.key}`;
+  } 
+  filename += `-${jiraEvent.webhookEvent}`;
+  if (jiraEvent.issue_event_type_name) {
+    filename += `-${jiraEvent.issue_event_type_name}`;
+  } 
+  if (changedField) {
+    filename += `-${changedField}`;
+  }
+  filename += `.json`;
+  return filename;
 }

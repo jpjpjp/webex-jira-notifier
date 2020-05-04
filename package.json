@@ -1,15 +1,16 @@
 {
   "name": "jira-notification-bot",
-  "version": "1.1.0",
+  "version": "1.5.0",
   "description": "Bot for notifying a user when they are mentioned in or assigned to a jira ticket",
   "main": "server.js",
   "engines": {
-    "node": ">=8.0"
+    "node": ">=10.0"
   },
   "engineStrict": true,
   "scripts": {
     "start": "node server.js",
-    "test": "node test-jira-event-handler.js"
+    "test": "node test-jira-event-handler.js",
+    "deploy": "cd deploy; node deploy.js"
   },
   "keywords": [
     "Cisco",
@@ -19,13 +20,19 @@
   ],
   "author": "JP Shipherd",
   "license": "ISC",
+  "devDependencies": {
+    "js-yaml": "^3.13.1",
+    "mustache": "^4.0.1"
+  },
   "dependencies": {
     "body-parser": "^1.15.2",
+    "dev-dependencies": "^1.0.0",
     "dotenv": "^5.0.1",
     "express": "^4.14.0",
+    "mongodb": "^3.5.7",
     "request": "^2.88.2",
     "request-promise": "^4.2.2",
-    "webex-node-bot-framework": "^1.2.0",
+    "webex-node-bot-framework": "^1.2.1",
     "winston": "^2.4.1",
     "winston-papertrail": "^1.0.5"
   }
