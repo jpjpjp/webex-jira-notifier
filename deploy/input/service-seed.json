@@ -1,0 +1,23 @@
+{
+  "apiVersion": "v1",
+  "kind": "Service",
+  "metadata": {
+    "name": "{{serviceName}}",
+    "namespace": "{{projectName}}"
+  },
+  "spec": {
+    "ports": [
+      {
+        "name": "web",
+        "port": "{{incomingPort}}",
+        "protocol": "TCP",
+        "targetPort": "{{targetPort}}"
+      }
+    ],
+    "selector": {
+      "app": "{{appName}}"
+    },
+    "sessionAffinity": "None",
+    "type": "ClusterIP"
+  }
+}
