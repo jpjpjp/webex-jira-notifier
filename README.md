@@ -35,7 +35,7 @@ Prerequisites:
 Set the following environment varibles in a .env file if running locally or in your production environment:
 * TOKEN - the token that you got when you created your bot at https://developer.ciscospark.com/add-bot.html
 * PORT - the port where your app is running.  This is typically needed when running locally with ngrok, and set automatically when running in a production environemnt.
-* EMAIL_ORG - the email domain that all your Jira users belong to, ie: "my-company.com"
+* DEFAULT_DOMAIN - the email domain that all your Jira users belong to, ie: "my-company.com".  This is used to formulate a "best guess" at users email, when user lookup up a mentioned user fails.
 * MONGO_URI - the URI string to log into your Mongo Altas DB
 * MONGO_BOT_STORE - the name of the collection that your user info will be stored in
 * JIRA_URL - the URL of the jira system to monitor, ie:'https://jira.mycompany.com/jira'
@@ -71,6 +71,9 @@ The following commands are supported:
 The project comes with a set of reference Jira events.  When modifying the jira-notifer module developers can check to ensuer that nothing broke by running the following command:      ```npm test```
 
 When the app encounters something unepexpected in the jira webhook payload which causes an exception, the offending payload is saved in the jira-event-test-cases directory.  Developerss can modify the test-jira-event-handler.js to send new payloads to the test framework and modify the app to support these payloads
+
+## Deploy
+The project now comes with a deploy script for deploying in an OpenShift Kubernetes deployment environment. Details in the [deploy readme](./deploy/deploy-to-openshift.md)
 
 ## TO-DO
 * The current implementation requires that all jira users belong to the same email domain.  A future enhancement might support multiple domains and add code to translate jira mentions to the right email org.
