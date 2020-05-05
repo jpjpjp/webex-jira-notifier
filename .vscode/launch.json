@@ -10,7 +10,10 @@
             "type": "node",
             "request": "launch",
             "outputCapture": "std",  // puts Winston logger in VSCode console
-            "env": {"DEBUG":"framework"},
+            "env": {
+              "DEBUG":"framework",
+              "USE_ISSUE_UPDATED_FOR_COMMENTS": "true"
+            },
             "protocol": "inspector",
             "program": "${workspaceFolder}/server.js"
         },
@@ -31,12 +34,28 @@
                     "VERBOSE":"true",
                     "TEST_TIMER_MULTIPLIER": "500500",
                     "USE_ISSUE_UPDATED_FOR_COMMENTS": "true",
+                    "TEST_CASES": "SUBSET",
+                    "TEST_CASE_DIR": "sandbox-jira-event-test-cases",
                     "LOG_LEVEL": "0"},
             "protocol": "inspector",
             "outputCapture": "std",
-            "program": "${workspaceFolder}/test-jira-event-handler.js"
+            "program": "${workspaceFolder}/sandbox-jira-event-test-cases/test-jira-event-handler.js"
         },
         {
+          "name": "Launch Old Test",
+          "type": "node",
+          "request": "launch",
+          "env": {"DEBUG":"framework",
+                  "VERBOSE":"true",
+                  "TEST_TIMER_MULTIPLIER": "500500",
+                  "TEST_CASES": "SUBSET",
+                  "TEST_CASE_DIR": "prod-jira-event-test-cases",
+                  "LOG_LEVEL": "0"},
+          "protocol": "inspector",
+          "outputCapture": "std",
+          "program": "${workspaceFolder}/test-jira-event-handler.js"
+      },
+      {
             "name": "Heroku",
             "type": "node",
             "request": "attach",
