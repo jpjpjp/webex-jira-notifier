@@ -37,8 +37,12 @@ JiraWebhook.png
 ./deploy/.env*
 ./deploy/ouput/*
 ./deploy/cisco-specific/*
-./old-deploy/*
+./old-deploy/*.*
 
 # project specific database tools
 ./database/*
 
+database/
+deploy/cisco-specific/
+deploy/output/
+old-deploy/
