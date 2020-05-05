@@ -35,9 +35,9 @@ JiraWebhook.png
 
 # project specific deploy configs and secrets
 ./deploy/.env*
-./deploy/ouput
-./deploy/cisco-specific
-./old-deploy
+./deploy/ouput/*
+./deploy/cisco-specific/*
+./old-deploy/*
 
 # project specific database tools
 ./database/*
