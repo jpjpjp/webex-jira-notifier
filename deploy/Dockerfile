@@ -5,6 +5,9 @@ ARG BUILD_TIMESTAMP
 # Make it available to the running image
 ENV DOCKER_BUILD=$BUILD_TIMESTAMP
 
+# Make rsync availabe in the image
+RUN apt-get update && apt-get -y install rsync
+
 # Setup the directories for our app and make them 
 # accesible to non-root users.
 RUN mkdir -p /usr/src/app
