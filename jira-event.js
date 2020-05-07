@@ -99,7 +99,6 @@ function processIssueEvent(jiraEvent, framework, jira, cb) {
       return;
     }
 
-
     // TODO figure out how/if this is still relevent
     // The new module pretty much REQUIRES full access to Jira to work
     // // Is this from one of the proejcts we can access?
@@ -169,16 +168,6 @@ function processIssueEvent(jiraEvent, framework, jira, cb) {
     if ((msgElements.subject === "issue") && (msgElements.action === 'created') && (issue.fields.assignee)) {
       // Set action to assigned to when issue was assigned when it was created
       msgElements.action = 'assigned';
-// Perhaps this is not necessary?      
-    // } else if (msgElements.action === 'assigned') {
-    //   if (jiraEvent.changelog && jiraEvent.changelog.items) {
-    //     msgElements.assignee = jiraEvent.changelog.items[0].to;
-    //     if (!toNotifyList.find((user) => user === msgElements.assignee)) {
-    //       toNotifyList.push(msgElements.assignee);
-    //     }
-    //   }
-// Perhaps we can be even more "generic" than this
-//    } else if (msgElements.action === 'generic') {
     } else if ((jiraEvent.webhookEvent === 'jira:issue_updated') &&
       (!issueEventWithComment.test(jiraEvent.issue_event_type_name)) &&
       (msgElements.action !== 'moved')) {
@@ -196,8 +185,13 @@ function processIssueEvent(jiraEvent, framework, jira, cb) {
         // Otherwise we take the first thing in the changelog
         if (msgElements.action === '') {
           msgElements.action = jiraEvent.changelog.items[0].field;
+          // clean up some of the action names for better message syntax
           if (msgElements.action === 'assignee') {
             msgElements.action = 'assigned'; 
+          } else if (msgElements.action === 'Attachment') {
+            msgElements.action = 'attachments'; 
+          } else if (msgElements.action === 'duedate') {
+            msgElements.action = 'due date'; 
           }
           msgElements.updatedTo = jiraEvent.changelog.items[0].toString;
         }
@@ -214,11 +208,9 @@ function processIssueEvent(jiraEvent, framework, jira, cb) {
     return when(watcherPromise).then((watcherInfo) => {
       return processWatcherInfo(framework, watcherInfo, toNotifyList, msgElements, jira, cb);
     }).catch((e) => {
-// Temporarily remove this      
-      // logger.warn(`Failed getting watchers associated with issue ${jiraEvent.issue.key}: ` +
-      //   `"${e.message}". Can only notify the assignee and mentioned users.`);
-      // It may not make sense to create a test case when this happens
-      // createTestCase(e, jiraEvent, 'caught-error');
+      logger.warn(`Failed getting watchers associated with issue ${jiraEvent.issue.key}: ` +
+        `"${e.message}". Can only notify the assignee and mentioned users.`);
+      createTestCase(e, jiraEvent, 'caught-error');
     });
 
   } catch (e) {
@@ -470,14 +462,6 @@ function buildWatcherOrAssigneeMessage(msgElements, botEmail, jira) {
     switch (msgElements.subject) {
       case ('comment'):
         msg = `${msgElements.author} ${msgElements.action} a comment on a `;
-        // if (msgElements.action === 'created') {
-        //   msg += 'commented on a ';
-        // } else if (msgElements.action === 'updated') {
-        //   msg += 'updated a comment on a ';
-        // } else {
-        //   logger.warn(`buildWatchedMessage: Unsure how to format message for ` +
-        //     `action:${msgElements.action} in ${JSON.stringify(msgElements, 2, 2)}`);
-        // }
         break;
 
       case ('issue'):
@@ -498,9 +482,10 @@ function buildWatcherOrAssigneeMessage(msgElements, botEmail, jira) {
         } else if (msgElements.action === 'deleted') {
           msg = `${msgElements.author} deleted a `;
         } else {
+          msg = `${msgElements.author} changed the ${msgElements.action} for `;
           logger.warn(`buildWatcherOrAssigneeMessage: Got an issue with msgElments.action=${msgElements.action},` +
-            ' Will format message with a generic update status');
-          msg = `${msgElements.author} made an update to a `;
+            `Setting a generic message: "${msg}"`);
+          //msg = `${msgElements.author} made an update to a `;
         }
         break;
 
