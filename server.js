@@ -411,7 +411,7 @@ function tryToInitAdminBot(bot, framework) {
     (bot.isDirectTo.toLocaleLowerCase() === adminEmail.toLocaleLowerCase())) {
     adminsBot = bot;
     framework.adminsBot = adminsBot;
-    adminsBot.sayWithLocalFile('Starting up again...', './JiraWebhook.png');
+    adminsBot.say('Starting up again...');
   } else if ((!adminsBot) && (adminSpaceId) && (bot.room.id === adminSpaceId)) {
     adminsBot = bot;
     framework.adminsBot = adminsBot;
