@@ -52,7 +52,7 @@ class JiraEventHandler {
     try {
 
       if (commentEvent.test(jiraEvent.webhookEvent)) {
-        if (process.env.USE_ISSUE_UPDATED_FOR_COMMENTS) {
+        if (!process.env.PROCESS_COMMENT_EVENTS) {
           logger.info(`Ignoring webhookEvent: "${jiraEvent.webhookEvent}, ` +
           `Will use issue_updated event instead.`);
           return;
@@ -84,7 +84,7 @@ function processIssueEvent(jiraEvent, framework, jira, cb) {
     // process it depending on how we are configured...
     if ((jiraEvent.webhookEvent === 'jira:issue_updated') &&
       (issueEventWithComment.test(jiraEvent.issue_event_type_name))) {
-      if (!process.env.USE_ISSUE_UPDATED_FOR_COMMENTS) {
+      if (process.env.PROCESS_COMMENT_EVENTS) {
         logger.verbose(`Igoring issue_updated for a ` +
         `${jiraEvent.issue_event_type_name} for ${jiraEvent.issue.key}.` +
         `Expecting a new comment_[created/deleted] event instead`);
