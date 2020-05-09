@@ -1,0 +1,51 @@
+# Don't need this in our image
+.dockerignore
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+.DS_Store
+
+# Local notes to myself
+*.txt
+
+# Directory for storing jira events and project specific tests cases
+JiraEvents/*
+potential-jira-event-test-cases/*
+prod-jira-event-test-cases/*
+sandbox-jira-event-test-cases/*
+simulated-webhooks/*
+
+# Dependency directories
+node_modules
+jspm_packages
+
+# Optional npm cache directory
+.npm
+
+# Optional REPL history
+.node_repl_history
+
+# Config
+.env*
+JiraWebhook.png
+
+# project specific deploy configs and secrets
+./deploy/.env*
+./deploy/ouput/*
+./deploy/cisco-specific/*
+./old-deploy/*.*
+
+# project specific database tools
+./database/*
+
+database/
+deploy/cisco-specific/
+deploy/output/
+old-deploy/

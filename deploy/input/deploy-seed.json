@@ -1,0 +1,204 @@
+{
+  "apiVersion": "extensions/v1beta1",
+  "kind": "Deployment",
+  "metadata": {
+    "name": "{{appName}}",
+    "namespace": "{{projectName}}"
+  },
+  "spec": {
+    "replicas": 1,
+    "minReadySeconds": 300,
+    "revisionHistoryLimit": 20,
+    "selector": {
+      "matchLabels": {
+        "app": "{{appName}}"
+      }
+    },
+    "strategy": {
+      "type": "RollingUpdate",
+      "rollingUpdate": {
+        "maxSurge": 1,
+        "maxUnavailable": 1
+      }
+    },
+    "template": {
+      "metadata": {
+        "labels": {
+          "app": "{{appName}}"
+        }
+      },
+      "spec": {
+        "containers": [
+          {
+            "env": [
+              {
+                "name": "PAPERTRAIL_HOST",
+                "valueFrom": {
+                  "configMapKeyRef": {
+                    "key": "PAPERTRAIL_HOST",
+                    "name": "{{configName}}"
+                  }
+                }
+              },
+              {
+                "name": "PAPERTRAIL",
+                "valueFrom": {
+                  "configMapKeyRef": {
+                    "key": "PAPERTRAIL",
+                    "name": "{{configName}}"
+                  }
+                }
+              },
+              {
+                "name": "PAPERTRAIL_PORT",
+                "valueFrom": {
+                  "configMapKeyRef": {
+                    "key": "PAPERTRAIL_PORT",
+                    "name": "{{configName}}"
+                  }
+                }
+              },
+              {
+                "name": "LOG_LEVEL",
+                "valueFrom": {
+                  "configMapKeyRef": {
+                    "key": "LOG_LEVEL",
+                    "name": "{{configName}}"
+                  }
+                }
+              },
+              {
+                "name": "TOKEN",
+                "valueFrom": {
+                  "configMapKeyRef": {
+                    "key": "TOKEN",
+                    "name": "{{configName}}"
+                  }
+                }
+              },
+              {
+                "name": "PORT",
+                "valueFrom": {
+                  "configMapKeyRef": {
+                    "key": "PORT",
+                    "name": "{{configName}}"
+                  }
+                }
+              },
+              {
+                "name": "MONGO_URI",
+                "valueFrom": {
+                  "configMapKeyRef": {
+                    "key": "MONGO_URI",
+                    "name": "{{configName}}"
+                  }
+                }
+              },
+              {
+                "name": "MONGO_BOT_STORE",
+                "valueFrom": {
+                  "configMapKeyRef": {
+                    "key": "MONGO_BOT_STORE",
+                    "name": "{{configName}}"
+                  }
+                }
+              },
+              {
+                "name": "ADMIN_EMAIL",
+                "valueFrom": {
+                  "configMapKeyRef": {
+                    "key": "ADMIN_EMAIL",
+                    "name": "{{configName}}"
+                  }
+                }
+              },
+              {
+                "name": "JIRA_PROJECTS",
+                "valueFrom": {
+                  "configMapKeyRef": {
+                    "key": "JIRA_PROJECTS",
+                    "name": "{{configName}}"
+                  }
+                }
+              },
+              {
+                "name": "JIRA_USER",
+                "valueFrom": {
+                  "configMapKeyRef": {
+                    "key": "JIRA_USER",
+                    "name": "{{configName}}"
+                  }
+                }
+              },
+              {
+                "name": "JIRA_URL",
+                "valueFrom": {
+                  "configMapKeyRef": {
+                    "key": "JIRA_URL",
+                    "name": "{{configName}}"
+                  }
+                }
+              },
+              {
+                "name": "JIRA_PW",
+                "valueFrom": {
+                  "configMapKeyRef": {
+                    "key": "JIRA_PW",
+                    "name": "{{configName}}"
+                  }
+                }
+              },
+              {
+                "name": "LOG_JIRA_EVENTS",
+                "valueFrom": {
+                  "configMapKeyRef": {
+                    "key": "LOG_JIRA_EVENTS",
+                    "name": "{{configName}}"
+                  }
+                }
+              },
+              {
+                "name": "DEFAULT_DOMAIN",
+                "valueFrom": {
+                  "configMapKeyRef": {
+                    "key": "DEFAULT_DOMAIN",
+                    "name": "{{configName}}"
+                  }
+                }
+              }
+            ],
+            "image": "{{containerHub}}/{{userName}}/{{appName}}:{{imageVersion}}",
+            "imagePullPolicy": "Always",
+            "name": "{{appName}}",
+            "ports": [
+              {
+                "containerPort": "{{targetPort}}",
+                "protocol": "TCP"
+              }
+            ],
+            "resources": {
+              "limits": {
+                "memory": "3Gi"
+              },
+              "requests": {
+                "memory": "3Gi"
+              }
+            },
+            "terminationMessagePath": "/dev/termination-log",
+            "terminationMessagePolicy": "File"
+          }
+        ],
+        "imagePullSecrets": [
+          {
+            "name": "{{pullSecret}}"
+          }
+        ],
+        "dnsPolicy": "ClusterFirst",
+        "restartPolicy": "Always",
+        "schedulerName": "default-scheduler",
+        "securityContext": {},
+        "terminationGracePeriodSeconds": 30
+      }
+    }
+  }
+}
