@@ -6,6 +6,7 @@ Jira ticket and/or if it is assigned to them.
 console.log(process.version);
 
 
+const package_version = require('./package.json').version;
 var Framework = require('webex-node-bot-framework');
 var express = require('express');
 var bodyParser = require('body-parser');
@@ -18,26 +19,17 @@ logger = require('./logger');
 
 
 // Helper classes for dealing with Jira Webhook payload
-var jiraEventHandler = require("./jira-event.js");
 let jira = {};
+let jiraEventHandler = {};
 try {
   // Create the object for interacting with Jira
   var JiraConnector = require('./jira-connector.js');
   jira = new JiraConnector();
+  const JiraEventHandler = require("./jira-event.js");
+  jiraEventHandler = new JiraEventHandler(jira);
 } catch (err) {
   logger.error('Initialization Failure: ' + err.message);
   process.exit(-1);
-}
-
-
-// EMAIL_ORG environment is the email domain for our jira
-// Only those users are allowed to use our bot
-let emailOrg = '';
-if (process.env.EMAIL_ORG) {
-  emailOrg = process.env.EMAIL_ORG;
-} else {
-  logger.error('Cannot read required environment variable EMAIL_ORG');
-  return;
 }
 
 // Set the config vars for the environment we are running in
@@ -87,7 +79,7 @@ if (process.env.MONGO_URI) {
     'Also note, the mongodb module v3.4 or higher must be available (this is not included in the framework\'s default dependencies)');
   logger.error('Running without having these set will mean that there will be no persistent storage \n' +
     'across server restarts, and that no metrics will be written.  Generally this is a bad thing for production, \n' +
-    ' but may be expected in developement.  If you meant this, please disregard warnings about ' +
+    ' but may be expected in development.  If you meant this, please disregard warnings about ' +
     ' failed calls to bot.recall() and bot.writeMetric()');
 }
 
@@ -184,8 +176,10 @@ framework.on('spawn', function (bot, id, addedById) {
       logger.info(`Bot object spawn() in existing room: "${bot.room.title}" ` +
         `where activity has occured since our server started`);
     }
-    // Check if this existing user needs to see the new functionality message
-    // bot.recall('newFunctionalityMsg').catch(() => {
+    // //Check if this existing user needs to see the new functionality message
+    // bot.recall('newFunctionalityMsg2').then((val) => {
+    //   logger.info(`For ${bot.isDirectTo} got newFunctionalityMsg2 == ${val}`);
+    // }).catch(() => {
     //   // This user hasn't gotten the new functionality message yet
     //   sayNewFunctionalityMessage(bot);
     // });
@@ -212,68 +206,78 @@ framework.on('spawn', function (bot, id, addedById) {
 });
 
 function sayNewFunctionalityMessage(bot) {
-  bot.say('I\'ve just been updated so that I can give you more information!\n\n' +
-    'In addition to notifying you when you are mentioned in, or assigned to, ' +
-    'a jira ticket, I will now send you a message if a ticket you are watching ' +
-    'is changed.\n\n' +
-    'This may make me too "chatty" for some users, especially those who are ' +
-    'automatically made watchers to many tickets.   To turn off watcher messages, ' +
-    'but keep getting notified for mentions and assignments just type **no watchers**\n\n' +
-    'If you want the functionality back, type **yes watchers**' +
-    "\n\nIf you aren't sure which messages you are getting, just type **status**" +
-    "\n\nQuestions or feedback?   Join the Ask JiraNotification Bot space here: https://eurl.io/#Hy4f7zOjG"
+  bot.say('Not sure if you noticed, but I haven\'t been doing a good job lately of notifying you ' +
+    'about all the jira issues you aren\'t explicitly mentioned in. ' +
+    'I\'ve recently been redeployed in a network configuration that should ' +
+    'give me better access to info about watchers and assignees too. ' +
+    'Remember you can always type **help** to learn how to change the '+
+    'things I notify you about.\n\n' +
+    'I\'ve also learned a new trick.  If you reply to one of my notifications, I will post ' +
+    'the content of that message as a new comment on that jira issue on your behalf.  Get more done in Teams!\n\n' +
+    '\n\nI don\'t have access to every project in jira, so if you find this isn\'t working for you, please ' +   
+    'post a message in the [Ask JiraNotification Bot space](https://eurl.io/#Hy4f7zOjG). That way we can ' +
+    'work with the project admin to add me to the project.\n\n' +
+    'Finally, if you find me useful, consider telling your teammates about me and help them ' +
+    'get more done in Teams too.\n\n'
   );
+  bot.store('newFunctionalityMsg2', true);
 }
 
 
-function postInstructions(bot, status_only = false, instructions_only = false) {
-  if (!status_only) {
-    bot.say("I will look for Jira tickets that are assigned to, or that mention " +
-      bot.isDirectTo + " and notify you so you can check out the ticket immediately.  " +
-      "\n\nIf you'd like to comment on a ticket I notified you about you can post " +
-      "a threaded reply and I'll update the ticket with your message as a comment." +
-      "\n\nI'll also notify you of changes to any tickets you are watching. " +
-      'If the watcher messages make me too "chatty", but you want to ' +
-      'keep getting notified for mentions and assignments just type **no watchers**. ' +
-      'If you want the watcher messages back, type **yes watchers**.' +
-      '\n\nBy default, I won\'t notify you about changes you have made, but if you want to ' +
-      'see them just type **yes notifyself**. ' +
-      'If you want to turn that behavior off, type **no notifyself**.' +
-      "\n\nYou can also type the command **shut up** to get me to stop sending any messages. " +
-      "If you ever want me to start notifying you again, type **come back**." +
-      "\n\nIf you aren't sure if I'm giving you notifications, just type **status**" +
-      "\n\nQuestions or feedback?   Join the Ask JiraNotification Bot space here: https://eurl.io/#Hy4f7zOjG");
-  }
-  if (!instructions_only) {
-    bot.recall('userConfig')
-      .then(function (userConfig) {
-        let msg = '';
-        if (userConfig.askedExit) {
-          msg = "\n\nCurrent Status: \n* Notifications are **disabled**.";
+async function postInstructions(bot, status_only = false, instructions_only = false) {
+  try {
+    if (!status_only) {
+      await bot.say("I will look for Jira tickets that are assigned to, or that mention " +
+        bot.isDirectTo + " and notify you so you can check out the ticket immediately.  " +
+        "\n\nIf you'd like to comment on a ticket I notified you about you can post " +
+        "a threaded reply and I'll update the ticket with your message as a comment." +
+        "\n\nI'll also notify you of changes to any tickets you are watching. " +
+        'If the watcher messages make me too "chatty", but you want to ' +
+        'keep getting notified for mentions and assignments just type **no watchers**. ' +
+        'If you want the watcher messages back, type **yes watchers**.' +
+        '\n\nI can only notify watchers for issues in projects that I have been granted access to. ' +
+        'To see a list of projects I have access to and learn how to request other projects, ' +
+        'type **projects**' +
+        '\n\nBy default, I won\'t notify you about changes you have made, but if you want to ' +
+        'see them just type **yes notifyself**. ' +
+        'If you want to turn that behavior off, type **no notifyself**.' +
+        "\n\nYou can also type the command **shut up** to get me to stop sending any messages. " +
+        "If you ever want me to start notifying you again, type **come back**." +
+        "\n\nIf you aren't sure if I'm giving you notifications, just type **status**" +
+        "\n\nQuestions or feedback?   Join the Ask JiraNotification Bot space here: https://eurl.io/#Hy4f7zOjG");
+    }
+    if (!instructions_only) {
+      let userConfig = await bot.recall('userConfig');
+        //.then(function (userConfig) {
+      let msg = '';
+      if (userConfig.askedExit) {
+        msg = "\n\nCurrent Status: \n* Notifications are **disabled**.";
+      } else {
+        msg = "\n\nCurrent Status: \n* Mention and Assignment Notifications are **enabled**.";
+        if (userConfig.watcherMsgs) {
+          msg += "\n* Watched Ticket Changed Notifications are **enabled**.";
         } else {
-          msg = "\n\nCurrent Status: \n* Mention and Assignment Notifications are **enabled**.";
-          if (userConfig.watcherMsgs) {
-            msg += "\n* Watched Ticket Changed Notifications are **enabled**.";
-          } else {
-            msg += "\n* Watched Ticket Changed Notifications are **disabled**.";
-          }
-          if (userConfig.notifySelf) {
-            msg += "\n* Notifications for changes to tickets that you have made are **enabled**.";
-          } else {
-            msg += "\n* Notifications for changes to tickets that you have made are **disabled**.";
-          }
+          msg += "\n* Watched Ticket Changed Notifications are **disabled**.";
         }
-        if (status_only) {
-          msg += '\n\nType **help** to learn how to change your Notification state.';
+        if (userConfig.notifySelf) {
+          msg += "\n* Notifications for changes to tickets that you have made are **enabled**.";
+        } else {
+          msg += "\n* Notifications for changes to tickets that you have made are **disabled**.";
         }
-        bot.say(msg);
-        logger.debug('Status for ' + bot.isDirectTo + ': ' + JSON.stringify(userConfig, null, 2));
-      })
-      .catch(function (err) {
-        logger.error('Unable to get askedExit status for ' + bot.isDirectTo);
-        logger.error(err.message);
-        bot.say("Hmmn. I seem to have a database problem, and can't report my notification status.   Please ask again later.");
-      });
+      }
+      if (status_only) {
+        msg += '\n\nType **help** to learn how to change your Notification state.';
+      }
+      await bot.say(msg);
+      logger.debug('Status for ' + bot.isDirectTo + ': ' + JSON.stringify(userConfig, null, 2));
+    //})
+    //    .catch(function (err) {
+    //    });
+    }
+  } catch(e) {
+    logger.error('Unable to get askedExit status for ' + bot.isDirectTo);
+    logger.error(err.message);
+    bot.say("Hmmn. I seem to have a database problem, and can't report my notification status.   Please ask again later.");
   }
 }
 
@@ -410,14 +414,12 @@ function tryToInitAdminBot(bot, framework) {
     (bot.isDirectTo.toLocaleLowerCase() === adminEmail.toLocaleLowerCase())) {
     adminsBot = bot;
     framework.adminsBot = adminsBot;
+    adminsBot.say('Starting up again...');
   } else if ((!adminsBot) && (adminSpaceId) && (bot.room.id === adminSpaceId)) {
     adminsBot = bot;
     framework.adminsBot = adminsBot;
   }
 }
-
-
-
 
 /****
 ## Process incoming messages
@@ -477,6 +479,24 @@ framework.hears(return_words, function (bot/*, trigger*/) {
   responded = true;
 });
 
+var project_words = /^\/?(projects)( |.|$)/i;
+framework.hears(project_words, function (bot/*, trigger*/) {
+  logger.verbose('Processing Projects Request for ' + bot.isDirectTo);
+  if (process.env.JIRA_PROJECTS) {
+    bot.say(`The projects that I can lookup watchers in are: ` + 
+      `${jira.jiraAllowedProjects.join(', ')}\n` +
+      `\n\nThe projects I have attempted to lookup watchers for was denied permission for are: ` +
+      `${jira.jiraDisallowedProjects.join(', ')}\n\n` +
+      `If you are interested in being notified about tickets in any of these denied projects, ` +
+      ` or ones in projects not listed here, please post a message in the ` +
+      `[Ask JiraNotification Bot space](https://eurl.io/#Hy4f7zOjG) and we can find ` +
+      `an appropriate project admin to help get me access.`);
+  } else {
+    bot.say('Sorry, I cannot access the list of projects I am allowed to view right now.');
+  }
+  responded = true;
+});
+
 framework.hears('/showadmintheusers', function (bot/*, trigger*/) {
   logger.verbose('Processing /showadmintheusers Request for ' + bot.isDirectTo);
   updateAdmin('The following people are using me:', true);
@@ -521,6 +541,7 @@ framework.hears(/.*/, function (bot, trigger) {
   if (!responded) {
     if (trigger.message.parentId) {
       // Handle threaded replies as a request to post a comment
+      logger.info(`Posting a comment as a reply in space: "${bot.room.title}"`);
       jira.postCommentToParent(bot, trigger);
     } else {
       let text = trigger.text;
@@ -539,8 +560,13 @@ framework.hears(/.*/, function (bot, trigger) {
 
 // Health Check
 app.get('/', function (req, res) {
-  res.send(`I'm alive.  To use this app add ${botEmail} to a Webex Teams space.`);
+  msg = `I'm alive.  To use this app add ${botEmail} to a Webex Teams space.`;
+  if (process.env.DOCKER_BUILD) {
+    msg += ` App Version:${package_version}, running in container built ${process.env.DOCKER_BUILD}.`;
+  }
+  res.send(msg);
 });
+
 
 // Jira webbhook
 app.post('/jira', function (req, res) {
@@ -548,18 +574,15 @@ app.post('/jira', function (req, res) {
   try {
     jiraEvent = req.body;
     if (typeof jiraEvent.webhookEvent !== 'undefined') {
-      let jiraKey = jiraEvent.issue ? jiraEvent.issue.key : '';
-      logger.info('Processing incoming Jira %s Event %s:%s', jiraKey, jiraEvent.webhookEvent, jiraEvent.issue_event_type_name);
-      jiraEventHandler.processJiraEvent(jiraEvent, framework, emailOrg);
+      jiraEventHandler.processJiraEvent(jiraEvent, framework);
     }
   } catch (e) {
     logger.warn('Error processing Jira Event Webhook:' + e);
-    logger.warn('Ignoring: ' + jiraEvent);
+    logger.warn('Ignoring: ' + JSON.stringify(jiraEvent));
     res.status(400);
   }
   res.end();
 });
-
 // start express server
 var server = app.listen(config.port, function () {
   framework.debug('Framework listening on port %s', config.port);
@@ -571,8 +594,18 @@ process.on('SIGTERM', sayGoodbye);
 
 function sayGoodbye() {
   logger.info('stoppping...');
-  server.close();
-  framework.stop().then(function () {
-    process.exit();
-  });
+  if (adminsBot) {
+    adminsBot.say('Shutting down...')
+      .finally(() => {
+        server.close();
+        framework.stop().then(function () {
+          process.exit();
+        });    
+      });
+  } else { 
+    server.close();
+    framework.stop().then(function () {
+      process.exit();
+    });
+  }
 }
