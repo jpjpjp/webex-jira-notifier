@@ -113,6 +113,15 @@
                 }
               },
               {
+                "name": "JIRA_PROJECTS",
+                "valueFrom": {
+                  "configMapKeyRef": {
+                    "key": "JIRA_PROJECTS",
+                    "name": "{{configName}}"
+                  }
+                }
+              },
+              {
                 "name": "JIRA_USER",
                 "valueFrom": {
                   "configMapKeyRef": {
@@ -135,15 +144,6 @@
                 "valueFrom": {
                   "configMapKeyRef": {
                     "key": "JIRA_PW",
-                    "name": "{{configName}}"
-                  }
-                }
-              },
-              {
-                "name": "USE_ISSUE_UPDATED_FOR_COMMENTS",
-                "valueFrom": {
-                  "configMapKeyRef": {
-                    "key": "USE_ISSUE_UPDATED_FOR_COMMENTS",
                     "name": "{{configName}}"
                   }
                 }
