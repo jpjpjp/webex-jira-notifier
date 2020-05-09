@@ -235,6 +235,9 @@ async function postInstructions(bot, status_only = false, instructions_only = fa
         'If the watcher messages make me too "chatty", but you want to ' +
         'keep getting notified for mentions and assignments just type **no watchers**. ' +
         'If you want the watcher messages back, type **yes watchers**.' +
+        '\n\nI can only notify watchers for issues in projects that I have been granted access to. ' +
+        'To see a list of projects I have access to and learn how to request other projects, ' +
+        'type **projects**' +
         '\n\nBy default, I won\'t notify you about changes you have made, but if you want to ' +
         'see them just type **yes notifyself**. ' +
         'If you want to turn that behavior off, type **no notifyself**.' +
@@ -473,6 +476,24 @@ framework.hears(return_words, function (bot/*, trigger*/) {
   logger.verbose('Processing Return Request for ' + bot.isDirectTo);
   setAskedExit(bot, false);
   updateAdmin(bot.isDirectTo + ' asked me to start notifying them again');
+  responded = true;
+});
+
+var project_words = /^\/?(projects)( |.|$)/i;
+framework.hears(project_words, function (bot/*, trigger*/) {
+  logger.verbose('Processing Projects Request for ' + bot.isDirectTo);
+  if (process.env.JIRA_PROJECTS) {
+    bot.say(`The projects that I can lookup watchers in are: ` + 
+      `${jira.jiraAllowedProjects.join(', ')}\n` +
+      `\n\nThe projects I have attempted to lookup watchers for was denied permission for are: ` +
+      `${jira.jiraDisallowedProjects.join(', ')}\n\n` +
+      `If you are interested in being notified about tickets in any of these denied projects, ` +
+      ` or ones in projects not listed here, please post a message in the ` +
+      `[Ask JiraNotification Bot space](https://eurl.io/#Hy4f7zOjG) and we can find ` +
+      `an appropriate project admin to help get me access.`);
+  } else {
+    bot.say('Sorry, I cannot access the list of projects I am allowed to view right now.');
+  }
   responded = true;
 });
 

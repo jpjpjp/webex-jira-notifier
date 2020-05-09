@@ -22,7 +22,6 @@ class JiraConnector {
       this.jira_lookup_user_api = '';
       this.proxy_url = '';
       this.jira_url_regexp = null;
-      //this.jiraProjects = null;
       this.jiraReqOpts = {
         "json": true,
         method: 'GET',
@@ -52,8 +51,10 @@ class JiraConnector {
         }
 
         // Check if our bot is only allowed to access specified jira projects
+        this.jiraAllowedProjects = [];
+        this.jiraDisallowedProjects = [];
         if (process.env.JIRA_PROJECTS) {
-          this.jiraProjects = process.env.JIRA_PROJECTS.split(',');
+          this.jiraAllowedProjects = process.env.JIRA_PROJECTS.split(',');
         }
 
         // Check if our environment overrode the lookup by username path
@@ -196,20 +197,51 @@ class JiraConnector {
 
   /**
    * Lookup watchers base on info in jira issue object
+   * 
+   * This method includes some logic to try to "get smart"
+   * about which projects it is able to see watchers in and 
+   * which it isn't.  As it gets 403 responses for certain projects
+   * it will add them to a disallowed list and no longer attempt
+   * to find watchers for those projects.
    *
    * @function lookupWatcherInfoFromIssue
    * @param {object} issue - email or username to lookup
    */
   lookupWatcherInfoFromIssue(issue) {
-    let watcherPromise = null;
     let watches = issue.fields.watches;
+    let project = '';
+    if ((typeof issue.fields === 'object') && (typeof issue.fields.project === 'object')) {
+      project = issue.fields.project.key;
+      if (-1 !== this.jiraDisallowedProjects.indexOf(project)) {
+        logger.debug(`Skipping watcher lookup in known dissallowed project: ${project}`);
+        return when(null);
+      }
+    } 
     if (watches && watches.watchCount && watches.self) {
       // Use a proxy server if configured
       let watcherUrl = watches.self;
-      watcherPromise = request.get(this.convertForProxy(watcherUrl),
-        this.jiraReqOpts);
+      return request.get(this.convertForProxy(watcherUrl), this.jiraReqOpts)
+        .then(watcherInfo => {
+          if (-1 === this.jiraAllowedProjects.indexOf(project)) {
+            // Temporary so I see this in the logs
+            logger.error(`Got watcher info for project "${issue.fields.project.key}` +
+              ` but it is not in our allowed project list.`);
+            this.jiraAllowedProjects.push(project);
+          }
+          return when(watcherInfo);
+        }).catch(e => {
+          if (e.statusCode === 403) {
+            if (-1 === this.jiraDisallowedProjects.indexOf(project)) {
+            // Temporary so I see this in the logs
+              logger.error(`Failed watcher info for project "${issue.fields.project.key}` +
+              ` adding it to the disallowed list.`);
+              this.jiraDisallowedProjects.push(project);
+            }
+          }
+          return when.reject(e);
+        });
     }
-    return watcherPromise;
+    return when(null);
   }
 
   /**
