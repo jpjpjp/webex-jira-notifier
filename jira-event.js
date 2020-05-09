@@ -84,8 +84,8 @@ function processIssueEvent(jiraEvent, framework, jira, cb) {
     // process it depending on how we are configured...
     if ((jiraEvent.webhookEvent === 'jira:issue_updated') &&
       (issueEventWithComment.test(jiraEvent.issue_event_type_name))) {
-      if (process.env.PROCESS_COMMENT_EVENTS) {
-        logger.verbose(`Igoring issue_updated for a ` +
+       if (process.env.PROCESS_COMMENT_EVENTS) {
+        logger.verbose(`Ignoring issue_updated for a ` +
         `${jiraEvent.issue_event_type_name} for ${jiraEvent.issue.key}.` +
         `Expecting a new comment_[created/deleted] event instead`);
         return;
@@ -129,7 +129,8 @@ function processIssueEvent(jiraEvent, framework, jira, cb) {
       issueKey: issue.key,
       issueType: issue.fields.issuetype.name,
       issueSummary: jiraEvent.issue.fields.summary,
-      issueSelf: issue.self
+      issueSelf: issue.self,
+      jiraEvent: jiraEvent  
     };
 
 
@@ -210,12 +211,12 @@ function processIssueEvent(jiraEvent, framework, jira, cb) {
     }).catch((e) => {
       logger.warn(`Failed getting watchers associated with issue ${jiraEvent.issue.key}: ` +
         `"${e.message}". Can only notify the assignee and mentioned users.`);
-      createTestCase(e, jiraEvent, 'caught-error');
+      // createTestCase(e, jiraEvent, framework, 'process-watcher-error');
     });
 
   } catch (e) {
     logger.error(`processIssueEvent() caught error: ${e.message}`);
-    createTestCase(e, jiraEvent, framework, 'caught-error');
+    createTestCase(e, jiraEvent, framework, 'process-issue-error');
     if (cb) {return (cb(e));}
   }
 };
@@ -269,12 +270,12 @@ function processCommentEvent(jiraEvent, framework, jira, cb) {
     }).catch((e) => {
       logger.error(`processCommentEvent() got error: "${e.message}". ` +
         `May have only notified people mentioned in the comment or none at all.`);
-      createTestCase(e, jiraEvent, framework, 'caught-error');
+      // createTestCase(e, jiraEvent, framework, 'caught-error');
     });
 
   } catch (e) {
     logger.error(`processCommentEvent(): caught error: ${e.message}`);
-    createTestCase(e, jiraEvent, framework, 'caught-error');
+    createTestCase(e, jiraEvent, framework, 'process-comment-error');
     if (cb) {return (cb(e));}
   }
 };
@@ -315,6 +316,7 @@ async function notifyMentioned(framework, msgElements, notifyList, jira, cb) {
     }).catch((e) => {
       // User lookup failed, log it and move on.
       logger.error(`notifyMentioned() caught exception: ${e.message}`);
+      createTestCase(e, msgElements.jiraEvent, framework, 'lookup-user-error'); 
     }).finally(() => when(true)));
   });
 
@@ -322,6 +324,7 @@ async function notifyMentioned(framework, msgElements, notifyList, jira, cb) {
     return notifyBotUsers(framework, "mentioned", msgElements, mentionedEmails, jira, cb);
   }).catch((e) => {
     logger.error(`notifyMentioned() caught exception: ${e.message}`);
+    createTestCase(e, msgElements.jiraEvent, framework, 'notify-users-error'); 
     return when();
   });
 }
@@ -355,6 +358,7 @@ function notifyBotUsers(framework, recipientType, msgElements, emails, jira, cb)
         logger.error('Unable to get quietMode status for ' + theBot.isDirectTo);
         logger.error(err.message);
         logger.error('Erring on the side of notifying them.');
+        createTestCase(e, msgElements.jiraEvent, framework, 'bot-recall-error'); 
         sendWebexNotification(theBot, recipientType, {notifySelf: true}, msgElements, cb);
       });
     } else {
@@ -389,8 +393,9 @@ function sendWebexNotification(bot, recipientType, userConfig, msgElements, jira
       msg = buildWatcherOrAssigneeMessage(msgElements, bot.isDirectTo, jira);
       break;
     default:
-      logger.error(`Cannot build message for unknown recipeient ` +
+      logger.error(`Cannot build message for unknown recipient ` +
         `type: ${recipientType}`);
+      createTestCase(null, msgElements.jiraEvent, framework, `recipient-type-${recipientType}-error`); 
       return;
   }
   logger.info('Sending a notification to ' + bot.isDirectTo + ' about ' + msgElements.issueKey);
@@ -548,13 +553,6 @@ function createTestCase(e, jiraEvent, framework, changedField = '') {
   fs.writeFile(filename, JSON.stringify(jiraEvent, null, 4), (err) => {
     if (err) {
       logger.error('createTestCase() Error writing jira event to disk:' + err);
-    }
-    if ((typeof e === 'object') && (Object.keys(e).length !== 0)) {
-      fs.appendFile(filename, JSON.stringify(e, null, 4), (err) => {
-        if (err) {
-          logger.error('Error writing jira event to disk:' + err);
-        }
-      });
     }
     if (process.env.ADMIN_EMAIL) {
       // Message the admin about this 
