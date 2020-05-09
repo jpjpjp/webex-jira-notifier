@@ -6,59 +6,89 @@
 
 // When running locally read environment variables from a .env file
 require('dotenv').config();
-request = require('request-promise');
-logger = require('./logger');
-
-// Helper classes for dealing with Jira Webhook payload
-//var jiraEventHandler = require("./jira-event.js");
+const when = require('when');
+const request = require('request-promise');
+const logger = require('./logger');
 
 
 class JiraConnector {
+  // TODO modify constructor so logger can be passed in as an optional
+  // param which defaults to console logging
   constructor() {
     try {
-      // Jira login configuration
-      this.jira_user = process.env.JIRA_USER;
-      this.jira_pw = process.env.JIRA_PW;
-      this.jira_auth = 'Basic ' + Buffer.from(this.jira_user + ':' + this.jira_pw).toString('base64');
-      this.jira_url = process.env.JIRA_URL;
-
-      // Optional support for a proxy to access jira system behind a firewall
-      if (process.env.PROXY_URL) {
-        this.jira_url_regexp = new RegExp(this.jira_url);
-        this.proxy_url = process.env.PROXY_URL;
-        logger.info('Will attempt to access Jira via proxy at ' + this.proxy_url);
-      } else {
-        this.jira_url_regexp = null;
-        this.proxy_url = null;
-      }
-
-      // Default jira query request options
-      this.defaultOptions = {
-        "method": 'POST',
+      // Configure Access to Jira to find watcher and other info
+      this.request = null;
+      this.jira_url = '';
+      this.jira_lookup_user_api = '';
+      this.proxy_url = '';
+      this.jira_url_regexp = null;
+      this.jiraReqOpts = {
         "json": true,
+        method: 'GET',
         headers: {
-          // We'll use Basic Auth for most operations
-          'Authorization': this.jira_auth,
-          // If I ever switch to OAuth
-          //'bearer' : bearerToken
-
-          'Content-Type': 'application/json'
-        },
-        body: {
-          // TODO implment pagination
-          "maxResults": 500
-        },
+          'Authorization': 'Basic '
+        }
       };
-      if (this.proxy_url) {
-        this.defaultOptions.uri = this.proxy_url + '/rest/api/2/search';
-      } else {
-        this.defaultOptions.uri = this.jira_url + '/rest/api/2/search';
-      }
 
+      // Set up Authorization header
+      if ((process.env.JIRA_USER) && (process.env.JIRA_PW)) {
+        this.request = request;
+        this.jiraReqOpts.headers.Authorization +=
+          new Buffer.from(process.env.JIRA_USER + ':' +
+            process.env.JIRA_PW).toString('base64');
+
+        if (process.env.JIRA_URL) {
+          this.jira_url = process.env.JIRA_URL;
+          // Set variables to get access jira via proxy
+          if (process.env.PROXY_URL) {
+            this.jira_url_regexp = new RegExp(this.jira_url);
+            this.proxy_url = process.env.PROXY_URL;
+            logger.info('Will attempt to access Jira at ' + this.proxy_url +
+              'in order in order to proxy requests to ' + this.jira_url);
+          }
+        } else {
+          console.error(`Missing environment varialbe JIRA_URL.  Messages will not contain links to stories.`);
+        }
+
+        // Check if our bot is only allowed to access specified jira projects
+        this.jiraAllowedProjects = [];
+        this.jiraDisallowedProjects = [];
+        if (process.env.JIRA_PROJECTS) {
+          this.jiraAllowedProjects = process.env.JIRA_PROJECTS.split(',');
+        }
+
+        // Check if our environment overrode the lookup by username path
+        if (process.env.JIRA_LOOKUP_USER_API) {
+          this.jira_lookup_user_api = JIRA_LOOKUP_USER_API;
+        } else {
+          this.jira_lookup_user_api = `${this.jira_url}/rest/api/2/user`;
+        }
+        // Check if our environment overrode the lookup by username path
+        if (process.env.JIRA_LOOKUP_ISSUE_API) {
+          this.jira_lookup_issue_api = JIRA_LOOKUP_ISSUE_API;
+        } else {
+          this.jira_lookup_issue_api = `${this.jira_url}/rest/api/2/search`;
+        }
+
+        // Build an in-memory cache of jira users as we look them up
+        this.jiraUserCache = [];
+
+      } else {
+        logger.error('Cannot read Jira credential.  Will not notify watchers');
+      }
     } catch (err) {
       logger.error('Cannot read Jira config from environment: ' + err.message);
       throw (err);
     }
+  }
+
+  /**
+   * Accessor for main jira url
+   *
+   * @function getJiraUrl
+   */
+  getJiraUrl() {
+    return this.jira_url;
   }
 
   /**
@@ -67,7 +97,7 @@ class JiraConnector {
    * @function getDefaultOptions
    */
   getDefaultOptions() {
-    return this.defaultOptions;
+    return this.jiraReqOpts;
   }
 
   /**
@@ -78,13 +108,37 @@ class JiraConnector {
    * @function getDefaultOptions
    */
   getDefaultPutOptions() {
-    let options = JSON.parse(JSON.stringify(this.defaultOptions));
+    let options = JSON.parse(JSON.stringify(this.jiraReqOpts));
     options.method = 'PUT';
-    // delete options.headers.Authorization;
-    // options.headers.userid = this.jira_user;
-    // options.headers.password = this.jira_pw;
-
+    options.headers['Content-Type'] = 'application/json';
     return options;
+  }
+
+  /**
+   * Accessor for default request options for a PUT
+   * For some reason PATCH requries username and password
+   * instead of an Authorization header
+   *
+   * @function getDefaultOptions
+   */
+  getDefaultPostOptions() {
+    let options = JSON.parse(JSON.stringify(this.jiraReqOpts));
+    options.method = 'POST';
+    options.headers['Content-Type'] = 'application/json';
+    return options;
+  }
+
+  /**
+   * Convert url to use proxy if configured
+   *
+   * @function convertForProxy
+   * @param {object} url - url to translate
+   */
+  convertForProxy(url) {
+    if (this.jira_url_regexp) {
+      url = url.replace(this.jira_url_regexp, this.proxy_url);
+    }
+    return url;
   }
 
   /**
@@ -92,27 +146,122 @@ class JiraConnector {
    *
    * @function lookupUser
    * @param {object} user - email or username to lookup
+   * @returns {Promise.<user>} - a single jira user object
    */
   lookupUser(user) {
-    let self = this;
-    return new Promise(function (resolve, reject) {
-      let options = JSON.parse(JSON.stringify(self.defaultOptions));
-      options.method = 'GET';
-      options.uri = self.proxy_url ? self.proxy_url : self.jira_url;
-      options.uri += self.user_url;
-      options.qs = {
-        "username": user
-      };
-      request(options).then(resp => {
-        if ((!Array.isArray(resp)) || (!resp.length)) {
-          reject(new Error('Could not determine if ' + user + ' is a member of our jira team.'));
+    // Check our local cache first
+    let userObj = this.jiraUserCache.find((u) => (user === u.name));
+    if (userObj) {
+      logger.verbose(`lookupUser: Found cached info on jira user: ${user}`);
+      return when(userObj);
+    }
+
+    let url = `${this.jira_lookup_user_api}?username=${user}`;
+    // Use a proxy server if configured
+    logger.verbose(`lookupUser: Fetching info on jira user: ${user}`);
+    return request(this.convertForProxy(url), this.jiraReqOpts)
+      .then((userObj) => {
+        if ((userObj.length)) {
+          return when.reject(new Error(`User search for ${user} at ${url} ` +
+            `returned a list instead of expected user object.`));
         }
-        resolve(resp);
-      }).catch(err => {
-        logger.error('Failed to lookup jira user: ' + user + ', ' + err.message);
-        reject(new Error('Could not determine if ' + user + ' is a member of our jira team.'));
+        // Add to local cache
+        let cachedUser = this.jiraUserCache.find((u) => (userObj.name === u.name));
+        if (typeof cachedUser === 'undefined') {
+          this.jiraUserCache.push(userObj);
+          if (!(this.jiraUserCache.length % 50)) {
+            logger.info(`lookupUser: ${this.jiraUserCache.length} users in memory cache.`);
+          }
+        }
+        return when(userObj);
+      }).catch((e) => {
+      // We are getting a lot of 404s, need to debug why
+      // In the meantime, try to guess at users where we get 404s
+        if ((e.statusCode === 404) && (process.env.DEFAULT_DOMAIN)) {
+          logger.warn(`lookupUser() failed: "${e.message}".  ` +
+            `Guessing user's email address by adding ${process.env.DEFAULT_DOMAIN}.`);
+          let user = e.options.uri.split('=')[1];
+          let userObj = {
+            emailAddress: `${user}@${process.env.DEFAULT_DOMAIN}`,
+            displayName: user,
+            name: user,
+            key: user
+          };
+          return when(userObj);
+        } else {
+          return when.reject(e);
+        }
       });
-    });
+    // pass exceptions on to caller
+  }
+
+  /**
+   * Lookup watchers base on info in jira issue object
+   * 
+   * This method includes some logic to try to "get smart"
+   * about which projects it is able to see watchers in and 
+   * which it isn't.  As it gets 403 responses for certain projects
+   * it will add them to a disallowed list and no longer attempt
+   * to find watchers for those projects.
+   *
+   * @function lookupWatcherInfoFromIssue
+   * @param {object} issue - email or username to lookup
+   */
+  lookupWatcherInfoFromIssue(issue) {
+    let watches = issue.fields.watches;
+    let project = '';
+    if ((typeof issue.fields === 'object') && (typeof issue.fields.project === 'object')) {
+      project = issue.fields.project.key;
+      if (-1 !== this.jiraDisallowedProjects.indexOf(project)) {
+        logger.debug(`Skipping watcher lookup in known dissallowed project: ${project}`);
+        return when(null);
+      }
+    } 
+    if (watches && watches.watchCount && watches.self) {
+      // Use a proxy server if configured
+      let watcherUrl = watches.self;
+      return request.get(this.convertForProxy(watcherUrl), this.jiraReqOpts)
+        .then(watcherInfo => {
+          if (-1 === this.jiraAllowedProjects.indexOf(project)) {
+            // Temporary so I see this in the logs
+            logger.error(`Got watcher info for project "${issue.fields.project.key}` +
+              ` but it is not in our allowed project list.`);
+            this.jiraAllowedProjects.push(project);
+          }
+          return when(watcherInfo);
+        }).catch(e => {
+          if (e.statusCode === 403) {
+            if (-1 === this.jiraDisallowedProjects.indexOf(project)) {
+            // Temporary so I see this in the logs
+              logger.error(`Failed watcher info for project "${issue.fields.project.key}` +
+              ` adding it to the disallowed list.`);
+              this.jiraDisallowedProjects.push(project);
+            }
+          }
+          return when.reject(e);
+        });
+    }
+    return when(null);
+  }
+
+  /**
+   * Lookup the issue associated with a comment event
+   *
+   * @function lookupIssueFromCommentEvent
+   * @param {object} commentEvent - email or username to lookup
+   */
+  lookupIssueFromCommentEvent(commentEvent) {
+    let issuePromise = null;
+    let commentUrl = commentEvent.comment.self;
+    let commentIndex = commentUrl.indexOf('/comment');
+    if (commentIndex > 0) {
+      let issueUrl = commentUrl.substr(0, commentIndex);
+      // Use a proxy server if configured
+      issuePromise = request.get(this.convertForProxy(issueUrl), this.jiraReqOpts);
+    } else {
+      return Promise.reject(new Error('Could not find issue link in comment webhook payload'));
+    }
+    return issuePromise;
   }
 
   /**
@@ -123,12 +272,11 @@ class JiraConnector {
    * @param {array} keys - array of jira key names to fetch
    */
   lookupByKey(callerName, keys) {
-    let self = this;
-    return new Promise(function (resolve, reject) {
-      let options = JSON.parse(JSON.stringify(self.defaultOptions));
-      options.body = {"jql": ""};
-      options.body.jql = 'key in (' + keys.map(x => '\"' + x + '\"').join(',') + ')';
-      request(options).then(resp => {
+    let options = JSON.parse(JSON.stringify(this.getDefaultPostOptions()));
+    options.body = {"jql": ""};
+    options.body.jql = 'key in (' + keys.map(x => '\"' + x + '\"').join(',') + ')';
+    return request.post(this.convertForProxy(this.jira_lookup_issue_api), options)
+      .then(resp => {
         if (!resp.hasOwnProperty('issues')) {
           reject(new Error('Did not get expected response from Jira watcher lookup. ' +
             'This usually happens due to login failure and redirection.'));
@@ -136,11 +284,10 @@ class JiraConnector {
         logger.debug('lookupByKey method found ' + resp.issues.length + ' issues ' +
           'for query filter: ' + options.body.jql +
           ' Requested by user:' + callerName);
-        resolve(resp.issues);
+        return when(resp.issues);
       }).catch(err => {
-        reject(err);
+        return when.reject(err);
       });
-    });
   }
 
   /**
@@ -155,19 +302,11 @@ class JiraConnector {
    */
   async addComment(uri, key, comment, bot, email) {
     let fullComment = `${comment}\n\nPosted by ${bot.person.displayName} on behalf of [~${email.split('@', 1)[0]}]`;
-    let options = this.getDefaultPutOptions();
+    let options = this.getDefaultPostOptions();
     delete options.uri;
-    options.url = uri;
+    options.url = `${uri}/comment`;
     options.body = {
-      "update": {
-        "comment": [
-          {
-            "add": {
-              "body": fullComment
-            }
-          }
-        ]
-      }
+      "body": fullComment
     };
     request(options).then((resp) => {
       // Add logic to check for a 204?
