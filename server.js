@@ -485,7 +485,7 @@ framework.hears(project_words, function (bot/*, trigger*/) {
   if (process.env.JIRA_PROJECTS) {
     bot.say(`The projects that I can lookup watchers in are: ` + 
       `${jira.jiraAllowedProjects.join(', ')}\n` +
-      `\n\nThe projects I have attempted to lookup watchers for was denied permission for are: ` +
+      `\n\nThe projects that denied permission to my lookup watcher requests since my last restart are: ` +
       `${jira.jiraDisallowedProjects.join(', ')}\n\n` +
       `If you are interested in being notified about tickets in any of these denied projects, ` +
       ` or ones in projects not listed here, please post a message in the ` +
