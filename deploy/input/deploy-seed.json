@@ -149,6 +149,42 @@
                 }
               },
               {
+                "name": "TRANSITION_PROJECTS",
+                "valueFrom": {
+                  "configMapKeyRef": {
+                    "key": "TRANSITION_PROJECTS",
+                    "name": "{{configName}}"
+                  }
+                }
+              },
+              {
+                "name": "TRANSITION_STATUS_TYPES",
+                "valueFrom": {
+                  "configMapKeyRef": {
+                    "key": "TRANSITION_STATUS_TYPES",
+                    "name": "{{configName}}"
+                  }
+                }
+              },
+              {
+                "name": "TRANSITION_ISSUE_TYPES",
+                "valueFrom": {
+                  "configMapKeyRef": {
+                    "key": "TRANSITION_ISSUE_TYPES",
+                    "name": "{{configName}}"
+                  }
+                }
+              },
+              {
+                "name": "TRANSITION_SPACE_IDS",
+                "valueFrom": {
+                  "configMapKeyRef": {
+                    "key": "TRANSITION_SPACE_IDS",
+                    "name": "{{configName}}"
+                  }
+                }
+              },
+              {
                 "name": "LOG_JIRA_EVENTS",
                 "valueFrom": {
                   "configMapKeyRef": {

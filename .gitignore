@@ -1,3 +1,6 @@
+# Local debug environment
+.vscode/launch.json
+
 # Logs
 logs
 *.log

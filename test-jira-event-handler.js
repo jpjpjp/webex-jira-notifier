@@ -3,11 +3,34 @@
 // that we get our expected results
 /*jshint esversion: 6 */  // Help out our linter
 
+// Check if we are configured to notify certain group spaces about
+// certain types of issues transitioning
+let transitionConfig = {};
+if ((process.env.TRANSITION_PROJECTS) || (process.env.TRANSITION_STATUS_TYPES) ||
+  (process.env.TRANSITION_ISSUE_TYPES)) {
+  if (process.env.TRANSITION_PROJECTS) {
+    transitionConfig.projects = process.env.TRANSITION_PROJECTS.split(',');
+  } else {
+    exitWithTransitionConfigError();
+  }
+  if (process.env.TRANSITION_STATUS_TYPES) {
+    transitionConfig.statusTypes = process.env.TRANSITION_STATUS_TYPES.split(',');
+  } else {
+    exitWithTransitionConfigError();
+  }
+  if (process.env.TRANSITION_ISSUE_TYPES) {
+    transitionConfig.issueTypes = process.env.TRANSITION_ISSUE_TYPES.split(',');
+  } else {
+    exitWithTransitionConfigError();
+  }
+  transitionConfig.trSpaceBots = [];
+}
+
 // Helper classes for dealing with Jira Webhook payload
 const JiraConnector = require('./jira-connector');
 const jiraConnector = new JiraConnector();
 const JiraEventHandler = require("./jira-event.js");
-const jiraEventHandler = new JiraEventHandler(jiraConnector);
+const jiraEventHandler = new JiraEventHandler(jiraConnector, transitionConfig);
 fs = require('fs');
 
 if (!process.env.TEST_CASE_DIR) {
@@ -32,9 +55,12 @@ Framework.prototype.debug = function (message) {
   }
 };
 // Build the list of "bots" that we want our test suite to run against
-// The current set assumes all users work for ciso
 framework = new Framework();
 jiraTestCases.initBotUsers(framework, test_dir);
+// If we are doing transition notifications send them to the first bot initialized
+if (transitionConfig.projects) {
+  transitionConfig.trSpaceBots.push(framework.bots[0]);
+}
 
 var testCases = [];
 jiraTestCases.initTestCases(testCases, test_dir, jiraConnector.getJiraUrl());
@@ -191,4 +217,14 @@ function showExpected(msg, test) {
       console.error(`${test.result[i]}`);
     }
   }
+}
+
+
+function exitWithTransitionConfigError() {
+  console.error(`To configure the bot to notify for jira transitions ALL of the environment variables must be set:\n` +
+  `  - TRANSITION_PROJECTS: - list of jira projects to notify for\n`+
+  `  - TRANSITION_STATUS_TYPES: - list of jira status values to notify for\n`+
+  `  - TRANSITION_ISSUE_TYPES: - list of jira issue types to notify for\n\n`+
+  ` All values should be comma separated lists with no spaces.  Capitalization must match the jira configuration.`);
+  process.exit(0);
 }

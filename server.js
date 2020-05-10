@@ -3,10 +3,11 @@ Cisco Spark Bot to notify users when they are mentioned in a
 Jira ticket and/or if it is assigned to them.
 */
 /*jshint esversion: 6 */  // Help out our linter
-console.log(process.version);
-
-
 const package_version = require('./package.json').version;
+console.log(`Running app version: ${package_version}`);
+console.log(`Running node version: ${process.version}`);
+
+
 var Framework = require('webex-node-bot-framework');
 var express = require('express');
 var bodyParser = require('body-parser');
@@ -17,6 +18,33 @@ app.use(bodyParser.json({limit: '50mb'}));
 require('dotenv').config();
 logger = require('./logger');
 
+// Check if we are configured to notify certain group spaces about
+// certain types of issues transitioning
+let transitionConfig = {};
+if ((process.env.TRANSITION_PROJECTS) || (process.env.TRANSITION_STATUS_TYPES) ||
+  (process.env.TRANSITION_ISSUE_TYPES) || (process.env.TRANSITION_SPACE_IDS)) {
+  if (process.env.TRANSITION_SPACE_IDS) {
+    transitionConfig.trSpaceIds = process.env.TRANSITION_SPACE_IDS.split(',');
+  } else {
+    exitWithTransitionConfigError();
+  }
+  if (process.env.TRANSITION_PROJECTS) {
+    transitionConfig.projects = process.env.TRANSITION_PROJECTS.split(',');
+  } else {
+    exitWithTransitionConfigError();
+  }
+  if (process.env.TRANSITION_STATUS_TYPES) {
+    transitionConfig.statusTypes = process.env.TRANSITION_STATUS_TYPES.split(',');
+  } else {
+    exitWithTransitionConfigError();
+  }
+  if (process.env.TRANSITION_ISSUE_TYPES) {
+    transitionConfig.issueTypes = process.env.TRANSITION_ISSUE_TYPES.split(',');
+  } else {
+    exitWithTransitionConfigError();
+  }
+  transitionConfig.trSpaceBots = [];
+}
 
 // Helper classes for dealing with Jira Webhook payload
 let jira = {};
@@ -26,7 +54,7 @@ try {
   var JiraConnector = require('./jira-connector.js');
   jira = new JiraConnector();
   const JiraEventHandler = require("./jira-event.js");
-  jiraEventHandler = new JiraEventHandler(jira);
+  jiraEventHandler = new JiraEventHandler(jira, transitionConfig);
 } catch (err) {
   logger.error('Initialization Failure: ' + err.message);
   process.exit(-1);
@@ -166,6 +194,27 @@ framework.on('spawn', function (bot, id, addedById) {
   if (!adminsBot) {
     tryToInitAdminBot(bot, framework);
   }
+  // By design we leave group spaces we were added to.
+  if (bot.isGroup) {
+    // The only exception for this is any TR notification spaces
+    // TODO = may want to enforce membership rules here:
+    if ((transitionConfig.trSpaceIds.length) && 
+        (-1 !== transitionConfig.trSpaceIds.indexOf(bot.room.id))) {
+      logger.info(`Found a TR Notification Group Space: ${bot.room.title}`);
+      transitionConfig.trSpaceBots.push(bot);
+    } else {
+      logger.info(`Leaving Group Space: ${bot.room.title}`);
+      bot.say("Hi! Sorry, I only work in one-on-one rooms at the moment.  Goodbye.")
+        .finally(() => {
+          bot.exit();
+          if (adminsBot) {
+            adminsBot.say(`${botName} left the group space "${bot.room.title}"`)
+              .catch((e) => logger.error(`Failed to update to Admin about a new space our bot left. Error:${e.message}`));
+          }
+        });
+      return;
+    }
+  }
 
   if (!addedById) {
     // Framework discovered an existing space with our bot, log it
@@ -189,19 +238,19 @@ framework.on('spawn', function (bot, id, addedById) {
       adminsBot.say(`${botName} was added to a space: ${bot.room.title}`)
         .catch((e) => logger.error(`Failed to update to Admin about a new space our bot is in. Error:${e.message}`));
     }
-    // By design we leave group spaces we were added to.
-    if (bot.isGroup) {
-      logger.info(`Leaving Group Space: ${bot.room.title}`);
-      bot.say("Hi! Sorry, I only work in one-on-one rooms at the moment.  Goodbye.");
-      bot.exit();
-      if (adminsBot) {
-        adminsBot.say(`${botName} left the group space "${bot.room.title}"`)
-          .catch((e) => logger.error(`Failed to update to Admin about a new space our bot left. Error:${e.message}`));
-      }
-      return;
-    }
     postInstructions(bot, /*status_only=*/false, /*instructions_only=*/true);
     bot.store('userEmail', bot.isDirectTo);
+  }
+});
+
+framework.on('despawn', function (bot) {
+  let index;
+  if ((bot.isGroup) && (transitionConfig.trSpaceIds.length) && 
+    (-1 !==
+       (index = transitionConfig.trSpaceBots.findIndex(trBot => bot.room.id === trBot.room.id)))) {
+    logger.info(`Bot left a TR Notification Group Space: ${bot.room.title}`);
+    transitionConfig.trSpaceBots =
+          transitionConfig.trSpaceBots.splice(index, 1);
   }
 });
 
@@ -226,53 +275,63 @@ function sayNewFunctionalityMessage(bot) {
 
 async function postInstructions(bot, status_only = false, instructions_only = false) {
   try {
-    if (!status_only) {
-      await bot.say("I will look for Jira tickets that are assigned to, or that mention " +
-        bot.isDirectTo + " and notify you so you can check out the ticket immediately.  " +
-        "\n\nIf you'd like to comment on a ticket I notified you about you can post " +
-        "a threaded reply and I'll update the ticket with your message as a comment." +
-        "\n\nI'll also notify you of changes to any tickets you are watching. " +
-        'If the watcher messages make me too "chatty", but you want to ' +
-        'keep getting notified for mentions and assignments just type **no watchers**. ' +
-        'If you want the watcher messages back, type **yes watchers**.' +
-        '\n\nI can only notify watchers for issues in projects that I have been granted access to. ' +
-        'To see a list of projects I have access to and learn how to request other projects, ' +
-        'type **projects**' +
-        '\n\nBy default, I won\'t notify you about changes you have made, but if you want to ' +
-        'see them just type **yes notifyself**. ' +
-        'If you want to turn that behavior off, type **no notifyself**.' +
-        "\n\nYou can also type the command **shut up** to get me to stop sending any messages. " +
-        "If you ever want me to start notifying you again, type **come back**." +
-        "\n\nIf you aren't sure if I'm giving you notifications, just type **status**" +
-        "\n\nQuestions or feedback?   Join the Ask JiraNotification Bot space here: https://eurl.io/#Hy4f7zOjG");
-    }
-    if (!instructions_only) {
-      let userConfig = await bot.recall('userConfig');
+    if (bot.isGroup) {
+      bot.say('I will send notifications to this space about transitions. ' +
+        `My current configuration is as follows: \n` +
+        `* Jira Projects: ${transitionConfig.projects.join(', ')}\n` +
+        `* Issue Types  : ${transitionConfig.issueTypes.join(', ')}\n` +
+        `* Transition to: ${transitionConfig.statusTypes.join(',')}\n\n` +
+        `I don't currently support any commands in Transition notification spaces, ` +
+        `but if you message me in a 1-1 space I can give you customized notifications.`);
+    } else {
+      if (!status_only) {
+        await bot.say("I will look for Jira tickets that are assigned to, or that mention " +
+          bot.isDirectTo + " and notify you so you can check out the ticket immediately.  " +
+          "\n\nIf you'd like to comment on a ticket I notified you about you can post " +
+          "a threaded reply and I'll update the ticket with your message as a comment." +
+          "\n\nI'll also notify you of changes to any tickets you are watching. " +
+          'If the watcher messages make me too "chatty", but you want to ' +
+          'keep getting notified for mentions and assignments just type **no watchers**. ' +
+          'If you want the watcher messages back, type **yes watchers**.' +
+          '\n\nI can only notify watchers for issues in projects that I have been granted access to. ' +
+          'To see a list of projects I have access to and learn how to request other projects, ' +
+          'type **projects**' +
+          '\n\nBy default, I won\'t notify you about changes you have made, but if you want to ' +
+          'see them just type **yes notifyself**. ' +
+          'If you want to turn that behavior off, type **no notifyself**.' +
+          "\n\nYou can also type the command **shut up** to get me to stop sending any messages. " +
+          "If you ever want me to start notifying you again, type **come back**." +
+          "\n\nIf you aren't sure if I'm giving you notifications, just type **status**" +
+          "\n\nQuestions or feedback?   Join the Ask JiraNotification Bot space here: https://eurl.io/#Hy4f7zOjG");
+      }
+      if (!instructions_only) {
+        let userConfig = await bot.recall('userConfig');
         //.then(function (userConfig) {
-      let msg = '';
-      if (userConfig.askedExit) {
-        msg = "\n\nCurrent Status: \n* Notifications are **disabled**.";
-      } else {
-        msg = "\n\nCurrent Status: \n* Mention and Assignment Notifications are **enabled**.";
-        if (userConfig.watcherMsgs) {
-          msg += "\n* Watched Ticket Changed Notifications are **enabled**.";
+        let msg = '';
+        if (userConfig.askedExit) {
+          msg = "\n\nCurrent Status: \n* Notifications are **disabled**.";
         } else {
-          msg += "\n* Watched Ticket Changed Notifications are **disabled**.";
+          msg = "\n\nCurrent Status: \n* Mention and Assignment Notifications are **enabled**.";
+          if (userConfig.watcherMsgs) {
+            msg += "\n* Watched Ticket Changed Notifications are **enabled**.";
+          } else {
+            msg += "\n* Watched Ticket Changed Notifications are **disabled**.";
+          }
+          if (userConfig.notifySelf) {
+            msg += "\n* Notifications for changes to tickets that you have made are **enabled**.";
+          } else {
+            msg += "\n* Notifications for changes to tickets that you have made are **disabled**.";
+          }
         }
-        if (userConfig.notifySelf) {
-          msg += "\n* Notifications for changes to tickets that you have made are **enabled**.";
-        } else {
-          msg += "\n* Notifications for changes to tickets that you have made are **disabled**.";
+        if (status_only) {
+          msg += '\n\nType **help** to learn how to change your Notification state.';
         }
+        await bot.say(msg);
+        logger.debug('Status for ' + bot.isDirectTo + ': ' + JSON.stringify(userConfig, null, 2));
+      //})
+      //    .catch(function (err) {
+      //    });
       }
-      if (status_only) {
-        msg += '\n\nType **help** to learn how to change your Notification state.';
-      }
-      await bot.say(msg);
-      logger.debug('Status for ' + bot.isDirectTo + ': ' + JSON.stringify(userConfig, null, 2));
-    //})
-    //    .catch(function (err) {
-    //    });
     }
   } catch(e) {
     logger.error('Unable to get askedExit status for ' + bot.isDirectTo);
@@ -421,6 +480,16 @@ function tryToInitAdminBot(bot, framework) {
   }
 }
 
+function exitWithTransitionConfigError() {
+  console.error(`To configure the bot to notify for jira transitions ALL of the environment variables must be set:\n` +
+  `  - TRANSITION_SPACE_IDS: - list of roomIds I should post TR info to\n`+
+  `  - TRANSITION_PROJECTS: - list of jira projects to notify for\n`+
+  `  - TRANSITION_STATUS_TYPES: - list of jira status values to notify for\n`+
+  `  - TRANSITION_ISSUE_TYPES: - list of jira issue types to notify for\n\n`+
+  ` All values should be comma separated lists without spaces between entries.`);
+  process.exit(0);
+}
+
 /****
 ## Process incoming messages
    The framework will call the appropriate framework.hears() function
@@ -438,6 +507,7 @@ framework.hears(status_words, function (bot/*, trigger*/) {
 var no_watcher_words = /^\/?(no watcher)s?( |.|$)/i;
 framework.hears(no_watcher_words, function (bot/*, trigger*/) {
   logger.verbose('Processing Disable Watcher Notifications Request for ' + bot.isDirectTo);
+  if (bot.isGroup) {return;}
   toggleWatcherMsg(bot, false);
   responded = true;
 });
@@ -445,6 +515,7 @@ framework.hears(no_watcher_words, function (bot/*, trigger*/) {
 var yes_watcher_words = /^\/?(yes watcher)s?( |.|$)/i;
 framework.hears(yes_watcher_words, function (bot/*, trigger*/) {
   logger.verbose('Processing Enable Watcher Notifications Request for ' + bot.isDirectTo);
+  if (bot.isGroup) {return;}
   toggleWatcherMsg(bot, true);
   responded = true;
 });
@@ -452,6 +523,7 @@ framework.hears(yes_watcher_words, function (bot/*, trigger*/) {
 var no_notifyself_words = /^\/?(no notify ?self)( |.|$)/i;
 framework.hears(no_notifyself_words, function (bot/*, trigger*/) {
   logger.verbose('Processing Disable Notifications Made by user Request for ' + bot.isDirectTo);
+  if (bot.isGroup) {return;}
   toggleNotifySelf(bot, false);
   responded = true;
 });
@@ -459,6 +531,7 @@ framework.hears(no_notifyself_words, function (bot/*, trigger*/) {
 var yes_notifyself_words = /^\/?(yes notify ?self)( |.|$)/i;
 framework.hears(yes_notifyself_words, function (bot/*, trigger*/) {
   logger.verbose('Processing Enable Notifications Made by user Request for ' + bot.isDirectTo);
+  if (bot.isGroup) {return;}
   toggleNotifySelf(bot, true);
   responded = true;
 });
@@ -466,6 +539,7 @@ framework.hears(yes_notifyself_words, function (bot/*, trigger*/) {
 var exit_words = /^\/?(exit|goodbye|mute|leave|shut( |-)?up)( |.|$)/i;
 framework.hears(exit_words, function (bot/*, trigger*/) {
   logger.verbose('Processing Exit Request for ' + bot.isDirectTo);
+  if (bot.isGroup) {return;}
   setAskedExit(bot, true);
   updateAdmin(bot.isDirectTo + ' asked me to turn off notifications');
   responded = true;
@@ -474,6 +548,7 @@ framework.hears(exit_words, function (bot/*, trigger*/) {
 var return_words = /^\/?(talk to me|return|un( |-)?mute|come( |-)?back)( |.|$)/i;
 framework.hears(return_words, function (bot/*, trigger*/) {
   logger.verbose('Processing Return Request for ' + bot.isDirectTo);
+  if (bot.isGroup) {return;}
   setAskedExit(bot, false);
   updateAdmin(bot.isDirectTo + ' asked me to start notifying them again');
   responded = true;
@@ -482,6 +557,7 @@ framework.hears(return_words, function (bot/*, trigger*/) {
 var project_words = /^\/?(projects)( |.|$)/i;
 framework.hears(project_words, function (bot/*, trigger*/) {
   logger.verbose('Processing Projects Request for ' + bot.isDirectTo);
+  if (bot.isGroup) {return;}
   if (process.env.JIRA_PROJECTS) {
     bot.say(`The projects that I can lookup watchers in are: ` + 
       `${jira.jiraAllowedProjects.join(', ')}\n` +
@@ -506,6 +582,7 @@ framework.hears('/showadmintheusers', function (bot/*, trigger*/) {
 var reply_words = /^\/?reply/i;
 framework.hears(reply_words, function (bot, trigger) {
   logger.verbose('Processing reply request from ' + bot.isDirectTo);
+  if (bot.isGroup) {return;}
   if (trigger.message.parentId) {
     // Handle threaded replies in the catch-all handler
     return;
@@ -529,8 +606,9 @@ framework.hears(reply_words, function (bot, trigger) {
   responded = true;
 });
 
-var help_words = /^\/?help/i;
-framework.hears(help_words, function (bot/*, trigger*/) {
+// var help_words = /^\/?help/i;
+// framework.hears(help_words, function (bot/*, trigger*/) {
+framework.hears('help', function (bot/*, trigger*/) {
   logger.verbose('Processing help Request for ' + bot.isDirectTo);
   postInstructions(bot);
   responded = true;
@@ -539,6 +617,11 @@ framework.hears(help_words, function (bot/*, trigger*/) {
 // Respond to unexpected input
 framework.hears(/.*/, function (bot, trigger) {
   if (!responded) {
+    if (bot.isGroup) {
+      bot.say('I do not support any commands in Transition notification spaces.' +
+      ' If you message me in 1-1 space I can give you customized notifications.');
+      return;
+    }
     if (trigger.message.parentId) {
       // Handle threaded replies as a request to post a comment
       logger.info(`Posting a comment as a reply in space: "${bot.room.title}"`);

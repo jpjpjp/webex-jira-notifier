@@ -233,7 +233,7 @@ class JiraConnector {
           if (e.statusCode === 403) {
             if (-1 === this.jiraDisallowedProjects.indexOf(project)) {
             // Temporary so I see this in the logs
-              logger.error(`Failed watcher info for project "${issue.fields.project.key}` +
+              logger.warn(`Failed getting watcher info for project "${issue.fields.project.key}` +
               ` adding it to the disallowed list.`);
               this.jiraDisallowedProjects.push(project);
             }

@@ -24,10 +24,13 @@ class JiraEventHandler {
    * JiraEventHandler constructor needs a JiraConnector object
    *
    * @param {object} jiraConnector -- an instantiated jiraConnector object
+   * @param {object} [transitionConfig] - option config with rules to notify 
+   *                           of certain transion types. 
    */
-  constructor(jiraConnector) {
+  constructor(jiraConnector, transitionConfig) {
     /** @private */
     this.jiraConnector = jiraConnector;
+    this.transitionConfig = transitionConfig;
   }
 
   /**
@@ -61,7 +64,7 @@ class JiraEventHandler {
         return processCommentEvent(jiraEvent, framework, this.jiraConnector, cb);
       } else if (issueEvent.test(jiraEvent.webhookEvent)) {
         logger.info(`Processing incoming Jira issue event: "${jiraEvent.issue_event_type_name}", Issue Key: "${jiraEvent.issue.key}"`);
-        return processIssueEvent(jiraEvent, framework, this.jiraConnector, cb);
+        return processIssueEvent(jiraEvent, framework, this.jiraConnector, this.transitionConfig, cb);
       } else {
         logger.warn(`Ignoring unknown webhookEvent: "${jiraEvent.webhookEvent}`);
         return;
@@ -73,7 +76,7 @@ class JiraEventHandler {
 }
 module.exports = JiraEventHandler;
 
-function processIssueEvent(jiraEvent, framework, jira, cb) {
+function processIssueEvent(jiraEvent, framework, jira, transitionConfig, cb) {
   try {
     let msgElements = {};
     let toNotifyList = [];
@@ -127,6 +130,7 @@ function processIssueEvent(jiraEvent, framework, jira, cb) {
       author: user.displayName,
       authorEmail: user.emailAddress,
       issueKey: issue.key,
+      issueUrl: `${jira.getJiraUrl()}/browse/${issue.key}`,
       issueType: issue.fields.issuetype.name,
       issueSummary: jiraEvent.issue.fields.summary,
       issueSelf: issue.self,
@@ -181,6 +185,7 @@ function processIssueEvent(jiraEvent, framework, jira, cb) {
           if (statusItem) {
             msgElements.action = "status";
             msgElements.updatedTo = statusItem.toString;
+            msgElements.updatedFrom = statusItem.fromString;
           }
         }
         // Otherwise we take the first thing in the changelog
@@ -195,12 +200,16 @@ function processIssueEvent(jiraEvent, framework, jira, cb) {
             msgElements.action = 'due date'; 
           }
           msgElements.updatedTo = jiraEvent.changelog.items[0].toString;
+          msgElements.updatedFrom = jiraEvent.changelog.items[0].fromString;
         }
       }
     }
   
     // Notify assignee and mentioned users...
     notifyMentioned(framework, msgElements, toNotifyList, jira, cb);
+
+    // Evaluate and potentially notify spaces about a feature status transition
+    evaluateForTransitionNotification(framework, msgElements, jira, transitionConfig, cb);
 
     // Wait for and process the watchers (if any)
     if (!watcherPromise) {
@@ -369,6 +378,69 @@ function notifyBotUsers(framework, recipientType, msgElements, emails, jira, cb)
   });
 }
 
+function evaluateForTransitionNotification(framework, msgElements, jira, config, cb) {
+  // Evaluate transitionConfig and event objects to see if this issue is a candidate
+  if ((typeof config !== 'object') ||
+    (msgElements.jiraEvent.webhookEvent !== 'jira:issue_updated') ||
+    (msgElements.action !== 'status') || (typeof msgElements.jiraEvent.issue.fields !== 'object')) {
+    return;
+  }
+  let issue = msgElements.jiraEvent.issue;
+
+  // We have a status related event.
+  // Check if it is one of the projects we care about
+  if ((!config.projects) || (!config.projects.length) || 
+    (typeof issue.fields.project !== 'object') ||
+    (-1 === config.projects.findIndex(project => issue.fields.project.key.toLowerCase() === project.toLowerCase()))) {
+      return;
+  }
+  
+  // We have a status related event for a project we are interested in.
+  // Check if it is one of the issue types we care about
+  if ((!config.issueTypes) || (!config.issueTypes.length) ||
+    (typeof issue.fields.issuetype !== 'object') ||
+    (-1 === config.issueTypes.findIndex(type => issue.fields.issuetype.name.toLowerCase() === type.toLowerCase()))) {
+    return;
+  }
+
+  // Is this a transition to a status that we are monitoring?
+  if (-1 !== config.statusTypes.findIndex(status => msgElements.updatedTo.toLowerCase() === status.toLowerCase())) {
+    notifyTransitionSpaces(framework, msgElements, jira, config, cb);
+  }
+}
+
+function notifyTransitionSpaces(framework, msgElements, jira, config, cb) {
+  let issue = msgElements.jiraEvent.issue;
+  if ((typeof config !== 'object') || (typeof config.trSpaceBots !== 'object') ||
+    (!config.trSpaceBots.length)) {
+    return;
+  }
+  let msg = `${msgElements.author} transitioned a ${msgElements.issueType} from ` +
+    `${msgElements.updatedFrom} to ${msgElements.updatedTo}:\n` +
+    `* [${msgElements.issueKey}](${msgElements.issueUrl}): ${msgElements.issueSummary}\n`;
+
+  if ((typeof issue.fields.components === 'object') && (issue.fields.components.length)) {
+    msg += '* Components: ';
+    for (let i=0; i<issue.components.length; i++) {
+      msg += `${issue.components[i].name}, `;
+    }
+    // remove dangling comma and space
+    msg = msg.substring(0, msg.length - 2);
+  }
+
+  if ((typeof issue.fields.customfield_11800 === 'object') && (issue.fields.customfield_11800.value)) {
+    msg += `* Team/PT: ${issue.fields.customfield_11800.value}`;
+    if ((typeof issue.fields.customfield_11800.child === 'object') && (issue.fields.customfield_11800.child.value)) {
+      msg += `: ${issue.fields.customfield_11800.child.value}`;
+    }
+  }
+
+  // TODO figure out how to add Team/PT
+  config.trSpaceBots.forEach((bot) => {
+    bot.say(msg);
+  });
+}
+
 function sendWebexNotification(bot, recipientType, userConfig, msgElements, jira, cb) {
   if ((bot.isDirectTo === msgElements.authorEmail) &&
     ((!userConfig) || (!userConfig.hasOwnProperty('notifySelf')) || (!userConfig.notifySelf))) {
@@ -454,7 +526,7 @@ function buildMentionedMessage(msgElements, botEmail, jira) {
         logger.warn(`buildMentionedMessage: Unsure how to format message for ` +
           `subject:${msgElements.subject} in ${JSON.stringify(msgElements, 2, 2)}`);
     }
-    msg += `${jira.getJiraUrl()}/browse/${msgElements.issueKey}`;
+    msg += msgElements.issueUrl;
     return msg;
   } catch (e) {
     throw new Error(`buildMentionedMessage failed: ${e.message}`);
@@ -554,7 +626,7 @@ function createTestCase(e, jiraEvent, framework, changedField = '') {
     if (err) {
       logger.error('createTestCase() Error writing jira event to disk:' + err);
     }
-    if (process.env.ADMIN_EMAIL) {
+    if ((process.env.ADMIN_EMAIL) && (typeof framework.webex === 'object')) {
       // Message the admin about this 
       let msg = {
         toPersonEmail: process.env.ADMIN_EMAIL,

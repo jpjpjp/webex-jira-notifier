@@ -1,6 +1,6 @@
 {
   "name": "jira-notification-bot",
-  "version": "1.5.3",
+  "version": "1.6.0",
   "description": "Bot for notifying a user when they are mentioned in or assigned to a jira ticket",
   "main": "server.js",
   "engines": {
