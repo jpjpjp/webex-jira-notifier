@@ -24,22 +24,22 @@ let transitionConfig = {};
 if ((process.env.TRANSITION_PROJECTS) || (process.env.TRANSITION_STATUS_TYPES) ||
   (process.env.TRANSITION_ISSUE_TYPES) || (process.env.TRANSITION_SPACE_IDS)) {
   if (process.env.TRANSITION_SPACE_IDS) {
-    transitionConfig.trSpaceIds = process.env.TRANSITION_SPACE_IDS.split(',');
+    transitionConfig.trSpaceIds = process.env.TRANSITION_SPACE_IDS.split(/,\s*/);
   } else {
     exitWithTransitionConfigError();
   }
   if (process.env.TRANSITION_PROJECTS) {
-    transitionConfig.projects = process.env.TRANSITION_PROJECTS.split(',');
+    transitionConfig.projects = process.env.TRANSITION_PROJECTS.split(/,\s*/);
   } else {
     exitWithTransitionConfigError();
   }
   if (process.env.TRANSITION_STATUS_TYPES) {
-    transitionConfig.statusTypes = process.env.TRANSITION_STATUS_TYPES.split(',');
+    transitionConfig.statusTypes = process.env.TRANSITION_STATUS_TYPES.split(/,\s*/);
   } else {
     exitWithTransitionConfigError();
   }
   if (process.env.TRANSITION_ISSUE_TYPES) {
-    transitionConfig.issueTypes = process.env.TRANSITION_ISSUE_TYPES.split(',');
+    transitionConfig.issueTypes = process.env.TRANSITION_ISSUE_TYPES.split(/,\s*/);
   } else {
     exitWithTransitionConfigError();
   }
@@ -279,7 +279,7 @@ async function postInstructions(bot, status_only = false, instructions_only = fa
       bot.say('I will send notifications to this space about transitions. ' +
         `My current configuration is as follows: \n` +
         `* Jira Projects: ${transitionConfig.projects.join(', ')}\n` +
-        `* Issue Types  : ${transitionConfig.issueTypes.join(', ')}\n` +
+        `* Issue Types:   ${transitionConfig.issueTypes.join(', ')}\n` +
         `* Transition to: ${transitionConfig.statusTypes.join(',')}\n\n` +
         `I don't currently support any commands in Transition notification spaces, ` +
         `but if you message me in a 1-1 space I can give you customized notifications.`);
