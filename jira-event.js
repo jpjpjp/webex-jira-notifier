@@ -209,7 +209,7 @@ function processIssueEvent(jiraEvent, framework, jira, transitionConfig, cb) {
     notifyMentioned(framework, msgElements, toNotifyList, jira, cb);
 
     // Evaluate and potentially notify spaces about a feature status transition
-    evaluateForTransitionNotification(framework, msgElements, jira, transitionConfig, cb);
+    evaluateForTransitionNotification(framework, msgElements, transitionConfig, cb);
 
     // Wait for and process the watchers (if any)
     if (!watcherPromise) {
@@ -378,38 +378,44 @@ function notifyBotUsers(framework, recipientType, msgElements, emails, jira, cb)
   });
 }
 
-function evaluateForTransitionNotification(framework, msgElements, jira, config, cb) {
+function evaluateForTransitionNotification(framework, msgElements, config, cb) {
+  try {
   // Evaluate transitionConfig and event objects to see if this issue is a candidate
-  if ((typeof config !== 'object') ||
+    if ((config === null) || (typeof config !== 'object') ||
     (msgElements.jiraEvent.webhookEvent !== 'jira:issue_updated') ||
     (msgElements.action !== 'status') || (typeof msgElements.jiraEvent.issue.fields !== 'object')) {
-    return;
-  }
-  let issue = msgElements.jiraEvent.issue;
+      return;
+    }
+    let issue = msgElements.jiraEvent.issue;
 
-  // We have a status related event.
-  // Check if it is one of the projects we care about
-  if ((!config.projects) || (!config.projects.length) || 
+    // We have a status related event.
+    // Check if it is one of the projects we care about
+    if ((!config.projects) || (!config.projects.length) || 
     (typeof issue.fields.project !== 'object') ||
     (-1 === config.projects.findIndex(project => issue.fields.project.key.toLowerCase() === project.toLowerCase()))) {
       return;
-  }
+    }
   
-  // We have a status related event for a project we are interested in.
-  // Check if it is one of the issue types we care about
-  if ((!config.issueTypes) || (!config.issueTypes.length) ||
+    // We have a status related event for a project we are interested in.
+    // Check if it is one of the issue types we care about
+    if ((!config.issueTypes) || (!config.issueTypes.length) ||
     (typeof issue.fields.issuetype !== 'object') ||
     (-1 === config.issueTypes.findIndex(type => issue.fields.issuetype.name.toLowerCase() === type.toLowerCase()))) {
-    return;
-  }
+      return;
+    }
 
-  // Is this a transition to a status that we are monitoring?
-  if (-1 !== config.statusTypes.findIndex(status => msgElements.updatedTo.toLowerCase() === status.toLowerCase())) {
-    notifyTransitionSpaces(framework, msgElements, jira, config, cb);
+    // Is this a transition to a status that we are monitoring?
+    if (-1 !== config.statusTypes.findIndex(status => msgElements.updatedTo.toLowerCase() === status.toLowerCase())) {
+      notifyTransitionSpaces(msgElements, config, cb);
+    }
+  } catch(e) {
+    logger.error(`evaluateForTransitionNotification() caught exception: ${e.message}`);
+    createTestCase(e, msgElements.jiraEvent, framework, 'evaluate-for-tr-error'); 
+    return;  
   }
 }
 
-function notifyTransitionSpaces(framework, msgElements, jira, config, cb) {
+function notifyTransitionSpaces(msgElements, config, cb) {
   let issue = msgElements.jiraEvent.issue;
   if ((typeof config !== 'object') || (typeof config.trSpaceBots !== 'object') ||
     (!config.trSpaceBots.length)) {
@@ -419,25 +425,27 @@ function notifyTransitionSpaces(framework, msgElements, jira, config, cb) {
     `${msgElements.updatedFrom} to ${msgElements.updatedTo}:\n` +
     `* [${msgElements.issueKey}](${msgElements.issueUrl}): ${msgElements.issueSummary}\n`;
 
-  if ((typeof issue.fields.components === 'object') && (issue.fields.components.length)) {
+  if ((issue.fields.components !== null) && (typeof issue.fields.components === 'object') && 
+    (issue.fields.components.length)) {
     msg += '* Components: ';
-    for (let i=0; i<issue.components.length; i++) {
-      msg += `${issue.components[i].name}, `;
+    for (let i=0; i<issue.fields.components.length; i++) {
+      msg += `${issue.fields.components[i].name}, `;
     }
     // remove dangling comma and space
     msg = msg.substring(0, msg.length - 2);
   }
 
-  if ((typeof issue.fields.customfield_11800 === 'object') && (issue.fields.customfield_11800.value)) {
+  if ((issue.fields.customfield_11800 !== null) && (typeof issue.fields.customfield_11800 === 'object') && 
+    (issue.fields.customfield_11800.value)) {
     msg += `* Team/PT: ${issue.fields.customfield_11800.value}`;
     if ((typeof issue.fields.customfield_11800.child === 'object') && (issue.fields.customfield_11800.child.value)) {
       msg += `: ${issue.fields.customfield_11800.child.value}`;
     }
   }
 
-  // TODO figure out how to add Team/PT
   config.trSpaceBots.forEach((bot) => {
-    bot.say(msg);
+    bot.say({markdown: msg});
+    if (cb) {cb(null, bot);}
   });
 }
 
@@ -519,7 +527,8 @@ function buildMentionedMessage(msgElements, botEmail, jira) {
           logger.warn(`buildMentionedMessage: Unsure how to format message for ` +
             `action:${msgElements.action} in ${JSON.stringify(msgElements, 2, 2)}`);
         }
-        msg += `**${msgElements.issueSummary}**.\n\n${msgElements.body}\n\n`;
+//        msg += `**${msgElements.issueSummary}**.\n\n${msgElements.body}\n\n`;
+        msg += `**${msgElements.issueSummary}**.\n\n`;
         break;
 
       default:
@@ -578,7 +587,11 @@ function buildWatcherOrAssigneeMessage(msgElements, botEmail, jira) {
         msg += ` that you are watching.\n\n`;
       }
     }
-    msg += `${msgElements.body}\n\n${jira.getJiraUrl()}/browse/${msgElements.issueKey}`;
+    if ((msgElements.subject === 'comment') ||
+      ((msgElements.action === 'assigned') && (msgElements.assignedToEmail === botEmail))) {
+      msg += `${msgElements.body}\n\n`;
+    }
+    msg += `${jira.getJiraUrl()}/browse/${msgElements.issueKey}`;
     return msg;
   } catch (e) {
     throw new Error(`buildWatcherOrAssigneeMessage failed: ${e.message}`);

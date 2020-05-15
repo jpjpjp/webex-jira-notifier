@@ -19,7 +19,6 @@ class JiraConnector {
       // Configure Access to Jira to find watcher and other info
       this.request = null;
       this.jira_url = '';
-      this.jira_lookup_user_api = '';
       this.proxy_url = '';
       this.jira_url_regexp = null;
       this.jiraReqOpts = {
@@ -54,20 +53,63 @@ class JiraConnector {
         this.jiraAllowedProjects = [];
         this.jiraDisallowedProjects = [];
         if (process.env.JIRA_PROJECTS) {
-          this.jiraAllowedProjects = process.env.JIRA_PROJECTS.split(',');
+          this.jiraAllowedProjects = process.env.JIRA_PROJECTS.split(/,\s*/);
         }
 
         // Check if our environment overrode the lookup by username path
         if (process.env.JIRA_LOOKUP_USER_API) {
-          this.jira_lookup_user_api = JIRA_LOOKUP_USER_API;
+          this.jiraLookupUserApi = JIRA_LOOKUP_USER_API;
         } else {
-          this.jira_lookup_user_api = `${this.jira_url}/rest/api/2/user`;
+          this.jiraLookupUserApi = `${this.jira_url}/rest/api/2/user`;
         }
         // Check if our environment overrode the lookup by username path
         if (process.env.JIRA_LOOKUP_ISSUE_API) {
-          this.jira_lookup_issue_api = JIRA_LOOKUP_ISSUE_API;
+          this.jiraLookupIssueApi = JIRA_LOOKUP_ISSUE_API;
         } else {
-          this.jira_lookup_issue_api = `${this.jira_url}/rest/api/2/search`;
+          this.jiraLookupIssueApi = `${this.jira_url}/rest/api/2/search`;
+        }
+
+        // Check if our environment overrode the lookup board info URL
+        if (process.env.JIRA_LOOKUP_BOARD_API) {
+          this.jiraLookupBoardApi = JIRA_LOOKUP_BOARD_API;
+        } else {
+          this.jiraLookupBoardApi = `${this.jira_url}/rest/agile/1.0/board`;
+        }
+
+        // Check if our bot was configured with a Transition Board Cache Duration
+        if (process.env.JIRA_TRANSITION_CACHE_DURATION) {
+          this.transitionCacheDuration = process.env.JIRA_TRANSITION_CACHE_DURATION;
+        } else {
+          this.transitionCacheDuration = 2 * 60 * 1000;  // two minutes
+        }
+
+        // Check if our bot is configured to send transition notifications only for
+        // issues that belong to certain boards
+        this.transitionBoards = [];
+        this.transitionStories = [];
+        if (process.env.JIRA_TRANSITION_BOARDS) {
+          this.jiraTransitionBoards = process.env.JIRA_TRANSITION_BOARDS.split(/,\s*/);
+          // TODO put this in a timer so that it gets called periodically
+          this.getInfoForBoards(this.jiraTransitionBoards)
+            .then(boards => {
+              this.transitionBoards = boards;
+              return this.getStoriesForBoards(boards);
+            }).then(boardsWithStories => {
+              this.transitionStories = boardsWithStories;
+              setInterval(() => {
+                this.getStoriesForBoards(this.transitionBoards)
+                  .then(boardsWithStories => {
+                    this.transitionStories = boardsWithStories;
+                  }).catch(e => {
+                    logger.error(`jira-connector failed getting issues for transition boards: ${e.message}`);
+                    logger.error(`Will use existing cache of eligible transition ` +
+                      `stories and attempt to refresh again in ${this.transitionCacheDuration/1000} seconds`);
+                  });
+              }, this.transitionCacheDuration);
+            }).catch(e => {
+              logger.error(`jira-connector failed getting details for transition boards: "${e.message}" ` +
+                `Will notify about all issues that meet transition criteria.`);
+            });
         }
 
         // Build an in-memory cache of jira users as we look them up
@@ -156,7 +198,7 @@ class JiraConnector {
       return when(userObj);
     }
 
-    let url = `${this.jira_lookup_user_api}?username=${user}`;
+    let url = `${this.jiraLookupUserApi}?username=${user}`;
     // Use a proxy server if configured
     logger.verbose(`lookupUser: Fetching info on jira user: ${user}`);
     return request(this.convertForProxy(url), this.jiraReqOpts)
@@ -275,7 +317,7 @@ class JiraConnector {
     let options = JSON.parse(JSON.stringify(this.getDefaultPostOptions()));
     options.body = {"jql": ""};
     options.body.jql = 'key in (' + keys.map(x => '\"' + x + '\"').join(',') + ')';
-    return request.post(this.convertForProxy(this.jira_lookup_issue_api), options)
+    return request.post(this.convertForProxy(this.jiraLookupIssueApi), options)
       .then(resp => {
         if (!resp.hasOwnProperty('issues')) {
           reject(new Error('Did not get expected response from Jira watcher lookup. ' +
@@ -356,6 +398,74 @@ class JiraConnector {
       return bot.reply(trigger.message, errMsg);
     });
   }
+
+
+  /**
+   * Gets board info given a list of boardIds
+   *
+   * @function getInfoForBoards
+   * @param {Array} boardIds - list of boardIds to fetch
+   * @returns {Promise.Array} - returns array with an info object for each board
+   */
+  getInfoForBoards(boardIds) {
+    let boardsInfo = [];
+    return Promise.all(boardIds.map(boardId => {
+      let boardUrl = `${this.jiraLookupBoardApi}/${boardId}`;
+      return request.get(this.convertForProxy(boardUrl), this.jiraReqOpts)
+        .then(boardInfo => boardsInfo.push(boardInfo));
+    }))
+      .then(() => boardsInfo);
+  }
+
+  /**
+   * Add the child stories to a list of boardsInfo
+   *
+   * @function getStoriesForBoards
+   * @param {Array} boards - list of board info objects 
+   * @returns {Promise.Array} - returns array with an info object for each board
+   */
+  getStoriesForBoards(boards) {
+    let boardsWithStories = [];
+    return Promise.all(boards.map(board => {
+      let issuesUrl = `${board.self}/issue`;
+      let options = JSON.parse(JSON.stringify(this.jiraReqOpts));
+      return this.getStoriesForABoard(issuesUrl, options)
+        .then(stories => {
+          board.stories = stories.map(s => s.key);
+          boardsWithStories.push(board);
+        });
+    }))
+      .then(() => boardsWithStories);
+  }
+
+  /**
+   * 
+   * Recursively fetch all the stories for a given board
+   *
+   * @function getStorysForBoard
+   * @param {string} url - url to get stories from
+   * @param {Object} options - request options
+   * @returns {Promise.Array} - returns array with user stories
+   */
+  getStoriesForABoard(url, options, stories) {
+    return request.get(this.convertForProxy(url), options)
+      .then(issuesListObj => {
+        if (!stories) {
+          stories = [];
+        }
+        if (issuesListObj.total) {
+          stories = stories.concat(issuesListObj.issues);
+        }
+        if (issuesListObj.issues.length === issuesListObj.maxResults) {
+          options.qs = {startAt: stories.length};
+          console.debug(`Fetching eligible transtion stories from ${url}/?startAt=${stories.length}`);
+          return this.getStoriesForABoard(url, options, stories);
+        }
+        console.debug(`Got all ${stories.length} eligible transtion stories board ${url}`);
+        return stories;
+      });
+  }
+
 
 }
 
