@@ -38,7 +38,35 @@
                     "LOG_LEVEL": "0"},
             "protocol": "inspector",
             "outputCapture": "std",
+            "program": "${workspaceFolder}/sandbox-jira-event-test-cases/test-jira-event-handler.js"
+        },
+        {
+          "name": "Launch Old Test",
+          "type": "node",
+          "runtimeVersion": "14.2.0",
+          "request": "launch",
+          "env": {"DEBUG":"framework",
+                  "VERBOSE":"true",
+                  "TEST_TIMER_MULTIPLIER": "500500",
+                  "TEST_CASES": "SUBSET-all",
+                  "TEST_CASE_DIR": "prod-jira-event-test-cases",
+                  "TRANSITION_PROJECTS": "SPARK,WEBEX",
+                  "TRANSITION_STATUS_TYPES": "DEFINITION,DELIVERY,IN PROGRESS,WORK STARTED,EVALUATE,INTERNAL_EARLY_ACCESS,DONE",
+                  "TRANSITION_ISSUE_TYPES": "EPIC,PORTFOLIO FEATURE",
+                  "LOG_LEVEL": "0"},
+          "protocol": "inspector",
+          "outputCapture": "std",
           "program": "${workspaceFolder}/test-jira-event-handler.js"
+      },
+      {
+            "name": "Heroku",
+            "type": "node",
+            "request": "attach",
+            "address": "localhost",
+            "port": 9229,
+            "protocol": "inspector",
+            "localRoot": "${workspaceFolder}",
+            "remoteRoot": "/app"
         }      
     ]
 }

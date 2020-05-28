@@ -80,7 +80,7 @@ class JiraConnector {
         if (process.env.JIRA_TRANSITION_CACHE_DURATION) {
           this.transitionCacheDuration = process.env.JIRA_TRANSITION_CACHE_DURATION;
         } else {
-          this.transitionCacheDuration = 2 * 60 * 1000;  // two minutes
+          this.transitionCacheDuration = 6 * 60 * 60 * 1000;  // six hours
         }
 
         // Check if our bot is configured to send transition notifications only for
@@ -89,27 +89,6 @@ class JiraConnector {
         this.transitionStories = [];
         if (process.env.JIRA_TRANSITION_BOARDS) {
           this.jiraTransitionBoards = process.env.JIRA_TRANSITION_BOARDS.split(/,\s*/);
-          // TODO put this in a timer so that it gets called periodically
-          this.getInfoForBoards(this.jiraTransitionBoards)
-            .then(boards => {
-              this.transitionBoards = boards;
-              return this.getStoriesForBoards(boards);
-            }).then(boardsWithStories => {
-              this.transitionStories = boardsWithStories;
-              setInterval(() => {
-                this.getStoriesForBoards(this.transitionBoards)
-                  .then(boardsWithStories => {
-                    this.transitionStories = boardsWithStories;
-                  }).catch(e => {
-                    logger.error(`jira-connector failed getting issues for transition boards: ${e.message}`);
-                    logger.error(`Will use existing cache of eligible transition ` +
-                      `stories and attempt to refresh again in ${this.transitionCacheDuration/1000} seconds`);
-                  });
-              }, this.transitionCacheDuration);
-            }).catch(e => {
-              logger.error(`jira-connector failed getting details for transition boards: "${e.message}" ` +
-                `Will notify about all issues that meet transition criteria.`);
-            });
         }
 
         // Build an in-memory cache of jira users as we look them up
@@ -123,7 +102,7 @@ class JiraConnector {
       throw (err);
     }
   }
-
+  
   /**
    * Accessor for main jira url
    *
@@ -401,8 +380,52 @@ class JiraConnector {
 
 
   /**
+   * Initialize jira calls to create a cache of issue keys that are on boards 
+   * that users want to be notified about
+   * 
+   * @function initTRBoardCache
+   * @return {<Promise>} - if resolved, config is initiatialized
+   */
+  initTRBoardCache() {
+    // First validate that all configured boards are available
+    return this.getInfoForBoards(this.jiraTransitionBoards)
+      .then(boards => {
+        this.transitionBoards = boards;
+        return this.getStoriesForBoards(boards);
+      }).then(boardsWithStories => {
+        this.transitionStories = boardsWithStories;
+        // Then read in all the issues on each of those boards
+        // We set an interval timer here so that this cache is 
+        // periodically refereshed
+        setInterval(() => {
+          this.getStoriesForBoards(this.transitionBoards)
+            .then(boardsWithStories => {
+              this.transitionStories = boardsWithStories;
+            }).catch(e => {
+              logger.error(`jira-connector failed getting issues for transition boards: ${e.message}`);
+              logger.error(`Will use existing cache of eligible transition ` +
+                        `stories and attempt to refresh again in ${this.transitionCacheDuration/1000} seconds`);
+            });
+        }, this.transitionCacheDuration);
+      });
+  }
+
+  /**
+   * Is issue in our TR Notification Filter Cache
+   * 
+   * @function issueInTRFilterList
+   * @param {string} key - issue key for TR Notification candidate
+   * @return {object} - array of boards that have the issue on them
+   */
+  issueInTRFilterList(key) {
+    return this.transitionStories.filter(boardInfo => {
+      return (-1 != boardInfo.stories.indexOf(key));
+    }); 
+  }
+
+  /**
    * Gets board info given a list of boardIds
-   *
+   * @private
    * @function getInfoForBoards
    * @param {Array} boardIds - list of boardIds to fetch
    * @returns {Promise.Array} - returns array with an info object for each board
@@ -412,14 +435,21 @@ class JiraConnector {
     return Promise.all(boardIds.map(boardId => {
       let boardUrl = `${this.jiraLookupBoardApi}/${boardId}`;
       return request.get(this.convertForProxy(boardUrl), this.jiraReqOpts)
-        .then(boardInfo => boardsInfo.push(boardInfo));
+        .then(boardInfo => {
+          logger.info(`Will notify of transitions on boardId: ${boardInfo.id}, name: ${boardInfo.name}`);
+          return boardsInfo.push(boardInfo);
+        })
+        .catch(e => {
+          logger.error(`getInfoForBoards failed lookup for boardID "${boardId}": ${e.message}`);
+          return Promise.reject(e);
+        });
     }))
       .then(() => boardsInfo);
   }
 
   /**
    * Add the child stories to a list of boardsInfo
-   *
+   * @private
    * @function getStoriesForBoards
    * @param {Array} boards - list of board info objects 
    * @returns {Promise.Array} - returns array with an info object for each board
@@ -432,6 +462,7 @@ class JiraConnector {
       return this.getStoriesForABoard(issuesUrl, options)
         .then(stories => {
           board.stories = stories.map(s => s.key);
+          logger.info(`Got all ${board.stories.length} issues on boardId: ${board.id}, name: ${board.name}`);
           boardsWithStories.push(board);
         });
     }))
@@ -441,7 +472,7 @@ class JiraConnector {
   /**
    * 
    * Recursively fetch all the stories for a given board
-   *
+   * @private
    * @function getStorysForBoard
    * @param {string} url - url to get stories from
    * @param {Object} options - request options
@@ -458,10 +489,9 @@ class JiraConnector {
         }
         if (issuesListObj.issues.length === issuesListObj.maxResults) {
           options.qs = {startAt: stories.length};
-          console.debug(`Fetching eligible transtion stories from ${url}/?startAt=${stories.length}`);
+          logger.debug(`Fetching eligible transtion stories from ${url}/?startAt=${stories.length}`);
           return this.getStoriesForABoard(url, options, stories);
         }
-        console.debug(`Got all ${stories.length} eligible transtion stories board ${url}`);
         return stories;
       });
   }

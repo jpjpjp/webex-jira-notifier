@@ -1,4 +1,4 @@
-FROM node:10
+FROM node:14
 
 # Expect the build command to set BUILD_TIMESTAMP
 ARG BUILD_TIMESTAMP

@@ -31,8 +31,9 @@ Prerequisites:
  
 
 ## Configuring the bot
-
 Much of the functionality of this app is controlled by enviornement variables. Set the following environment variables in a .env file if running locally or in your production environment.
+
+### Bare Minimum configuration To run
 
 The bare mimimum environment required is:
 * TOKEN - the Webex bot token that you got when you created your bot at https://developer.webex.com/add-bot.html
@@ -40,9 +41,17 @@ The bare mimimum environment required is:
 * JIRA_URL - the URL of the jira system to monitor, ie:'https://jira.mycompany.com/jira'
 * JIRA_USER and JIRA_PW - The username and password of an account that has permission to query watchers and that can post comments on behalf of users.  (For organizations that support it, an enhancement to this bot could be to get each user to provide an OAuth token for the comments.)
 
+### Recommended minimum configuration
+
 While not strictly required during the iterative development process the following variables are used to maintain user state in persistent storage:
 * MONGO_URI - the URI string to log into your Mongo Altas DB
 * MONGO_BOT_STORE - the name of the collection that your user info will be stored in
+
+It's sometimes useful to get feedback in Webex Teams about the bots health.  It can report when it goes up/down, when new users add it to a space, or when error conditions occur.   Set one of the following to receive these updates:
+* ADMIN_EMAIL - the email address of the Webex Teams user to notify about bot activity.  This is generally the developer who maintains this bot
+
+
+### Special Jira Configurations
 
 Jira webhooks can be configured to send events for new comments.  These are generally redundant with the issue_updated:comment_[created,updated,deleted] events.  If you wish to process the comment event as well set the following:
 * PROCESS_COMMENT_EVENTS - when set comment events will be processed and issue_updated:comment_* events will be ignored. (Note that this method is generally less efficient and results in an additional API call to Jira to fetch the issue information anyhow.)
@@ -56,20 +65,18 @@ When the bot receives Jira Events it will typically make calls back to the Jira 
 If user lookups fail, the bot contains logic to "guess" the user's email based on a specified default domain.  For example if it discovers a mention with user "fred" it can guess that the email for this user is "fred@company.com", if DEFAULT_DOMAIN is set to company.com.   Note that this logic only takes effect if the lookup user API fails.
 * DEFAULT_DOMAIN - the email domain that all your Jira users belong to, ie: "my-company.com".  
 
-
-It's sometimes useful to get feedback in Webex Teams about the bots health.  It can report when it goes up/down, when new users add it to a space, or when error conditions occur.   Set one of the following to receive these updates:
-* ADMIN_EMAIL - the email address of the Webex Teams user to notify about bot activity.  This is generally the developer who maintains this bot
-
+### Working with a proxy server to access JIRA
 Also optionally, this bot can use a proxy server to route the watcher requests to a jira.  When these variables are set the bot will replace the portion of the wather URL that came with the Jira webhook and replace it with the string in the proxy server.  For example one might set the following environment varialbes:
 * JIRA_URL - base URL for my secure jira server ie: https://jira.securecompany.com/jira
 * PROXY-URL - base URL for the proxy server, ie: https://jira-proxy.securcompany.com/jira
 
 When using a proxy make sure to set the JIRA_USER and JIRA_PW environment variables to a proxy authorized user.  The proxy server is responsible for replacing this with the credentials for a user authorized in the real system.
 
+### Logging configurations
+
 The bot can be configured to log all the jira events it receives to a directory JiraEvents.   These files can be helpful when intially deploying and troubleshooting the bot.
 * LOG_JIRA_EVENTS - set to true to enable jira event logging
   
-
 Finally, the bot contains a logger that can be configured to post log data to [papertrail](https://www.solarwinds.com/papertrail), which provides for remote browser based log viewing.   To enable this create a papertrail account and set the following:
 * PAPERTRAIL - set to enable 
 * PAPERTRAIL_HOST - host URL provided for your papertrail account
@@ -77,6 +84,28 @@ Finally, the bot contains a logger that can be configured to post log data to [p
 
 Regardless of whether you use papertrail or some other logging mechanism, the bot is configured with levels of logging which can be controlled via:
 * LOG_LEVEL - set to debug, verbose, info, warn, or error.  debug (all) logging is enabled if not set
+
+## Group space configurations
+
+The bot can be configurated to work in specifically authorized group spaces through the use environment variables.   The bot can provide two types of authorization in group spaces
+
+### Transition Notifications
+
+The bot can notify group spaces when the status of an issue changes.   At Cisco, we call this a "transition" which may include certain ceremonies.   All of the following environment variables must be set to enable transition notifications in group spaces:
+
+* TRANSITION_SPACE_IDS - A comma seperated list of Webex Teams spaceIds where the bot is allowed to provide transition notifications
+* TRANSITION_PROJECTS - A comma seperated list of Jira Project types to notify about
+* TRANSITION_STATUS_TYPES - A comma seperated list of status names.  Notifications will be sent when an issue transfers TO one of the statuses on this list
+* TRANSITION_ISSUE_TYPES - A comma seperated list of issue types to notify about
+
+Optionally, an additional environment variable can be set to further filter on which transitions will generate a notification:
+
+* JIRA_TRANSITION_BOARDS - A list of board IDs.  If set, the application will query for all the stories for each of the boards and keep a list of issue keys in a memory cache.  When all other transition filter criteria are met, the app will ensure that the issue also belongs to at least one of the configured boards.
+
+The cache is refreshed every 6 hours.
+
+
+
 
 ## Starting the bot
 
@@ -87,7 +116,7 @@ Start your node server in your enviornment.  This can be done via a debugger whe
 
 Once the server is up and running Webex Teams users can get Jira Notifications by creating a one-on-on space with the bot.  You will need to inform your users of the email address that you specified when you created the bot at https://developer.ciscospark.com/add-bot.html
 
-The bot only works in one on one spaces.  If a user attempts to add it to a group space it will immediately exit.  This ensures that no jira information will ever be shared with a non jira user.
+Unless specially configured, The bot only works in one on one spaces.  If a user attempts to add it to a group space it will immediately exit.  This ensures that no jira information will ever be shared with a non jira user.  See the optional environment settings below to learn about group space configuration.
 
 When a user succesfully creates a one-on-one space with the bot, they will get an inititial welcome message.  Subsequently the bot will send them messages when they are mentioned in a jira ticket, if a jira ticket is assigned to them, if a jira ticket they were assigned to is assigned to someone else, or if a jira ticket hey were assigned to is deleted.   A private message will be sent from the bot to the user specified via the ADMIN_EMAIL environemnt variable letting them know about the new user.
 

@@ -24,13 +24,13 @@ class JiraEventHandler {
    * JiraEventHandler constructor needs a JiraConnector object
    *
    * @param {object} jiraConnector -- an instantiated jiraConnector object
-   * @param {object} [transitionConfig] - option config with rules to notify 
-   *                           of certain transion types. 
+   * @param {object} [groupSpaceConfig] - option config with rules to notify 
+   *                           of certain events in group spaces. 
    */
-  constructor(jiraConnector, transitionConfig) {
+  constructor(jiraConnector, groupSpaceConfig) {
     /** @private */
     this.jiraConnector = jiraConnector;
-    this.transitionConfig = transitionConfig;
+    this.groupSpaceConfig = groupSpaceConfig;
   }
 
   /**
@@ -64,7 +64,7 @@ class JiraEventHandler {
         return processCommentEvent(jiraEvent, framework, this.jiraConnector, cb);
       } else if (issueEvent.test(jiraEvent.webhookEvent)) {
         logger.info(`Processing incoming Jira issue event: "${jiraEvent.issue_event_type_name}", Issue Key: "${jiraEvent.issue.key}"`);
-        return processIssueEvent(jiraEvent, framework, this.jiraConnector, this.transitionConfig, cb);
+        return processIssueEvent(jiraEvent, framework, this.jiraConnector, this.groupSpaceConfig, cb);
       } else {
         logger.warn(`Ignoring unknown webhookEvent: "${jiraEvent.webhookEvent}`);
         return;
@@ -76,7 +76,7 @@ class JiraEventHandler {
 }
 module.exports = JiraEventHandler;
 
-function processIssueEvent(jiraEvent, framework, jira, transitionConfig, cb) {
+function processIssueEvent(jiraEvent, framework, jira, groupSpaceConfig, cb) {
   try {
     let msgElements = {};
     let toNotifyList = [];
@@ -209,7 +209,10 @@ function processIssueEvent(jiraEvent, framework, jira, transitionConfig, cb) {
     notifyMentioned(framework, msgElements, toNotifyList, jira, cb);
 
     // Evaluate and potentially notify spaces about a feature status transition
-    evaluateForTransitionNotification(framework, msgElements, transitionConfig, cb);
+    evaluateForTransitionNotification(framework, msgElements, groupSpaceConfig.transitionConfig, jira, cb);
+
+    // Evaluate and potentially notify spaces about new issues being created
+    evaluateForNewIssueNotifications(framework, msgElements, groupSpaceConfig.newIssueConfigs, jira, cb);
 
     // Wait for and process the watchers (if any)
     if (!watcherPromise) {
@@ -378,11 +381,60 @@ function notifyBotUsers(framework, recipientType, msgElements, emails, jira, cb)
   });
 }
 
-function evaluateForTransitionNotification(framework, msgElements, config, cb) {
+function evaluateForNewIssueNotifications(framework, msgElements, configs, jira, cb) {
   try {
-  // Evaluate transitionConfig and event objects to see if this issue is a candidate
-    if ((config === null) || (typeof config !== 'object') ||
-    (msgElements.jiraEvent.webhookEvent !== 'jira:issue_updated') ||
+    // Is this issue event a New Issue Notification candidate?
+    if ((msgElements.jiraEvent.webhookEvent !== 'jira:issue_created') || 
+      // Initial version only supports bugs
+      (msgElements.issueType != 'Bug')) {
+      return;
+    }
+    let issue = msgElements.jiraEvent.issue;
+
+    // We have a new issue, lets see if any spaces want to be notified about it
+    configs.forEach(spaceConfig => {
+      // Is it for a component, this space cares about?
+      if ((!spaceConfig?.components?.length) || (!issue?.fields?.components?.length)) {
+        return;
+      } 
+      let commonComponents = issue.fields.components.filter(c => {
+        return (-1 != spaceConfig.components.indexOf(c.name));
+      });
+
+      // TODO allow for other things to trigger notifications like Team/PT
+      if (commonComponents.length) {
+        let msg = buildWatcherOrAssigneeMessage(msgElements, null, jira)
+        let bot = spaceConfig.bot;
+        if (bot) {
+          logger.info('Sending a new issue notification to ' + bot.room.title + ' about ' + msgElements.issueKey);
+          bot.say({markdown: msg});
+          // Store the key of the last notification in case the user wants to reply
+          let lastNotifiedIssue = {
+            storyUrl: msgElements.issueSelf,
+            storyKey: msgElements.issueKey
+          };
+          bot.store('lastNotifiedIssue', lastNotifiedIssue);
+          if (cb) {cb(null, bot);}
+        }
+      }
+
+    });
+
+  } catch(e) {
+    logger.error(`evaluateForNewIssueNotifications() caught exception: ${e.message}`);
+    createTestCase(e, msgElements.jiraEvent, framework, 'evaluate-for-tr-error'); 
+    return;  
+  }
+}
+
+function evaluateForTransitionNotification(framework, msgElements, config, jira, cb) {
+  try {
+    // No point evaluating if no one is listening...
+    if (!config?.trSpaceBots?.length) { // eslint-disable-line
+      return;
+    }  
+    // Is this issue event a TR Notification candidate
+    if ((msgElements.jiraEvent.webhookEvent !== 'jira:issue_updated') ||
     (msgElements.action !== 'status') || (typeof msgElements.jiraEvent.issue.fields !== 'object')) {
       return;
     }
@@ -390,24 +442,36 @@ function evaluateForTransitionNotification(framework, msgElements, config, cb) {
 
     // We have a status related event.
     // Check if it is one of the projects we care about
-    if ((!config.projects) || (!config.projects.length) || 
-    (typeof issue.fields.project !== 'object') ||
-    (-1 === config.projects.findIndex(project => issue.fields.project.key.toLowerCase() === project.toLowerCase()))) {
+    if ((!config?.projects?.length) || (!issue?.fields?.project?.key) ||
+      (-1 === config.projects.findIndex(project => issue.fields.project.key.toLowerCase() === project.toLowerCase()))) {
       return;
     }
   
     // We have a status related event for a project we are interested in.
     // Check if it is one of the issue types we care about
-    if ((!config.issueTypes) || (!config.issueTypes.length) ||
-    (typeof issue.fields.issuetype !== 'object') ||
-    (-1 === config.issueTypes.findIndex(type => issue.fields.issuetype.name.toLowerCase() === type.toLowerCase()))) {
+    if ((!config?.issueTypes?.length) || (!issue?.fields?.issuetype?.name) ||
+      (-1 === config.issueTypes.findIndex(type => issue.fields.issuetype.name.toLowerCase() === type.toLowerCase()))) {
       return;
     }
 
     // Is this a transition to a status that we are monitoring?
-    if (-1 !== config.statusTypes.findIndex(status => msgElements.updatedTo.toLowerCase() === status.toLowerCase())) {
-      notifyTransitionSpaces(msgElements, config, cb);
+    if ((!config?.statusTypes) || (!msgElements?.updatedTo) ||
+      (-1 === config.statusTypes.findIndex(status => msgElements.updatedTo.toLowerCase() === status.toLowerCase()))) {
+        return;
     }
+    // This is a candidate.  Do we have a filter of specific issues we care about?
+    if (jira.transitionStories.length) {
+      let boards = jira.issueInTRFilterList(msgElements.issueKey);
+      if (boards.length) {
+        let boardNames = 
+          boards.map(board => `[${board.name}](${board.self})`).join(', and the board ');
+        notifyTransitionSpaces(msgElements, config, boardNames, cb);
+      }
+    } else {
+      // No TR Board filter, go ahead and notify
+      notifyTransitionSpaces(msgElements, config, '', cb);
+    } 
+    
   } catch(e) {
     logger.error(`evaluateForTransitionNotification() caught exception: ${e.message}`);
     createTestCase(e, msgElements.jiraEvent, framework, 'evaluate-for-tr-error'); 
@@ -415,18 +479,16 @@ function evaluateForTransitionNotification(framework, msgElements, config, cb) {
   }
 }
 
-function notifyTransitionSpaces(msgElements, config, cb) {
+function notifyTransitionSpaces(msgElements, config, boards, cb) {
   let issue = msgElements.jiraEvent.issue;
-  if ((typeof config !== 'object') || (typeof config.trSpaceBots !== 'object') ||
-    (!config.trSpaceBots.length)) {
-    return;
+  let msg = `${msgElements.author} transitioned a(n) ${msgElements.issueType} from ` +
+    `${msgElements.updatedFrom} to ${msgElements.updatedTo}`;
+  if ((msgElements.updatedTo) && (issue?.fields?.resolution?.name)) {
+    msg += `, Resolution:${issue.fields.resolution.name}`
   }
-  let msg = `${msgElements.author} transitioned a ${msgElements.issueType} from ` +
-    `${msgElements.updatedFrom} to ${msgElements.updatedTo}:\n` +
-    `* [${msgElements.issueKey}](${msgElements.issueUrl}): ${msgElements.issueSummary}\n`;
+  msg += `:\n* [${msgElements.issueKey}](${msgElements.issueUrl}): ${msgElements.issueSummary}\n`;
 
-  if ((issue.fields.components !== null) && (typeof issue.fields.components === 'object') && 
-    (issue.fields.components.length)) {
+  if (issue?.fields?.components?.length) {
     msg += '* Components: ';
     for (let i=0; i<issue.fields.components.length; i++) {
       msg += `${issue.fields.components[i].name}, `;
@@ -435,13 +497,17 @@ function notifyTransitionSpaces(msgElements, config, cb) {
     msg = msg.substring(0, msg.length - 2);
   }
 
-  if ((issue.fields.customfield_11800 !== null) && (typeof issue.fields.customfield_11800 === 'object') && 
-    (issue.fields.customfield_11800.value)) {
-    msg += `* Team/PT: ${issue.fields.customfield_11800.value}`;
+  if (issue?.fields?.customfield_11800?.value) {
+    msg += `\n* Team/PT: ${issue.fields.customfield_11800.value}`;
     if ((typeof issue.fields.customfield_11800.child === 'object') && (issue.fields.customfield_11800.child.value)) {
       msg += `: ${issue.fields.customfield_11800.child.value}`;
     }
   }
+
+  if (boards) {
+    msg += `\n\nOn the board: ${boards}`;
+  }
+
 
   config.trSpaceBots.forEach((bot) => {
     bot.say({markdown: msg});
@@ -579,15 +645,19 @@ function buildWatcherOrAssigneeMessage(msgElements, botEmail, jira) {
         logger.warn(`buildWatcherOrAssigneeMessage: Unsure how to format message for ` +
           `subject:${msgElements.subject} in ${JSON.stringify(msgElements, 2, 2)}`);
     }
+
     if (!((msgElements.action === 'assigned') && (msgElements.assignedToEmail === botEmail))) {
       msg += `Jira ${msgElements.issueType}: **${msgElements.issueSummary}**`;
       if (msgElements.assignedToEmail === botEmail) {
         msg += ` that you are assigned to.\n\n`;
-      } else {
+      } else if (botEmail) {
         msg += ` that you are watching.\n\n`;
+      } else {
+        msg += `.\n\n`
       }
-    }
-    if ((msgElements.subject === 'comment') ||
+    } 
+
+    if ((msgElements.subject === 'comment') || (!botEmail) ||
       ((msgElements.action === 'assigned') && (msgElements.assignedToEmail === botEmail))) {
       msg += `${msgElements.body}\n\n`;
     }

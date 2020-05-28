@@ -3,9 +3,6 @@ Cisco Spark Bot to notify users when they are mentioned in a
 Jira ticket and/or if it is assigned to them.
 */
 /*jshint esversion: 6 */  // Help out our linter
-const package_version = require('./package.json').version;
-console.log(`Running app version: ${package_version}`);
-console.log(`Running node version: ${process.version}`);
 
 
 var Framework = require('webex-node-bot-framework');
@@ -17,6 +14,9 @@ app.use(bodyParser.json({limit: '50mb'}));
 // When running locally read environment variables from a .env file
 require('dotenv').config();
 logger = require('./logger');
+const package_version = require('./package.json').version;
+logger.info(`Running app version: ${package_version}`);
+logger.info(`Running node version: ${process.version}`);
 
 // Check if we are configured to notify certain group spaces about
 // certain types of issues transitioning
@@ -46,6 +46,32 @@ if ((process.env.TRANSITION_PROJECTS) || (process.env.TRANSITION_STATUS_TYPES) |
   transitionConfig.trSpaceBots = [];
 }
 
+// Check if we are configured to notify certain group spaces about
+// new issues being created
+let groupSpaceConfig = {
+  transitionConfig,
+  newIssueConfigs: []
+};
+if (process.env.NOTIFICATION_SPACE_IDS) {
+  let spaces = process.env.NOTIFICATION_SPACE_IDS.split('/');
+  spaces.forEach(space => {
+    let config = space.split('+');
+    let roomId = config.shift();
+    if (!config.length) {
+      console.error(`Cannot read filter info for Notification space: ${roomId}\n` +
+       `Syntax: NOTIFICATIONS_SPACE_IDS=roomId1+component1,component2/roomId2:component1,...`);
+      process.exit(0); 
+    }
+    let components = config[0].split(/,\s*/);
+    groupSpaceConfig.newIssueConfigs.push({
+      roomId,
+      components
+    });
+  });
+}
+
+
+
 // Helper classes for dealing with Jira Webhook payload
 let jira = {};
 let jiraEventHandler = {};
@@ -54,11 +80,26 @@ try {
   var JiraConnector = require('./jira-connector.js');
   jira = new JiraConnector();
   const JiraEventHandler = require("./jira-event.js");
-  jiraEventHandler = new JiraEventHandler(jira, transitionConfig);
+  jiraEventHandler = new JiraEventHandler(jira, groupSpaceConfig);
 } catch (err) {
   logger.error('Initialization Failure: ' + err.message);
   process.exit(-1);
 }
+
+// If configured to use TR Boards as transition notification filters, 
+// load in the initial cache of all the issues on those boards
+if (process.env.JIRA_TRANSITION_BOARDS) {
+  logger.info('Found Transition Boards to filter on, will try to read all their issues..');
+  jira.initTRBoardCache()
+    .then(() => {
+      logger.info(`Jira Transition Board issue cache is now populated.  Notifying only on those issues`);
+    }).catch(e => {
+      logger.error(`Failed to lookup all issues on TR boards: ${e.message}.\n` +
+        `Check config set in environment JIRA_TRANSITION_BOARDS: ${process.env.JIRA_TRANSITION_BOARDS}.\n` +
+        `Transition notifications will be sent without this filter`);
+    });
+}
+
 
 // Set the config vars for the environment we are running in
 var config = {};
@@ -198,11 +239,19 @@ framework.on('spawn', function (bot, id, addedById) {
   if (bot.isGroup) {
     // The only exception for this is any TR notification spaces
     // TODO = may want to enforce membership rules here:
-    if ((transitionConfig.trSpaceIds.length) && 
-        (-1 !== transitionConfig.trSpaceIds.indexOf(bot.room.id))) {
+    let groupIsAuthorized = false;
+    if (-1 !== (index = transitionConfig.trSpaceIds.indexOf(bot.room.id))) {
       logger.info(`Found a TR Notification Group Space: ${bot.room.title}`);
+      groupIsAuthorized = true;
       transitionConfig.trSpaceBots.push(bot);
-    } else {
+    }
+    if (-1 !== (index = groupSpaceConfig.newIssueConfigs.findIndex(s => s.roomId === bot.room.id))) {
+      logger.info(`Found a New Issue Notification Group Space: ${bot.room.title}`);
+      groupIsAuthorized = true;
+      let config = groupSpaceConfig.newIssueConfigs[index];
+      config.bot = bot;
+    } 
+    if (!groupIsAuthorized) {
       logger.info(`Leaving Group Space: ${bot.room.title}`);
       bot.say("Hi! Sorry, I only work in one-on-one rooms at the moment.  Goodbye.")
         .finally(() => {
@@ -245,12 +294,18 @@ framework.on('spawn', function (bot, id, addedById) {
 
 framework.on('despawn', function (bot) {
   let index;
-  if ((bot.isGroup) && (transitionConfig.trSpaceIds.length) && 
-    (-1 !==
-       (index = transitionConfig.trSpaceBots.findIndex(trBot => bot.room.id === trBot.room.id)))) {
-    logger.info(`Bot left a TR Notification Group Space: ${bot.room.title}`);
-    transitionConfig.trSpaceBots =
+  if (bot.isGroup) {
+    if (-1 !==
+       (index = transitionConfig.trSpaceBots.findIndex(trBot => bot.room.id === trBot.room.id))) {
+      logger.info(`Bot left a TR notification Group Space: ${bot.room.title}`);
+      transitionConfig.trSpaceBots =
           transitionConfig.trSpaceBots.splice(index, 1);
+    } 
+    if (-1 !==
+        (index = groupSpaceConfig.newIssueConfigs.findIndex(s => s.roomId === bot.room.id))) { 
+      logger.info(`Bot left a New Issue notification Group Space: ${bot.room.title}`);
+      groupSpaceConfig.newIssueConfigs = groupSpaceConfig.newIssueConfigs.splice(index, 1);
+    }
   }
 });
 
@@ -276,13 +331,26 @@ function sayNewFunctionalityMessage(bot) {
 async function postInstructions(bot, status_only = false, instructions_only = false) {
   try {
     if (bot.isGroup) {
-      bot.say('I will send notifications to this space about transitions. ' +
+      let also = '';
+      let msg = '';
+      if (-1 !== transitionConfig.trSpaceIds.indexOf(bot.room.id)) {
+        msg = 'I will send notifications to this space about transitions. ' +
         `My current configuration is as follows: \n` +
         `* Jira Projects: ${transitionConfig.projects.join(', ')}\n` +
         `* Issue Types:   ${transitionConfig.issueTypes.join(', ')}\n` +
-        `* Transition to: ${transitionConfig.statusTypes.join(',')}\n\n` +
-        `I don't currently support any commands in Transition notification spaces, ` +
-        `but if you message me in a 1-1 space I can give you customized notifications.`);
+        `* Transition to: ${transitionConfig.statusTypes.join(',')}\n\n`;
+        also = 'also ';
+      } 
+      if (-1 != groupSpaceConfig.newIssueConfigs.findIndex(s => s.roomId === bot.room.id)) {
+        let config = groupSpaceConfig.newIssueConfigs.find(s => s.roomId === bot.room.id);
+        msg += `I will ${also}send notifications to this space about new issues. ` +
+        `My current configuration is as follows: \n` +
+        `* Issue Types: Bug\n` +
+        `* Components: ${config.components.join(',')}\n\n`;
+      }
+      msg += `I don't currently support any commands in group spaces, ` +
+      `but if you message me in a 1-1 space I can give you personalized notifications.`;
+      await bot.say(msg);
     } else {
       if (!status_only) {
         await bot.say("I will look for Jira tickets that are assigned to, or that mention " +
@@ -328,9 +396,6 @@ async function postInstructions(bot, status_only = false, instructions_only = fa
         }
         await bot.say(msg);
         logger.debug('Status for ' + bot.isDirectTo + ': ' + JSON.stringify(userConfig, null, 2));
-      //})
-      //    .catch(function (err) {
-      //    });
       }
     }
   } catch(e) {

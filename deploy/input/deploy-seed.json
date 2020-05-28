@@ -149,6 +149,15 @@
                 }
               },
               {
+                "name": "JIRA_TRANSITION_BOARDS",
+                "valueFrom": {
+                  "configMapKeyRef": {
+                    "key": "JIRA_TRANSITION_BOARDS",
+                    "name": "{{configName}}"
+                  }
+                }
+              },
+              {
                 "name": "TRANSITION_PROJECTS",
                 "valueFrom": {
                   "configMapKeyRef": {
@@ -180,6 +189,15 @@
                 "valueFrom": {
                   "configMapKeyRef": {
                     "key": "TRANSITION_SPACE_IDS",
+                    "name": "{{configName}}"
+                  }
+                }
+              },
+              {
+                "name": "NOTIFICATION_SPACE_IDS",
+                "valueFrom": {
+                  "configMapKeyRef": {
+                    "key": "NOTIFICATION_SPACE_IDS",
                     "name": "{{configName}}"
                   }
                 }
