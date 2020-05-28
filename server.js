@@ -509,6 +509,32 @@ function toggleNotifySelf(bot, state) {
   });
 }
 
+/*
+ * Helper methods for Group Space Commands and Configuration
+ */
+function processGroupSpaceCommand(bot, trigger) {
+  logger.info(`Processing a "${trigger.text}" request in space: "${bot.room.title}"`);
+  if (trigger.text.match(/(delete)/i)) {
+    let msg = 'I can only process a "delete" command as a threaded reply to a message that I posted';
+    if (trigger.message.parentId) {
+      bot.webex.messages.remove(trigger.message.parentId)
+        .catch(e => {
+          logger.info(`Failed to delete a parent message. ` +
+            `This is usually because it wasn't posted by the bot.  Error: ${e.message}`);
+          bot.reply(trigger.message, msg);
+        });
+    } else {
+      bot.reply(trigger.message, msg);
+    }
+  } else {
+    bot.reply(trigger.message,
+      `Sorry, I don't know how to respond to "${trigger.text}" in a group space.`);
+  }
+}
+
+/*
+ * Helper methods for the Admin space
+ */
 function updateAdmin(message, listAll = false) {
   try {
     if (listAll) {
@@ -660,12 +686,12 @@ framework.hears(reply_words, function (bot, trigger) {
           lastNotifiedIssue.storyKey,
           comment, bot, bot.isDirectTo);
       } else {
-        bot.say('Sorry, cannot find last notification to reply to. ' +
+        bot.reply(trigger.message, 'Sorry, cannot find last notification to reply to. ' +
           'Please click the link above and update directly in jira.');
       }
     }).catch((e) => {
       logger.warn('Failure in reply handler: ' + e.message);
-      bot.say('Sorry, cannot find last notification to reply to. ' +
+      bot.reply(trigger.message, 'Sorry, cannot find last notification to reply to. ' +
         'Please click the link above and update directly in jira.');
     });
   responded = true;
@@ -683,17 +709,20 @@ framework.hears('help', function (bot/*, trigger*/) {
 framework.hears(/.*/, function (bot, trigger) {
   if (!responded) {
     if (bot.isGroup) {
-      bot.say('I do not support any commands in Transition notification spaces.' +
-      ' If you message me in 1-1 space I can give you customized notifications.');
-      return;
+      if (trigger.args[0] === botName) {
+        trigger.args.shift();
+        trigger.text = trigger.args.join(' ');
+        return processGroupSpaceCommand(bot, trigger);
+      }
     }
     if (trigger.message.parentId) {
+      // TODO:  Unless this is a request to delete a notification
       // Handle threaded replies as a request to post a comment
       logger.info(`Posting a comment as a reply in space: "${bot.room.title}"`);
       jira.postCommentToParent(bot, trigger);
     } else {
       let text = trigger.text;
-      bot.say('Don\'t know how to respond to "' + text + '"' +
+      bot.reply(trigger.message, 'Don\'t know how to respond to "' + text + '"' +
         '.  Enter **help** for info on what I do understand.');
       logger.info('Bot did not know how to respond to: ' + text +
         ', from ' + bot.isDirectTo);
@@ -731,6 +760,7 @@ app.post('/jira', function (req, res) {
   }
   res.end();
 });
+
 // start express server
 var server = app.listen(config.port, function () {
   framework.debug('Framework listening on port %s', config.port);
