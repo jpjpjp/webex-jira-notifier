@@ -18,8 +18,8 @@ pids
 # Directory for storing jira events and project specific tests cases
 JiraEvents/*
 potential-jira-event-test-cases/*
-prod-jira-event-test-cases/*
-sandbox-jira-event-test-cases/*
+tests/prod-jira-event-test-cases/*
+tests/sandbox-jira-event-test-cases/*
 simulated-webhooks/*
 
 # Dependency directories
