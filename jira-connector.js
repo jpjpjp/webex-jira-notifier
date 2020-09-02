@@ -58,30 +58,33 @@ class JiraConnector {
 
         // Check if our environment overrode the lookup by username path
         if (process.env.JIRA_LOOKUP_USER_API) {
-          this.jiraLookupUserApi = JIRA_LOOKUP_USER_API;
+          this.jiraLookupUserApi = process.env.JIRA_LOOKUP_USER_API;
         } else {
           this.jiraLookupUserApi = `${this.jira_url}/rest/api/2/user`;
         }
         // Check if our environment overrode the lookup by username path
         if (process.env.JIRA_LOOKUP_ISSUE_API) {
-          this.jiraLookupIssueApi = JIRA_LOOKUP_ISSUE_API;
+          this.jiraLookupIssueApi = process.env.JIRA_LOOKUP_ISSUE_API;
         } else {
           this.jiraLookupIssueApi = `${this.jira_url}/rest/api/2/search`;
         }
 
         // Check if our environment overrode the lookup board info URL
         if (process.env.JIRA_LOOKUP_BOARD_API) {
-          this.jiraLookupBoardApi = JIRA_LOOKUP_BOARD_API;
+          this.jiraLookupBoardApi = process.env.JIRA_LOOKUP_BOARD_API;
         } else {
           this.jiraLookupBoardApi = `${this.jira_url}/rest/agile/1.0/board`;
         }
 
-        // Check if our bot was configured with a Transition Board Cache Duration
-        if (process.env.JIRA_TRANSITION_CACHE_DURATION) {
-          this.transitionCacheDuration = process.env.JIRA_TRANSITION_CACHE_DURATION;
+        // Set (or use an environment supplied) pattern for board's web URLs
+        if (process.env.JIRA_BOARD_WEB_URL_PATTERN) {
+          this.boardViewUrlPattern= JIRA_LOOKUP_BOARD_API;
         } else {
-          this.transitionCacheDuration = 6 * 60 * 60 * 1000;  // six hours
+          this.boardViewUrlPattern = `${this.jira_url}/secure/RapidBoard.jspa?rapidView=`;
         }
+        // Set a regular expression to validate our expectation of a board URL
+        // TODO override with environment variable
+        this.boardUrlRegExp = new RegExp(/^.*RapidBoard\.jspa\?rapidView=\d+$/);
 
         // Check if our bot is configured to send transition notifications only for
         // issues that belong to certain boards
@@ -378,6 +381,130 @@ class JiraConnector {
     });
   }
 
+  /**
+   * Lookup a jira board by ID
+   * 
+   * @function lookupBoardById
+   * @param {string} boardID - id of a Jira board
+   * @return {<Promise>} - if resolved, the jira object for the board
+   */
+  lookupBoardById(boardId) {
+    let boardUrl = `${this.jiraLookupBoardApi}/${boardId}`;
+    return request.get(this.convertForProxy(boardUrl), this.jiraReqOpts)
+      .then(boardInfo => {
+        logger.info(`Found info for boardId: ${boardInfo.id}, name: ${boardInfo.name}`);
+        boardInfo.viewUrl = this.viewUrlFromBoardId(boardId);
+        return boardInfo;
+      })
+      .catch(e => {
+        logger.info(`getInfoForBoards failed lookup for boardID "${boardId}": ${e.message}`);
+        return Promise.reject(e);
+      });
+  }
+
+  /**
+   * Build a viewUrl from a board ID based on expected patterns
+   *
+   * @function viewUrlFromBoardId
+   * @param {integer} boardId - id of board
+   * @return {string} - web url of Jira Board that user can click on
+   */
+  viewUrlFromBoardId(boardId) {
+    return `${this.boardViewUrlPattern}${boardId}`;
+  }
+
+  /**
+   * Extract the board ID from a jira web URL for the board
+   * This function will also resolve if it is passed a board ID
+   *
+   * @function getBoardIdFromViewUrl
+   * @param {string} boardUrl - web url of Jira Board to lookup
+   * @return {<Promise>{Integer}} - if resolved, a String with the boardId
+   */
+  getBoardIdFromViewUrl(boardUrl) {
+    let boardId;
+    // Check if this is already a boardId
+    if (boardId = parseInt(boardUrl)) {
+      return when(boardId);
+    }
+    // Make sure this URL matches our configured JIRA
+    if (!boardUrl.startsWith(this.jira_url)) {
+      return when.reject(new Error(`lookupBoardByUrl: Board URL does not match jira this bot is configured to talk to`));
+    }
+    if (!this.boardUrlRegExp.test(boardUrl)) {
+      return when.reject(new Error(`lookupBoardByUrl: Board URL does include expected lookup pattern`));
+    }
+    let boardIdString = boardUrl.slice(boardUrl.lastIndexOf('=')+1);
+    if (boardId = parseInt(boardIdString)) {
+      return when(boardId);
+    }
+    return when.reject(new Error(`lookupBoardByUrl: BoardId in URL does no appear to be a number as expected`));
+  }
+
+  /**
+   * Lookup a jira board by web URL
+   * 
+   * @function lookupBoardByUrl
+   * @param {string} boardUrl - url of Jira Board to lookup
+   * @return {<Promise>{object}} - if resolved, a jira board object
+   */
+  lookupBoardByUrl(boardUrl) {
+    // Make sure this URL matches our configured JIRA
+    if (!boardUrl.startsWith(this.jira_url)) {
+      return Promise.reject(new Error(`lookupBoardByUrl: Board URL does not match jira this bot is configured to talk to`));
+    }
+    if (!this.boardUrlRegExp.test(boardUrl)) {
+      return Promise.reject(new Error(`lookupBoardByUrl: Board URL does include expected lookup pattern`));
+    }
+    let boardId = boardUrl.slice(boardUrl.lastIndexOf('=')+1);
+    return this.lookupBoardById(boardId);
+  }
+
+  /**
+   * 
+   * Recursively fetch all the stories for a given board's URL
+   * @function getStorysForBoardUrl
+   * @param {string} boardUrl - url to get stories from
+   * @returns {Promise.Array} - returns array with user stories
+   */
+  getStoriesForBoardUrl(boardUrl) {
+    let url = `${boardUrl}/issue`;
+    let options = JSON.parse(JSON.stringify(this.jiraReqOpts));
+    let stories = null;
+    return request.get(this.convertForProxy(url), options)
+      .then(issuesListObj => {
+        if (!stories) {
+          stories = [];
+        }
+        if (issuesListObj.total) {
+          stories = stories.concat(issuesListObj.issues);
+        }
+        if (issuesListObj.issues.length === issuesListObj.maxResults) {
+          options.qs = {startAt: stories.length};
+          logger.debug(`Fetching eligible transtion stories from ${url}/?startAt=${stories.length}`);
+          return this.getStoriesForABoard(url, options, stories);
+        }
+        return stories;
+      });
+  }
+
+  /**
+   * Add a list of issues to a board object
+   * 
+   * @function lookupAndStoreBoardIssues
+   * @param {object} board - a jira board object
+   * @return {<Promise>} - if resolved, board object will have a list of issue objects
+   */
+  lookupAndStoreBoardIssues(board) {
+    let issuesUrl = `${board.self}/issue`;
+    let options = JSON.parse(JSON.stringify(this.jiraReqOpts));
+    return this.getStoriesForABoard(issuesUrl, options)
+      .then(stories => {
+        board.stories = stories.map(s => s.key);
+        logger.info(`Got all ${board.stories.length} issues on boardId: ${board.id}, name: ${board.name}`);
+        return(board);
+      });
+  }
 
   /**
    * Initialize jira calls to create a cache of issue keys that are on boards 
@@ -440,7 +567,7 @@ class JiraConnector {
           return boardsInfo.push(boardInfo);
         })
         .catch(e => {
-          logger.error(`getInfoForBoards failed lookup for boardID "${boardId}": ${e.message}`);
+          logger.info(`jiraConnector:getInfoForBoards failed lookup for boardID "${boardId}": ${e.message}`);
           return Promise.reject(e);
         });
     }))

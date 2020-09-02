@@ -1,0 +1,37 @@
+{
+  "type": "Action.ShowCard",
+  "title": "Add a Board to Watch",
+  "card": {
+    "type": "AdaptiveCard",
+    "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+    "body": [
+      {
+        "type": "Container",
+        "items": [
+          {
+            "type": "TextBlock",
+            "text": "Which board would you like to receive transition notifications for?"
+          },
+          {
+            "type": "Input.Text",
+            "id": "boardIdOrUrl",
+            "placeholder": "Numeric Board ID or Board's URL"
+          },
+          {
+            "type": "ActionSet",
+            "actions": [
+              {
+                "type": "Action.Submit",
+                "title": "Validate Board!",
+                "id": "validateBoard",
+                "data": {
+                  "requestedTask": "updateBoardConfig"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}    

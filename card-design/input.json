@@ -1,0 +1,148 @@
+{
+  "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+  "type": "AdaptiveCard",
+  "version": "1.0",
+  "body": [
+    {
+      "type": "TextBlock",
+      "size": "medium",
+      "weight": "bolder",
+      "text": "Issue Notification Critera",
+      "horizontalAlignment": "center"
+    },
+    {
+      "type": "TextBlock",
+      "text": "Issue Type (select at least one):"
+    },
+    {
+      "type": "Input.ChoiceSet",
+      "id": "issueType",
+      "isMultiSelect": true,
+      "style": "compact",
+      "choices": [
+        {
+          "title": "Bugs",
+          "value": "Bug"
+        },
+        {
+          "title": "Tasks",
+          "value": "Task"
+        },
+        {
+          "title": "Stories",
+          "value": "Story"
+        },
+        {
+          "title": "Epics",
+          "value": "Epic"
+        },
+        {
+          "title": "Portfolio Features",
+          "value": "Portfolio Feature"
+        }
+      ]
+    },
+    {
+      "type": "TextBlock",
+      "text": "What color do you want? (expanded)"
+    },
+    {
+      "type": "Input.ChoiceSet",
+      "id": "SingleSelectVal",
+      "style": "expanded",
+      "value": "Red",
+      "choices": [
+        {
+          "title": "Red",
+          "value": "Red"
+        },
+        {
+          "title": "Green",
+          "value": "Green"
+        },
+        {
+          "title": "Blue",
+          "value": "Blue"
+        }
+      ]
+    },
+    {
+      "type": "TextBlock",
+      "text": "What colors do you want? (multiselect)"
+    },
+    {
+      "type": "Input.ChoiceSet",
+      "id": "MultiSelectVal",
+      "isMultiSelect": true,
+      "value": "Red,Blue",
+      "choices": [
+        {
+          "title": "Red",
+          "value": "Red"
+        },
+        {
+          "title": "Green",
+          "value": "Green"
+        },
+        {
+          "title": "Blue",
+          "value": "Blue"
+        }
+      ]
+    },
+    {
+      "type": "TextBlock",
+      "size": "medium",
+      "weight": "bolder",
+      "text": "Input.Toggle",
+      "horizontalAlignment": "center"
+    },
+    {
+      "type": "Input.Toggle",
+      "title": "I accept the terms and conditions (True/False)",
+      "valueOn": "true",
+      "valueOff": "false",
+      "id": "AcceptsTerms"
+    },
+    {
+      "type": "Input.Toggle",
+      "title": "Red cars are better than other cars",
+      "valueOn": "RedCars",
+      "valueOff": "NotRedCars",
+      "id": "ColorPreference"
+    }
+  ],
+  "actions": [
+    {
+      "type": "Action.Submit",
+      "title": "Submit",
+      "data": {
+        "cardType": "input",
+        "id": "inputTypesExample"
+      }
+    },
+    {
+      "type": "Action.ShowCard",
+      "title": "Show Card",
+      "card": {
+        "type": "AdaptiveCard",
+        "body": [
+          {
+            "type": "Input.Text",
+            "placeholder": "enter comment",
+            "style": "text",
+            "maxLength": 0,
+            "id": "CommentVal"
+          }
+        ],
+        "actions": [
+          {
+            "type": "Action.Submit",
+            "title": "OK",
+            "data": { "cardType": "input" }
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -8,6 +8,7 @@ Jira ticket and/or if it is assigned to them.
 var Framework = require('webex-node-bot-framework');
 var express = require('express');
 var bodyParser = require('body-parser');
+var logger = require('./logger');
 var app = express();
 app.use(bodyParser.json({limit: '50mb'}));
 
@@ -18,6 +19,7 @@ const package_version = require('./package.json').version;
 logger.info(`Running app version: ${package_version}`);
 logger.info(`Running node version: ${process.version}`);
 
+// This section shoudl be removed after groupNotifications works...
 // Check if we are configured to notify certain group spaces about
 // certain types of issues transitioning
 let transitionConfig = {};
@@ -47,59 +49,63 @@ if ((process.env.TRANSITION_PROJECTS) || (process.env.TRANSITION_STATUS_TYPES) |
 }
 
 // Check if we are configured to notify certain group spaces about
-// new issues being created
-let groupSpaceConfig = {
-  transitionConfig,
-  newIssueConfigs: []
-};
-if (process.env.NOTIFICATION_SPACE_IDS) {
-  let spaces = process.env.NOTIFICATION_SPACE_IDS.split('/');
-  spaces.forEach(space => {
-    let config = space.split('+');
-    let roomId = config.shift();
-    if (!config.length) {
-      console.error(`Cannot read filter info for Notification space: ${roomId}\n` +
-       `Syntax: NOTIFICATIONS_SPACE_IDS=roomId1+component1,component2/roomId2:component1,...`);
-      process.exit(0); 
-    }
-    let components = config[0].split(/,\s*/);
-    groupSpaceConfig.newIssueConfigs.push({
-      roomId,
-      components
-    });
-  });
-}
+// new issues being created.   The rules for configuration the 
+// NOTIFICATION_SPACE_ID environment variable is
+// SpaceID+comma seperated component list+comma sep. teams:PT list/
+// EG:
+// roomId+client:foo,server:bar+team1:pt1,team2:pt2/roomId2....
 
+// let groupSpaceConfig = {
+//   transitionConfig,
+//   newIssueConfigs: []
+// };
+// if (process.env.NOTIFICATION_SPACE_IDS) {
+//   let spaces = process.env.NOTIFICATION_SPACE_IDS.split('/');
+//   spaces.forEach(space => {
+//     let config = space.split('+');
+//     let roomId = config.shift();
+//     if (!config.length) {
+//       logger.error(`Cannot read filter info for Notification space: ${roomId}\n` +
+//        `Syntax: NOTIFICATIONS_SPACE_IDS=roomId1+component1,component2/roomId2:component1,...`);
+//       process.exit(0); 
+//     }
+//     let components = config.shift();
+//     components = components.split(/,\s*/);
+//     let teams = [];
+//     if (config.length) {
+//       let teamsList = config[0].split(/,\s*/);
+//       teamsList.forEach(team => {
+//         team = team.split(':');
+//         if (team.length !== 2) {
+//           logger.error(`Invalid Team PT specified in NOTIFICATION_SPACE_IDS for space:${roomId}`);
+//           logger.error(process.env.NOTIFICATION_SPACE_IDS);
+//           logger.error('Expected Teams/PT in format "Team Name:PT" seperated by commas');
+//         } else {
+//           teams.push({
+//             team: team[0],
+//             pt: team[1]
+//           });
+//         }
+//       });
+//     }
+//     groupSpaceConfig.newIssueConfigs.push({
+//       roomId,
+//       components,
+//       teams
+//     });
+//   });
+// }
 
-
-// Helper classes for dealing with Jira Webhook payload
+// Helper class for caling Jira APIs
 let jira = {};
-let jiraEventHandler = {};
 try {
   // Create the object for interacting with Jira
   var JiraConnector = require('./jira-connector.js');
   jira = new JiraConnector();
-  const JiraEventHandler = require("./jira-event.js");
-  jiraEventHandler = new JiraEventHandler(jira, groupSpaceConfig);
 } catch (err) {
   logger.error('Initialization Failure: ' + err.message);
   process.exit(-1);
 }
-
-// If configured to use TR Boards as transition notification filters, 
-// load in the initial cache of all the issues on those boards
-if (process.env.JIRA_TRANSITION_BOARDS) {
-  logger.info('Found Transition Boards to filter on, will try to read all their issues..');
-  jira.initTRBoardCache()
-    .then(() => {
-      logger.info(`Jira Transition Board issue cache is now populated.  Notifying only on those issues`);
-    }).catch(e => {
-      logger.error(`Failed to lookup all issues on TR boards: ${e.message}.\n` +
-        `Check config set in environment JIRA_TRANSITION_BOARDS: ${process.env.JIRA_TRANSITION_BOARDS}.\n` +
-        `Transition notifications will be sent without this filter`);
-    });
-}
-
 
 // Set the config vars for the environment we are running in
 var config = {};
@@ -108,15 +114,59 @@ var config = {};
 if ((process.env.TOKEN) && (process.env.PORT)) {
   config.token = process.env.TOKEN;
   config.port = process.env.PORT;
-  config.maxStartupSpaces = 1000;
   if (process.env.WEBHOOK) {
     // If no webhook url is set we will attempt to get events via websocket
     config.webhookUrl = process.env.WEBHOOK;
+  }
+  if (process.env.DEFAULT_DOMAIN) {
+    config.restrictedToEmailDomains = process.env.DEFAULT_DOMAIN;
   }
 } else {
   logger.error('Cannot start server.  Missing required environment variables PORT and TOKEN');
   return;
 }
+
+// If configured enable the Group Notifications Module
+// Note this REQUIRES that the framework config include the
+// restrictToEmailDomains parameter to be set 
+let groupNotifier = null;
+if (process.env.ENABLE_GROUP_NOTIFICATIONS) {
+  try {
+    // Create the object for interacting with Jira
+    var GroupNotifications = require('./group-notifier/group-notifications.js');
+    groupNotifier = new GroupNotifications(jira, logger, config);
+  } catch (err) {
+    logger.error('Initialization Failure: ' + err.message);
+    process.exit(-1);
+  }
+}
+
+
+// Helper classes for dealing with Jira Webhook events
+let jiraEventHandler = {};
+try {
+  const JiraEventHandler = require("./jira-event.js");
+//  jiraEventHandler = new JiraEventHandler(jira, groupSpaceConfig);
+  jiraEventHandler = new JiraEventHandler(jira, groupNotifier);
+} catch (err) {
+  logger.error('Initialization Failure while creating Jira Event Handler: ' + err.message);
+  process.exit(-1);
+}
+
+// Old way...
+// If configured to use TR Boards as transition notification filters, 
+// load in the initial cache of all the issues on those boards
+// if (process.env.JIRA_TRANSITION_BOARDS) {
+//   logger.info('Found Transition Boards to filter on, will try to read all their issues..');
+//   jira.initTRBoardCache()
+//     .then(() => {
+//       logger.info(`Jira Transition Board issue cache is now populated.  Notifying only on those issues`);
+//     }).catch(e => {
+//       logger.error(`Failed to lookup all issues on TR boards: ${e.message}.\n` +
+//         `Check config set in environment JIRA_TRANSITION_BOARDS: ${process.env.JIRA_TRANSITION_BOARDS}.\n` +
+//         `Transition notifications will be sent without this filter`);
+//     });
+// }
 
 // This bot uses the framework's Mongo persistent storage driver
 // Read in the configuration and get it ready to initialize
@@ -240,16 +290,23 @@ framework.on('spawn', function (bot, id, addedById) {
     // The only exception for this is any TR notification spaces
     // TODO = may want to enforce membership rules here:
     let groupIsAuthorized = false;
-    if (-1 !== (index = transitionConfig.trSpaceIds.indexOf(bot.room.id))) {
-      logger.info(`Found a TR Notification Group Space: ${bot.room.title}`);
+    // if (-1 !== (index = transitionConfig.trSpaceIds.indexOf(bot.room.id))) {
+    //   logger.info(`Found a TR Notification Group Space: ${bot.room.title}`);
+    //   groupIsAuthorized = true;
+    //   transitionConfig.trSpaceBots.push(bot);
+    // }
+    // if (-1 !== (index = groupSpaceConfig.newIssueConfigs.findIndex(s => s.roomId === bot.room.id))) {
+    //   logger.info(`Found a New Issue Notification Group Space: ${bot.room.title}`);
+    //   groupIsAuthorized = true;
+    //   let config = groupSpaceConfig.newIssueConfigs[index];
+    //   config.bot = bot;
+    // }
+    if ((!groupIsAuthorized) && (groupNotifier !== null)) {
+      // THe logic above should eventually go away, then I just need this check
+      //if (groupNotifier !== null) {
       groupIsAuthorized = true;
-      transitionConfig.trSpaceBots.push(bot);
-    }
-    if (-1 !== (index = groupSpaceConfig.newIssueConfigs.findIndex(s => s.roomId === bot.room.id))) {
-      logger.info(`Found a New Issue Notification Group Space: ${bot.room.title}`);
-      groupIsAuthorized = true;
-      let config = groupSpaceConfig.newIssueConfigs[index];
-      config.bot = bot;
+      
+      groupNotifier.onSpawn(bot, addedById, adminsBot);
     } 
     if (!groupIsAuthorized) {
       logger.info(`Leaving Group Space: ${bot.room.title}`);
@@ -287,8 +344,10 @@ framework.on('spawn', function (bot, id, addedById) {
       adminsBot.say(`${botName} was added to a space: ${bot.room.title}`)
         .catch((e) => logger.error(`Failed to update to Admin about a new space our bot is in. Error:${e.message}`));
     }
-    postInstructions(bot, /*status_only=*/false, /*instructions_only=*/true);
-    bot.store('userEmail', bot.isDirectTo);
+    if (bot.isDirect) {
+      postInstructions(bot, /*status_only=*/false, /*instructions_only=*/true);
+      bot.store('userEmail', bot.isDirectTo);
+    }
   }
 });
 
@@ -298,14 +357,15 @@ framework.on('despawn', function (bot) {
     if (-1 !==
        (index = transitionConfig.trSpaceBots.findIndex(trBot => bot.room.id === trBot.room.id))) {
       logger.info(`Bot left a TR notification Group Space: ${bot.room.title}`);
-      transitionConfig.trSpaceBots =
+      transitionConfig.trSpaceBots 
           transitionConfig.trSpaceBots.splice(index, 1);
     } 
     if (-1 !==
         (index = groupSpaceConfig.newIssueConfigs.findIndex(s => s.roomId === bot.room.id))) { 
       logger.info(`Bot left a New Issue notification Group Space: ${bot.room.title}`);
-      groupSpaceConfig.newIssueConfigs = groupSpaceConfig.newIssueConfigs.splice(index, 1);
+      delete groupSpaceConfig.newIssueConfigs[index].bot;
     }
+    groupNotifier.onDespawn(bot);
   }
 });
 
@@ -343,34 +403,45 @@ async function postInstructions(bot, status_only = false, instructions_only = fa
       } 
       if (-1 != groupSpaceConfig.newIssueConfigs.findIndex(s => s.roomId === bot.room.id)) {
         let config = groupSpaceConfig.newIssueConfigs.find(s => s.roomId === bot.room.id);
+        let teamString = '';
+        if (config.teams.length) {
+          config.teams.forEach(t => {
+            teamString += `${t.team}:${t.pt}, `;
+          });
+          teamString = teamString.substring(0, teamString.length - 2);
+        }
         msg += `I will ${also}send notifications to this space about new issues. ` +
         `My current configuration is as follows: \n` +
         `* Issue Types: Bug\n` +
-        `* Components: ${config.components.join(',')}\n\n`;
+        `* Components: ${config.components.join(',')}\n` +
+        `* Team/PT(s): ${teamString}\n\n`;
       }
       msg += `I don't currently support any commands in group spaces, ` +
       `but if you message me in a 1-1 space I can give you personalized notifications.`;
       await bot.say(msg);
     } else {
+      let msg = "I will look for Jira tickets that are assigned to, or that mention " +
+      bot.isDirectTo + " and notify you so you can check out the ticket immediately.  " +
+      "\n\nIf you'd like to comment on a ticket I notified you about you can post " +
+      "a threaded reply and I'll update the ticket with your message as a comment." +
+      "\n\nI'll also notify you of changes to any tickets you are watching. " +
+      'If the watcher messages make me too "chatty", but you want to ' +
+      'keep getting notified for mentions and assignments just type **no watchers**. ' +
+      'If you want the watcher messages back, type **yes watchers**.' +
+      '\n\nI can only notify watchers for issues in projects that I have been granted access to. ' +
+      'To see a list of projects I have access to and learn how to request other projects, ' +
+      'type **projects**' +
+      '\n\nBy default, I won\'t notify you about changes you have made, but if you want to ' +
+      'see them just type **yes notifyself**. ' +
+      'If you want to turn that behavior off, type **no notifyself**.' +
+      "\n\nYou can also type the command **shut up** to get me to stop sending any messages. " +
+      "If you ever want me to start notifying you again, type **come back**." +
+      "\n\nIf you aren't sure if I'm giving you notifications, just type **status**";
+      if ((process.env.ASK_SPACE_NAME) && (process.env.ASK_SPACE_URL)) {
+        msg += `\n\nQuestions or feedback?   [Join the ${process.env.ASK_SPACE_NAME}](${process.env.ASK_SPACE_URL})`;
+      }
       if (!status_only) {
-        await bot.say("I will look for Jira tickets that are assigned to, or that mention " +
-          bot.isDirectTo + " and notify you so you can check out the ticket immediately.  " +
-          "\n\nIf you'd like to comment on a ticket I notified you about you can post " +
-          "a threaded reply and I'll update the ticket with your message as a comment." +
-          "\n\nI'll also notify you of changes to any tickets you are watching. " +
-          'If the watcher messages make me too "chatty", but you want to ' +
-          'keep getting notified for mentions and assignments just type **no watchers**. ' +
-          'If you want the watcher messages back, type **yes watchers**.' +
-          '\n\nI can only notify watchers for issues in projects that I have been granted access to. ' +
-          'To see a list of projects I have access to and learn how to request other projects, ' +
-          'type **projects**' +
-          '\n\nBy default, I won\'t notify you about changes you have made, but if you want to ' +
-          'see them just type **yes notifyself**. ' +
-          'If you want to turn that behavior off, type **no notifyself**.' +
-          "\n\nYou can also type the command **shut up** to get me to stop sending any messages. " +
-          "If you ever want me to start notifying you again, type **come back**." +
-          "\n\nIf you aren't sure if I'm giving you notifications, just type **status**" +
-          "\n\nQuestions or feedback?   Join the Ask JiraNotification Bot space here: https://eurl.io/#Hy4f7zOjG");
+        await bot.say(msg);
       }
       if (!instructions_only) {
         let userConfig = await bot.recall('userConfig');
@@ -581,6 +652,17 @@ function exitWithTransitionConfigError() {
   process.exit(0);
 }
 
+/***
+ * Process any button presses on cards this bot has posted
+ */
+framework.on('attachmentAction', async (bot, trigger) => {
+  if (bot.isDirect) {
+    return logger.error(`Got an unexpected button press event in space with ${bot.isDirectTo}.  Ignoring.`);
+  }
+  groupNotifier.processAttachmentAction(bot, trigger);
+});
+
+
 /****
 ## Process incoming messages
    The framework will call the appropriate framework.hears() function
@@ -700,8 +782,13 @@ framework.hears(reply_words, function (bot, trigger) {
 // var help_words = /^\/?help/i;
 // framework.hears(help_words, function (bot/*, trigger*/) {
 framework.hears('help', function (bot/*, trigger*/) {
-  logger.verbose('Processing help Request for ' + bot.isDirectTo);
-  postInstructions(bot);
+  if (bot.isDirect) {
+    logger.verbose('Processing help Request for ' + bot.isDirectTo);
+    postInstructions(bot);
+  } else {
+    logger.verbose('Processing help Request for ' + bot.room.title);
+    groupNotifier.groupStatus.postStatusCard(bot);
+  }
   responded = true;
 });
 
@@ -756,6 +843,23 @@ app.post('/jira', function (req, res) {
   } catch (e) {
     logger.warn('Error processing Jira Event Webhook:' + e);
     logger.warn('Ignoring: ' + JSON.stringify(jiraEvent));
+    res.status(400);
+  }
+  res.end();
+});
+
+// Jira Fitter Match Webhook 
+app.post('/jiraFilterHits/:roomId', function (req, res) {
+  console.log('Got a hit on jiraFilterHits rout with roomId:' + req.params.roomId);
+  let jiraEvent = {};
+  try {
+    jiraEvent = req.body;
+    if (typeof jiraEvent.webhookEvent !== 'undefined') {
+      jiraEventHandler.processJiraFilterEvent(jiraEvent, framework, req.params.roomId);
+    }
+  } catch (e) {
+    logger.warn('Error processing Jira Filter Match Event Webhook:' + e);
+    logger.warn('Ignoring: ' + JSON.stringify(jiraEvent, req.params.id));
     res.status(400);
   }
   res.end();

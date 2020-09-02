@@ -1,0 +1,31 @@
+{
+    "type": "AdaptiveCard",
+    "version": "1.2",
+    "body": [
+      {
+        "type": "TextBlock",
+        "text": "Jira Notifier For Group Spaces",
+        "size": "medium",
+        "horizontalAlignment": "center",
+        "weight": "bolder"
+      },
+      {
+        "type": "TextBlock",
+        "text": "I am a bot that receives notifications from ",
+        "wrap": true
+      },
+      {
+        "type": "TextBlock",
+        "text": "I can provide notifications to group spaces when stories on Jira boards transition (ie: have their status changed). I can watch up to three boards per space.",
+        "wrap": true
+      },
+      {
+        "type": "TextBlock",
+        "text": "Placeholder",
+        "wrap": true
+      }
+    ],
+    "actions": [
+    ],
+    "$schema": "http://adaptivecards.io/schemas/adaptive-card.json"
+}

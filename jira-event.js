@@ -27,7 +27,7 @@ class JiraEventHandler {
    * @param {object} [groupSpaceConfig] - option config with rules to notify 
    *                           of certain events in group spaces. 
    */
-  constructor(jiraConnector, groupSpaceConfig) {
+  constructor(jiraConnector, groupSpaceConfig = null) {
     /** @private */
     this.jiraConnector = jiraConnector;
     this.groupSpaceConfig = groupSpaceConfig;
@@ -78,11 +78,8 @@ module.exports = JiraEventHandler;
 
 function processIssueEvent(jiraEvent, framework, jira, groupSpaceConfig, cb) {
   try {
-    let msgElements = {};
     let toNotifyList = [];
-    let user = jiraEvent.user;
     let issue = jiraEvent.issue;
-    
     // If this is an issue event typ comment_created/updated event we may ignore it or
     // process it depending on how we are configured...
     if ((jiraEvent.webhookEvent === 'jira:issue_updated') &&
@@ -102,30 +99,47 @@ function processIssueEvent(jiraEvent, framework, jira, groupSpaceConfig, cb) {
       return;
     }
 
-    // TODO figure out how/if this is still relevent
-    // The new module pretty much REQUIRES full access to Jira to work
-    // // Is this from one of the proejcts we can access?
-    // // jiraEvent.ourProjectIdx == -1 means no.
-    // const key = jiraEvent.issue.key;
-    // // Debug a particiular story
-    // // if (key == 'SPARK-7329') {
-    // //   console.log('Found the one I want to debug.');
-    // // }
-    // if (jiraProjects) {
-    //   // Ensure this event is associated with one of our allowd projects
-    //   // If not, we can notify mentioned users, but not watchers or owners
-    //   jiraEvent.ourProjectIdx = jiraProjects.indexOf(key.substr(0, key.indexOf('-')));
-    //   if (jiraEvent.ourProjectIdx == -1) {
-    //     logger.verbose('Got a webhook for ' + key +
-    //       '. Not in our list of projects: ' + process.env.JIRA_PROJECTS);
-    //   }
-    // }
-
     // See if there are watchers for this issue and fetch them while we look for mentions
     let watcherPromise = jira.lookupWatcherInfoFromIssue(issue);
 
     // While waiting for the watchers set up the msgElements and notify
     // the assignee and anyone mentioned
+    let msgElements = generateMsgElements(jiraEvent, jira, toNotifyList);
+
+    // Notify assignee and mentioned users...
+    notifyMentioned(framework, msgElements, toNotifyList, jira, cb);
+
+    // Evaluate and potentially notify group spaces about this event
+    if ((groupSpaceConfig) && (typeof groupSpaceConfig === 'object')) {
+      groupSpaceConfig.evaluateForGroupSpaceNotification(framework, msgElements, this, cb);
+    }
+
+    // Evaluate and potentially notify spaces about new issues being created
+    // evaluateForNewIssueNotifications(framework, msgElements, groupSpaceConfig.newIssueConfigs, jira, cb);
+
+    // Wait for and process the watchers (if any)
+    if (!watcherPromise) {
+      return;
+    }
+    return when(watcherPromise).then((watcherInfo) => {
+      return processWatcherInfo(framework, watcherInfo, toNotifyList, msgElements, jira, cb);
+    }).catch((e) => {
+      logger.warn(`Failed getting watchers associated with issue ${jiraEvent.issue.key}: ` +
+        `"${e.message}". Can only notify the assignee and mentioned users.`);
+      // createTestCase(e, jiraEvent, framework, 'process-watcher-error');
+    });
+
+  } catch (e) {
+    logger.error(`processIssueEvent() caught error: ${e.message}`);
+    createTestCase(e, jiraEvent, framework, 'process-issue-error');
+    if (cb) {return (cb(e));}
+  }
+};
+
+function generateMsgElements(jiraEvent, jira, toNotifyList = null) {
+  let user = jiraEvent.user;
+  let issue = jiraEvent.issue;
+  try {
     msgElements = {
       author: user.displayName,
       authorEmail: user.emailAddress,
@@ -137,18 +151,21 @@ function processIssueEvent(jiraEvent, framework, jira, groupSpaceConfig, cb) {
       jiraEvent: jiraEvent  
     };
 
-
     if ((jiraEvent.webhookEvent === 'jira:issue_updated') &&
     (issueEventWithComment.test(jiraEvent.issue_event_type_name))) {
       // Configure notifylist and msgElements with the comment body
-      toNotifyList = getAllMentions(jiraEvent.comment.body);
+      if (toNotifyList) {
+        toNotifyList = getAllMentions(jiraEvent.comment.body);
+      }
       msgElements.subject = "comment";
       msgElements.action = (jiraEvent.issue_event_type_name === 'issue_commented') ?
         "created" : "updated";
       msgElements.body = convertNewlines(jiraEvent.comment.body);
     } else {
       // Configure notifylist and msgElements with the issue summary
-      toNotifyList = getAllMentions(issue.fields.description);
+      if (toNotifyList) {
+        toNotifyList = getAllMentions(issue.fields.description);
+      }
       msgElements.subject = "issue";
       if (jiraEvent.webhookEvent === 'jira:issue_deleted') {
         msgElements.action = 'deleted';
@@ -165,7 +182,8 @@ function processIssueEvent(jiraEvent, framework, jira, groupSpaceConfig, cb) {
       } else {
         msgElements.assignee = issue.fields.assignee; 
       }
-      if (toNotifyList.indexOf(msgElements.assignee) === -1) {
+      if ((toNotifyList) && 
+        (toNotifyList.indexOf(msgElements.assignee) === -1)) {
         toNotifyList.push(msgElements.assignee);
       }
     }
@@ -204,35 +222,12 @@ function processIssueEvent(jiraEvent, framework, jira, groupSpaceConfig, cb) {
         }
       }
     }
-  
-    // Notify assignee and mentioned users...
-    notifyMentioned(framework, msgElements, toNotifyList, jira, cb);
-
-    // Evaluate and potentially notify spaces about a feature status transition
-    evaluateForTransitionNotification(framework, msgElements, groupSpaceConfig.transitionConfig, jira, cb);
-
-    // Evaluate and potentially notify spaces about new issues being created
-    evaluateForNewIssueNotifications(framework, msgElements, groupSpaceConfig.newIssueConfigs, jira, cb);
-
-    // Wait for and process the watchers (if any)
-    if (!watcherPromise) {
-      return;
-    }
-    return when(watcherPromise).then((watcherInfo) => {
-      return processWatcherInfo(framework, watcherInfo, toNotifyList, msgElements, jira, cb);
-    }).catch((e) => {
-      logger.warn(`Failed getting watchers associated with issue ${jiraEvent.issue.key}: ` +
-        `"${e.message}". Can only notify the assignee and mentioned users.`);
-      // createTestCase(e, jiraEvent, framework, 'process-watcher-error');
-    });
-
-  } catch (e) {
-    logger.error(`processIssueEvent() caught error: ${e.message}`);
-    createTestCase(e, jiraEvent, framework, 'process-issue-error');
-    if (cb) {return (cb(e));}
+    return msgElements;
+  } catch(e) {
+    logger.error(`generateMsgElements() caught error: ${e.message}`);
+    throw(e);
   }
-};
-
+}
 
 function processCommentEvent(jiraEvent, framework, jira, cb) {
   try {
@@ -381,6 +376,8 @@ function notifyBotUsers(framework, recipientType, msgElements, emails, jira, cb)
   });
 }
 
+// Some version of this will eventually go in the to be developed
+// new issue notification module
 function evaluateForNewIssueNotifications(framework, msgElements, configs, jira, cb) {
   try {
     // Is this issue event a New Issue Notification candidate?
@@ -392,17 +389,26 @@ function evaluateForNewIssueNotifications(framework, msgElements, configs, jira,
     let issue = msgElements.jiraEvent.issue;
 
     // We have a new issue, lets see if any spaces want to be notified about it
-    configs.forEach(spaceConfig => {
-      // Is it for a component, this space cares about?
-      if ((!spaceConfig?.components?.length) || (!issue?.fields?.components?.length)) {
-        return;
-      } 
-      let commonComponents = issue.fields.components.filter(c => {
-        return (-1 != spaceConfig.components.indexOf(c.name));
-      });
+    configs. forEach(spaceConfig => {
+      // Is it for a component or team/PT this space cares about?
+      let commonComponents = [];
+      let commonTeams = [];
+      if ((spaceConfig?.components?.length) && (issue?.fields?.components?.length)) {
+        commonComponents = issue.fields.components.filter(c => {
+          return (-1 != spaceConfig.components.indexOf(c.name));
+        });
+      }
 
-      // TODO allow for other things to trigger notifications like Team/PT
-      if (commonComponents.length) {
+      if (!commonComponents.length) {
+        // Check to see if there is a matching Team/PT trigger
+        let teamPt = issue?.fields?.customfield_11800 
+        if ((spaceConfig?.teams?.length) && (typeof teamPt === 'object')) {
+            commonTeams = spaceConfig.teams.filter(t => {
+              return ((t.team === teamPt?.value) && (t.pt === teamPt?.child?.value));
+            });    
+          }
+      }
+      if ((commonComponents.length) || (commonTeams.length)) {
         let msg = buildWatcherOrAssigneeMessage(msgElements, null, jira)
         let bot = spaceConfig.bot;
         if (bot) {
@@ -427,93 +433,6 @@ function evaluateForNewIssueNotifications(framework, msgElements, configs, jira,
   }
 }
 
-function evaluateForTransitionNotification(framework, msgElements, config, jira, cb) {
-  try {
-    // No point evaluating if no one is listening...
-    if (!config?.trSpaceBots?.length) { // eslint-disable-line
-      return;
-    }  
-    // Is this issue event a TR Notification candidate
-    if ((msgElements.jiraEvent.webhookEvent !== 'jira:issue_updated') ||
-    (msgElements.action !== 'status') || (typeof msgElements.jiraEvent.issue.fields !== 'object')) {
-      return;
-    }
-    let issue = msgElements.jiraEvent.issue;
-
-    // We have a status related event.
-    // Check if it is one of the projects we care about
-    if ((!config?.projects?.length) || (!issue?.fields?.project?.key) ||
-      (-1 === config.projects.findIndex(project => issue.fields.project.key.toLowerCase() === project.toLowerCase()))) {
-      return;
-    }
-  
-    // We have a status related event for a project we are interested in.
-    // Check if it is one of the issue types we care about
-    if ((!config?.issueTypes?.length) || (!issue?.fields?.issuetype?.name) ||
-      (-1 === config.issueTypes.findIndex(type => issue.fields.issuetype.name.toLowerCase() === type.toLowerCase()))) {
-      return;
-    }
-
-    // Is this a transition to a status that we are monitoring?
-    if ((!config?.statusTypes) || (!msgElements?.updatedTo) ||
-      (-1 === config.statusTypes.findIndex(status => msgElements.updatedTo.toLowerCase() === status.toLowerCase()))) {
-        return;
-    }
-    // This is a candidate.  Do we have a filter of specific issues we care about?
-    if (jira.transitionStories.length) {
-      let boards = jira.issueInTRFilterList(msgElements.issueKey);
-      if (boards.length) {
-        let boardNames = 
-          boards.map(board => `[${board.name}](${board.self})`).join(', and the board ');
-        notifyTransitionSpaces(msgElements, config, boardNames, cb);
-      }
-    } else {
-      // No TR Board filter, go ahead and notify
-      notifyTransitionSpaces(msgElements, config, '', cb);
-    } 
-    
-  } catch(e) {
-    logger.error(`evaluateForTransitionNotification() caught exception: ${e.message}`);
-    createTestCase(e, msgElements.jiraEvent, framework, 'evaluate-for-tr-error'); 
-    return;  
-  }
-}
-
-function notifyTransitionSpaces(msgElements, config, boards, cb) {
-  let issue = msgElements.jiraEvent.issue;
-  let msg = `${msgElements.author} transitioned a(n) ${msgElements.issueType} from ` +
-    `${msgElements.updatedFrom} to ${msgElements.updatedTo}`;
-  if ((msgElements.updatedTo) && (issue?.fields?.resolution?.name)) {
-    msg += `, Resolution:${issue.fields.resolution.name}`
-  }
-  msg += `:\n* [${msgElements.issueKey}](${msgElements.issueUrl}): ${msgElements.issueSummary}\n`;
-
-  if (issue?.fields?.components?.length) {
-    msg += '* Components: ';
-    for (let i=0; i<issue.fields.components.length; i++) {
-      msg += `${issue.fields.components[i].name}, `;
-    }
-    // remove dangling comma and space
-    msg = msg.substring(0, msg.length - 2);
-  }
-
-  if (issue?.fields?.customfield_11800?.value) {
-    msg += `\n* Team/PT: ${issue.fields.customfield_11800.value}`;
-    if ((typeof issue.fields.customfield_11800.child === 'object') && (issue.fields.customfield_11800.child.value)) {
-      msg += `: ${issue.fields.customfield_11800.child.value}`;
-    }
-  }
-
-  if (boards) {
-    msg += `\n\nOn the board: ${boards}`;
-  }
-
-
-  config.trSpaceBots.forEach((bot) => {
-    bot.say({markdown: msg});
-    if (cb) {cb(null, bot);}
-  });
-}
 
 function sendWebexNotification(bot, recipientType, userConfig, msgElements, jira, cb) {
   if ((bot.isDirectTo === msgElements.authorEmail) &&
