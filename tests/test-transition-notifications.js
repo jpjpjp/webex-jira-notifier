@@ -188,8 +188,13 @@ runInitTestCases(initTestCases, groupNotifier)
     // TODO add another environment variable to optionally dump the config to a file
     // console.log(JSON.stringify(groupNotifier.boardTransitions.boardsInfo, null, 2));
     //console.log(notifyTestCases[0]);
-    var jiraEvent = JSON.parse(fs.readFileSync(notifyTestCases[0].file, "utf8"));
-    jiraEventHandler.processJiraEvent(jiraEvent, framework, checkTestResult(framework, notifyTestCases[0], 0 + 1));
+    // var jiraEvent = JSON.parse(fs.readFileSync(notifyTestCases[0].file, "utf8"));
+    // jiraEventHandler.processJiraEvent(jiraEvent, framework, checkTestResult(framework, notifyTestCases[0], 0 + 1));
+
+    // Try sending our single test case through the test case runner
+    // In the other test framework tests are initialized inside here
+    // For now we have pre-initialized the notifyTestCases array with a single test case
+    runTests(notifyTestCases, test_dir, jira, groupNotifier);
   })
   .catch(e => {
     console.log(`runInitTestCases failed: ${e.message}`);
@@ -310,9 +315,10 @@ function initGroupNotifier() {
 // Run the tests
 // runTests(testCases, test_dir, jiraConnector, transitionConfig);
 
-async function runTests(testCases, test_dir, jiraConnector, transitionConfig) {
+async function runTests(testCases, test_dir, jira, transitionConfig) {
   // Wait for any test initialization to complete...
-  await initTests(testCases, test_dir, jiraConnector, transitionConfig);
+  // TODO Add this.  Right now I am pre-initializing a single test case
+  //await initTests(testCases, test_dir, jira, transitionConfig);
 
   // Loop through the test cases to and send each one to the event processor
   let expectedCallbacks = 0;
@@ -467,16 +473,6 @@ function showExpected(msg, test) {
   }
 }
 
-
-function exitWithTransitionConfigError() {
-  console.error(`To configure the bot to notify for jira transitions ALL of the environment variables must be set:\n` +
-  `  - TRANSITION_PROJECTS: - list of jira projects to notify for\n`+
-  `  - TRANSITION_STATUS_TYPES: - list of jira status values to notify for\n`+
-  `  - TRANSITION_ISSUE_TYPES: - list of jira issue types to notify for\n\n`+
-  ` All values should be comma separated lists with no spaces.  Capitalization must match the jira configuration.`);
-  process.exit(0);
-}
-
 function Promisedelay(t, val) {
   return new Promise(resolve => {
     setTimeout(resolve.bind(null, val), t);
@@ -497,68 +493,68 @@ function processInitReject(resObj, test, status) {
 }
 
 // Run the tests
-//runTests(testCases, test_dir, jiraConnector, transitionConfig);
+//runTests(testCases, test_dir, jira, transitionConfig);
 
-async function initTests(testCases, test_dir, jiraConnector, transitionConfig) {
+async function initTests(testCases, test_dir, jiraC, transitionConfig) {
   // If configured to use TR Boards as filters, load in the initial cache of issues
   if (process.env.JIRA_TRANSITION_BOARDS) {
     try { 
       console.info('Found Transition Boards to filter on, will try to read all their issues..');
-      await jiraConnector.initTRBoardCache();
+      await jira.initTRBoardCache();
     } catch (e) {
       console.error('initTRBoardCache failed to lookup all issues on TR boards.  Check configuration. ' +
         'TR Notifications will be sent without this filter');
       process.exit();
     }
   }
-  jiraTestCases.initTestCases(testCases, test_dir, jiraConnector.getJiraUrl(), transitionConfig);
+  testCases.initTestCases(testCases, test_dir, jira.getJiraUrl(), transitionConfig);
 }
 
-async function runTests(testCases, test_dir, jiraConnector, transitionConfig) {
-  // Wait for any test initialization to complete...
-  await initTests(testCases, test_dir, jiraConnector, transitionConfig);
+// async function runTests(testCases, test_dir, jira, transitionConfig) {
+//   // Wait for any test initialization to complete...
+//   await initTests(testCases, test_dir, jira, transitionConfig);
 
-  // Loop through the test cases to and send each one to the event processor
-  let expectedCallbacks = 0;
-  for (var i = 0, len = testCases.length; i < len; i++) {
-    test = testCases[i];
-    expectedCallbacks += test.numExpectedResults;
-    var jiraEvent = JSON.parse(fs.readFileSync(test.file, "utf8"));
-    jiraEventHandler.processJiraEvent(jiraEvent, framework, checkTestResult(framework, test, i + 1));
-  }
+//   // Loop through the test cases to and send each one to the event processor
+//   let expectedCallbacks = 0;
+//   for (var i = 0, len = testCases.length; i < len; i++) {
+//     test = testCases[i];
+//     expectedCallbacks += test.numExpectedResults;
+//     var jiraEvent = JSON.parse(fs.readFileSync(test.file, "utf8"));
+//     jiraEventHandler.processJiraEvent(jiraEvent, framework, checkTestResult(framework, test, i + 1));
+//   }
 
-  // Set a timer to determine when to check if we missed any of the expected callbacks
-  let timerDuration = expectedCallbacks * 1000;  // Allow 1 seconds per callback (or use environment)
-  if (process.env.TEST_TIMER_MULTIPLIER) {
-    timerDuration = expectedCallbacks * parseInt(process.env.TEST_TIMER_MULTIPLIER);
-  }
-  console.log(`Running ${testCases.length} tests expected to generate ${expectedCallbacks} responses.`);
-  console.log(`Set environment VERBOSE=true for more details.`);
-  console.log(`Will analyze results in ${timerDuration / 1000} seconds...`); 
-  setTimeout(() => {
-    let totalErrors = 0;
-    let totalPassed = 0;
-    for (var i = 0, len = testCases.length; i < len; i++) {
-      test = testCases[i];
-      totalErrors += test.numSeenErrors;
-      totalPassed += test.numPassed;
-      if ((test.result.length) && (test.result.length != test.numSeenErrors)) {
-        for (result of test.result) {
-          console.log(`Test ${i+1}: ${test.author} ${test.action} `+ 
-            `${test.subject}, based on file: ${test.file}, never got expected result:`);
-          console.log(result);
-          totalErrors += 1;
-        } 
-      }
-    }
+//   // Set a timer to determine when to check if we missed any of the expected callbacks
+//   let timerDuration = expectedCallbacks * 1000;  // Allow 1 seconds per callback (or use environment)
+//   if (process.env.TEST_TIMER_MULTIPLIER) {
+//     timerDuration = expectedCallbacks * parseInt(process.env.TEST_TIMER_MULTIPLIER);
+//   }
+//   console.log(`Running ${testCases.length} tests expected to generate ${expectedCallbacks} responses.`);
+//   console.log(`Set environment VERBOSE=true for more details.`);
+//   console.log(`Will analyze results in ${timerDuration / 1000} seconds...`); 
+//   setTimeout(() => {
+//     let totalErrors = 0;
+//     let totalPassed = 0;
+//     for (var i = 0, len = testCases.length; i < len; i++) {
+//       test = testCases[i];
+//       totalErrors += test.numSeenErrors;
+//       totalPassed += test.numPassed;
+//       if ((test.result.length) && (test.result.length != test.numSeenErrors)) {
+//         for (result of test.result) {
+//           console.log(`Test ${i+1}: ${test.author} ${test.action} `+ 
+//             `${test.subject}, based on file: ${test.file}, never got expected result:`);
+//           console.log(result);
+//           totalErrors += 1;
+//         } 
+//       }
+//     }
 
-    console.log(`\nAll tests complete. ${totalPassed} tests passed.`);
-    if (totalErrors) {
-      console.error(`Number of errors seen: ${totalErrors}`);
-    }
-    process.exit();
-  }, timerDuration);
-}
+//     console.log(`\nAll tests complete. ${totalPassed} tests passed.`);
+//     if (totalErrors) {
+//       console.error(`Number of errors seen: ${totalErrors}`);
+//     }
+//     process.exit();
+//   }, timerDuration);
+// }
 
 
 
@@ -581,9 +577,17 @@ function checkTestResult(framework, test, testNum) {
     // Error if we got more results than expected.
     if (!test.result.length) {
       let seenResult = (bot) ? bot.jiraEventMessage : '';
-      console.error(`Already got all ${test.numExpectedResults} expected results for test `
-        `${testNum}. Extra result is: "${seenResult}"`);
-      test.numSeenErrors++;
+      if ((!bot) && (!seenResult)) {
+        if (verbose) {
+          console.error(`Already got all ${test.numExpectedResults} expected results for test ` +
+          `${testNum}, but saw an empty response. This can happen when new watchers were added ` +
+          `the issue since the test was originally created.  Ignoring.`);
+        }
+      } else {
+        console.error(`Already got all ${test.numExpectedResults} expected results for test ` +
+          `${testNum}. Extra result is: "${seenResult}"`);
+        test.numSeenErrors++;
+      }
       return;
     }
 

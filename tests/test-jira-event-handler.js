@@ -3,35 +3,11 @@
 // that we get our expected results
 /*jshint esversion: 6 */  // Help out our linter
 
-// Check if we are configured to notify certain group spaces about
-// certain types of issues transitioning
-require('dotenv').config();
-
-let transitionConfig = {};
-if ((process.env.TRANSITION_PROJECTS) || (process.env.TRANSITION_STATUS_TYPES) ||
-  (process.env.TRANSITION_ISSUE_TYPES)) {
-  if (process.env.TRANSITION_PROJECTS) {
-    transitionConfig.projects = process.env.TRANSITION_PROJECTS.split(',');
-  } else {
-    exitWithTransitionConfigError();
-  }
-  if (process.env.TRANSITION_STATUS_TYPES) {
-    transitionConfig.statusTypes = process.env.TRANSITION_STATUS_TYPES.split(',');
-  } else {
-    exitWithTransitionConfigError();
-  }
-  if (process.env.TRANSITION_ISSUE_TYPES) {
-    transitionConfig.issueTypes = process.env.TRANSITION_ISSUE_TYPES.split(',');
-  } else {
-    exitWithTransitionConfigError();
-  }
-  transitionConfig.trSpaceBots = [];
-}
 // Helper classes for dealing with Jira Webhook payload
-const JiraConnector = require('./jira-connector');
+const JiraConnector = require('../jira-connector');
 const jiraConnector = new JiraConnector();
-const JiraEventHandler = require("./jira-event.js");
-const jiraEventHandler = new JiraEventHandler(jiraConnector, transitionConfig);
+const JiraEventHandler = require("../jira-event.js");
+const jiraEventHandler = new JiraEventHandler(jiraConnector);
 fs = require('fs');
 
 if (!process.env.TEST_CASE_DIR) {
@@ -39,13 +15,11 @@ if (!process.env.TEST_CASE_DIR) {
   process.exit(-1);
 }
 const test_dir = process.env.TEST_CASE_DIR;
-var verbose = false;
-if (process.env.VERBOSE) {
-  verbose = true;
-}
 
-const JiraTestCases = require(`./${test_dir}/init-test-cases.js`);
+const JiraTestCases = require(`../${test_dir}/init-test-cases.js`);
 const jiraTestCases = new JiraTestCases;
+
+
 
 // Create our own verion of the Framework object that supports our test cases.
 function Framework() {
@@ -58,82 +32,63 @@ Framework.prototype.debug = function (message) {
   }
 };
 // Build the list of "bots" that we want our test suite to run against
+// The current set assumes all users work for ciso
 framework = new Framework();
 jiraTestCases.initBotUsers(framework, test_dir);
-// If we are doing transition notifications send them to the first bot initialized
-if (transitionConfig.projects) {
-  transitionConfig.trSpaceBots.push(framework.bots[0]);
-}
 
 var testCases = [];
+jiraTestCases.initTestCases(testCases, test_dir, jiraConnector.getJiraUrl());
 
-// Run the tests
-runTests(testCases, test_dir, jiraConnector, transitionConfig);
-
-async function initTests(testCases, test_dir, jiraConnector, transitionConfig) {
-  // If configured to use TR Boards as filters, load in the initial cache of issues
-  if (process.env.JIRA_TRANSITION_BOARDS) {
-    try { 
-      console.info('Found Transition Boards to filter on, will try to read all their issues..');
-      await jiraConnector.initTRBoardCache();
-    } catch (e) {
-      console.error('initTRBoardCache failed to lookup all issues on TR boards.  Check configuration. ' +
-        'TR Notifications will be sent without this filter');
-      process.exit();
-    }
-  }
-  jiraTestCases.initTestCases(testCases, test_dir, jiraConnector.getJiraUrl(), transitionConfig);
+// Run the Tests
+var verbose = false;
+if (process.env.VERBOSE) {
+  verbose = true;
 }
 
-async function runTests(testCases, test_dir, jiraConnector, transitionConfig) {
-  // Wait for any test initialization to complete...
-  await initTests(testCases, test_dir, jiraConnector, transitionConfig);
+// This no longer works because it depends on each test completing before the next one starts
+// The new processJiraEvent does not complete the call to bot.say before the next test starts
+let expectedCallbacks = 0;
+for (var i = 0, len = testCases.length; i < len; i++) {
+  test = testCases[i];
+  expectedCallbacks += test.numExpectedResults;
+  //var jiraEvent = require(test.file);
+  var jiraEvent = JSON.parse(fs.readFileSync(`${test.file}`, "utf8"));
+  jiraEventHandler.processJiraEvent(jiraEvent, framework, checkTestResult(framework, test, i + 1));
+}
 
-  // Loop through the test cases to and send each one to the event processor
-  let expectedCallbacks = 0;
+// Set a timer to interrupt any long running tests.  Check which tests didn't get back expected results
+let timerDuration = expectedCallbacks * 1000;  // Allow 1 seconds per callback (or use environment)
+if (process.env.TEST_TIMER_MULTIPLIER) {
+  timerDuration = expectedCallbacks * parseInt(process.env.TEST_TIMER_MULTIPLIER);
+}
+console.log(`Running ${testCases.length} tests expected to generate ${expectedCallbacks} responses.`);
+console.log(`Set environment VERBOSE=true for more details.`);
+console.log(`Will analyze results in ${timerDuration / 1000} seconds...`); 
+setTimeout(() => {
+  let totalErrors = 0;
+  let totalPassed = 0;
   for (var i = 0, len = testCases.length; i < len; i++) {
     test = testCases[i];
-    expectedCallbacks += test.numExpectedResults;
-    var jiraEvent = JSON.parse(fs.readFileSync(test.file, "utf8"));
-    jiraEventHandler.processJiraEvent(jiraEvent, framework, checkTestResult(framework, test, i + 1));
+    totalErrors += test.numSeenErrors;
+    totalPassed += test.numPassed;
+    if ((test.result.length) && (test.result.length != test.numSeenErrors)) {
+      for (result of test.result) {
+        console.log(`Test ${i+1}: ${test.author} ${test.action} `+ 
+          `${test.subject}, based on file: ${test.file}, never got expected result:`);
+        console.log(result);
+        totalErrors += 1;
+      } 
+    }
   }
 
-  // Set a timer to determine when to check if we missed any of the expected callbacks
-  let timerDuration = expectedCallbacks * 1000;  // Allow 1 seconds per callback (or use environment)
-  if (process.env.TEST_TIMER_MULTIPLIER) {
-    timerDuration = expectedCallbacks * parseInt(process.env.TEST_TIMER_MULTIPLIER);
+  console.log(`\nAll tests complete. ${totalPassed} tests passed.`);
+  if (totalErrors) {
+    console.error(`Number of errors seen: ${totalErrors}`);
   }
-  console.log(`Running ${testCases.length} tests expected to generate ${expectedCallbacks} responses.`);
-  console.log(`Set environment VERBOSE=true for more details.`);
-  console.log(`Will analyze results in ${timerDuration / 1000} seconds...`); 
-  setTimeout(() => {
-    let totalErrors = 0;
-    let totalPassed = 0;
-    for (var i = 0, len = testCases.length; i < len; i++) {
-      test = testCases[i];
-      totalErrors += test.numSeenErrors;
-      totalPassed += test.numPassed;
-      if ((test.result.length) && (test.result.length != test.numSeenErrors)) {
-        for (result of test.result) {
-          console.log(`Test ${i+1}: ${test.author} ${test.action} `+ 
-            `${test.subject}, based on file: ${test.file}, never got expected result:`);
-          console.log(result);
-          totalErrors += 1;
-        } 
-      }
-    }
+  process.exit();
+}, timerDuration);
 
-    console.log(`\nAll tests complete. ${totalPassed} tests passed.`);
-    if (totalErrors) {
-      console.error(`Number of errors seen: ${totalErrors}`);
-    }
-    process.exit();
-  }, timerDuration);
-}
-
-
-
-// Jira event processor will call us back with the message that a bot sent
+// Jira Event will call us back with the message that a bot sent
 // Check to see if matches our expected result
 function checkTestResult(framework, test, testNum) {
   return function jiraEventCallback(err, bot = null) {
@@ -149,7 +104,7 @@ function checkTestResult(framework, test, testNum) {
       return;
     }
 
-    // Error if we got more results than expected.
+    //TODO figure out how to properly deal with this -- we got more results than expected!
     if (!test.result.length) {
       let seenResult = (bot) ? bot.jiraEventMessage : '';
       console.error(`Already got all ${test.numExpectedResults} expected results for test `
@@ -158,9 +113,6 @@ function checkTestResult(framework, test, testNum) {
       return;
     }
 
-    // No bot object means event processor found a user who could be notified
-    // but they do not have not registered a space with the bot
-    // (Configure users who have bots in init-test-cases.js in the TEST_CASE_DIR)
     if (!bot) {
       if (foundResult('', test)) {
         reportSuccess(test, 
@@ -174,7 +126,6 @@ function checkTestResult(framework, test, testNum) {
       return;
     }
 
-    // Compare result that bot "sent" is in the list of expected results in the test case
     var resultFound = false;
     if (bot.jiraEventMessage) {
       resultFound = true;
@@ -240,14 +191,4 @@ function showExpected(msg, test) {
       console.error(`${test.result[i]}`);
     }
   }
-}
-
-
-function exitWithTransitionConfigError() {
-  console.error(`To configure the bot to notify for jira transitions ALL of the environment variables must be set:\n` +
-  `  - TRANSITION_PROJECTS: - list of jira projects to notify for\n`+
-  `  - TRANSITION_STATUS_TYPES: - list of jira status values to notify for\n`+
-  `  - TRANSITION_ISSUE_TYPES: - list of jira issue types to notify for\n\n`+
-  ` All values should be comma separated lists with no spaces.  Capitalization must match the jira configuration.`);
-  process.exit(0);
 }
