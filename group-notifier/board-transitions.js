@@ -43,15 +43,18 @@ class BoardTransitions {
    * 
    * If the board has already been looked up and is in cache, the bot is added to
    * 
-   * @function watchBoardForBot
+   * @function watchIssuesListForBot
    * @param {object} bot - bot object for space requesting board notifications
-   * @param {string} boardIdString - id of or web url to the board bot wants to watch
-   * @returns {Promise.<Object>} - a public board object with id, name, and num of stories
+   * @param {string} listIdString - id of or web url to the list the bot wants to watch
+   * @param {string} listIdType - optional, type of list (ie: board, filter)
+   * @returns {Promise.<Object>} - a public list object with id, type, name, and num of stories
    */
-  watchBoardForBot(bot, boardIdString) {
-    return this.jira.getBoardIdFromViewUrl(boardIdString)
+  watchIssuesListForBot(bot, listIdString, listIdType = null) {
+    return this.jira.getIssuesListIdFromViewUrl(listIdString, listIdType)
     .then((boardId) => {
-      this.logger.info(`Space "${bot.room.title}" asked to watch boardID "${boardId}"`);
+// TEMPORARY UNTIL getIssuesListIdFromViewUrl returns object
+listIdType = 'board';
+      this.logger.info(`Space "${bot.room.title}" asked to watch listIdObj "${boardId}"`);
 
       if (-1 != this.boardIds.indexOf(boardId)) {
         // This board has already been requested.  Is it cached?
@@ -72,8 +75,9 @@ class BoardTransitions {
         this.logger.info(`This is a new board.  Will validate it and add stories to cache.`);
         this.boardIds.push(boardId);
         this.pendingBotAdds.push({boardId, bot});
-        return this.jira.lookupBoardById(boardId)
-        .then((board) => this.jira.lookupAndStoreBoardIssues(board))
+//        return this.jira.lookupBoardById(boardId)
+        return this.jira.lookupListByIdAndType(boardId, listIdType)
+        .then((board) => this.jira.lookupAndStoreListIssues(board))
         .then((board) => {
           this.logger.info(`${boardId} is a valid id: "${board.name}" Added ${board.stories.length} stories to cache.`);
           this.addBotToBoardInfo(bot, board);
@@ -82,7 +86,7 @@ class BoardTransitions {
           return  new Promise((r) => returnWhenNotPending(r, this.pendingBotAdds,boardId, bot, 10, this));
         })
         .catch(e => {
-          this.logger.warn(`watchBoardForBot: Failed getting info for board ${boardId}, requested in space "${bot.room.title}": ${e.message}`);
+          this.logger.warn(`watchIssuesListForBot: Failed getting info for board ${boardId}, requested in space "${bot.room.title}": ${e.message}`);
           // remove any pending bots waiting for this board
           this.pendingBotAdds = _.reject(this.pendingBotAdds, {'boardId': boardId});
           this.boardIds = this.boardIds.filter(id => id !== boardId); 
@@ -91,8 +95,8 @@ class BoardTransitions {
       }
     })
     .catch((e) => {
-      let msg = `Could not find a board matching ${boardIdString}`;
-      this.logger.info(`BoardTransition:watchBoardForBot: ${msg}. ` +
+      let msg = `Could not find a board matching ${listIdString}`;
+      this.logger.info(`BoardTransition:watchIssuesListForBot: ${msg}. ` +
         `Requested by bot from spaceID:${bot.room.id}\nError:${e.message}`);
       return when.reject(new Error(`${msg}`));
     });
@@ -215,7 +219,7 @@ class BoardTransitions {
         return bot.reply(trigger.attachmentAction, 
           `Looking up info for board: ${inputs.boardIdOrUrl}.  This can take several minutes....`)
           .then(() => {
-            return this.watchBoardForBot(bot, inputs.boardIdOrUrl)
+            return this.watchIssuesListForBot(bot, inputs.boardIdOrUrl, /* TODO Add type here */)
             .catch((e) => {
               e.boardProblemType = 'lookup';
               return Promise.reject(e);

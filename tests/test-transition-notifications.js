@@ -147,22 +147,23 @@ let framework = new Framework();
 framework.bots = [bot1, bot2, bot3];
 
 // Build the list of init test objects.
-function InitTestCse(description, bot, boardId, expectedPromise, expectedTitleOrError) {
+function InitTestCse(description, bot, listIdOrUrl, listType, expectedPromise, expectedTitleOrError) {
   this.description = description;
   this.bot = bot;
-  this.boardId = boardId;
+  this.listIdOrUrl = listIdOrUrl;
+  this.listType = listType;
   this.expectedPromise = expectedPromise;
   this.expectedTitleOrError = expectedTitleOrError;
 }
 var initTestCases =[];
-initTestCases.push(new InitTestCse('bot1 adds boardId 4263', bot1, '4263', 'resolve', '[Buttons and Cards] Bugs and feedback '));
-initTestCases.push(new InitTestCse('bot2 adds boardId 4263 by web url', bot2, 'https://jira-eng-gpk2.cisco.com/jira/secure/RapidBoard.jspa?rapidView=4263', 'resolve', '[Buttons and Cards] Bugs and feedback '));
-initTestCases.push(new InitTestCse('bot2 adds boardId 2885', bot2, '2885', 'resolve', 'Webex SMB Transition Review'));
-initTestCases.push(new InitTestCse('bot3 adds boardId 4289', bot3, '4289', 'resolve', '(AX) App Experience, Shared and Foundation'));
-initTestCases.push(new InitTestCse('bot3 adds boardId 428999', bot1, '428999', 'reject', 'Could not find a board matching 428999'));
-initTestCases.push(new InitTestCse('bot3 adds board via bad jira url', bot1, 'https://jira-foo.foobar.com/jira/secure/RapidBoard.jspa?rapidView=4263', 'reject', 'Could not find a board matching https://jira-foo.foobar.com/jira/secure/RapidBoard.jspa?rapidView=4263'));
-initTestCases.push(new InitTestCse('bot3 adds board via bad board url', bot1, 'https://jira-eng-gpk2.cisco.com/jira/secure/SlowBoard.jspa?rapidView=4263', 'reject', 'Could not find a board matching https://jira-eng-gpk2.cisco.com/jira/secure/SlowBoard.jspa?rapidView=4263'));
-initTestCases.push(new InitTestCse('bot3 adds board via bad board id query param', bot1, 'https://jira-eng-gpk2.cisco.com/jira/secure/RapidBoard.jspa?rapidView=NameInsteadOfNumber', 'reject', 'Could not find a board matching https://jira-eng-gpk2.cisco.com/jira/secure/RapidBoard.jspa?rapidView=NameInsteadOfNumber'));
+initTestCases.push(new InitTestCse('bot1 adds boardId 4263', bot1, '4263', 'board', 'resolve', '[Buttons and Cards] Bugs and feedback '));
+initTestCases.push(new InitTestCse('bot2 adds boardId 4263 by web url', bot2, 'https://jira-eng-gpk2.cisco.com/jira/secure/RapidBoard.jspa?rapidView=4263', null, 'resolve', '[Buttons and Cards] Bugs and feedback '));
+initTestCases.push(new InitTestCse('bot2 adds boardId 2885', bot2, '2885', 'board', 'resolve', 'Webex SMB Transition Review'));
+initTestCases.push(new InitTestCse('bot3 adds boardId 4289', bot3, '4289', 'board', 'resolve', '(AX) App Experience, Shared and Foundation'));
+initTestCases.push(new InitTestCse('bot3 adds boardId 428999', bot1, '428999', 'board', 'reject', 'Could not find a board matching 428999'));
+initTestCases.push(new InitTestCse('bot3 adds board via bad jira url', bot1, 'https://jira-foo.foobar.com/jira/secure/RapidBoard.jspa?rapidView=4263', null, 'reject', 'Could not find a board matching https://jira-foo.foobar.com/jira/secure/RapidBoard.jspa?rapidView=4263'));
+initTestCases.push(new InitTestCse('bot3 adds board via bad board url', bot1, 'https://jira-eng-gpk2.cisco.com/jira/secure/SlowBoard.jspa?rapidView=4263', null, 'reject', 'Could not find a board matching https://jira-eng-gpk2.cisco.com/jira/secure/SlowBoard.jspa?rapidView=4263'));
+initTestCases.push(new InitTestCse('bot3 adds board via bad board id query param', bot1, 'https://jira-eng-gpk2.cisco.com/jira/secure/RapidBoard.jspa?rapidView=NameInsteadOfNumber', null, 'reject', 'Could not find a board matching https://jira-eng-gpk2.cisco.com/jira/secure/RapidBoard.jspa?rapidView=NameInsteadOfNumber'));
 
 // Build the list of cannonical jira event test objects.
 function TestCase(file, action, author, subject, result) {
@@ -232,7 +233,7 @@ async function runInitTestCases(testCases, groupNotifier) {
   return Promise.all(testCases.map(test => {
     let result;
     return Promise.race([
-      groupNotifier.boardTransitions.watchBoardForBot(test.bot, test.boardId),
+      groupNotifier.boardTransitions.watchIssuesListForBot(test.bot, test.listIdOrUrl, test.listType),
       Promisedelay(promiseTimeout, {result: 'timeout', msg: `${test.description} timed out`})
     ])
       .then((boardInfo) => {

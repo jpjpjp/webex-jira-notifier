@@ -122,7 +122,7 @@ class GroupNotifications {
           })
 
         // Develoment debugging only
-        // this.boardTransitions.watchBoardForBot(bot, '4263');
+        // this.boardTransitions.watchIssuesListForBot(bot, '4263');
       })
       .catch(e => {
         this.logger.error(`Failed to store group space config in new space with ${bot.room.id}: ${e.messages}`);
@@ -132,7 +132,7 @@ class GroupNotifications {
       .then((config) => {
         if (config?.boards?.length) {
           config.boards.forEach(board => {
-            this.boardTransitions.watchBoardForBot(bot, board.id);
+            this.boardTransitions.watchIssuesListForBot(bot, board.id);
           })
         }
         // ToDo handle new issue notification configurations

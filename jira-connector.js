@@ -70,6 +70,19 @@ class JiraConnector {
         }
 
         // Check if our environment overrode the lookup board info URL
+        if (process.env.JIRA_LOOKUP_FILTER_API) {
+          this.jiraLookupFilterApi = process.env.JIRA_LOOKUP_FILTER_API;
+        } else {
+          this.jiraLookupFilterApi = `${this.jira_url}/rest/api/2/filter`;
+        }
+
+        // Set a regular expression to validate our expectation of a board URL
+        // There seem to be several different ways to get to this so we'll try
+        // anything that ends with a query param called "filter"
+        // TODO override with environment variable
+        this.filterUrlRegExp = new RegExp(/^.*\?filter=\d+$/);
+        
+        // Check if our environment overrode the lookup filter info URL
         if (process.env.JIRA_LOOKUP_BOARD_API) {
           this.jiraLookupBoardApi = process.env.JIRA_LOOKUP_BOARD_API;
         } else {
@@ -78,7 +91,7 @@ class JiraConnector {
 
         // Set (or use an environment supplied) pattern for board's web URLs
         if (process.env.JIRA_BOARD_WEB_URL_PATTERN) {
-          this.boardViewUrlPattern= JIRA_LOOKUP_BOARD_API;
+          this.boardViewUrlPattern= JIRA_BOARD_WEB_URL_PATTERN;
         } else {
           this.boardViewUrlPattern = `${this.jira_url}/secure/RapidBoard.jspa?rapidView=`;
         }
@@ -382,6 +395,29 @@ class JiraConnector {
   }
 
   /**
+   * Lookup a jira list by specified type
+   * Currently "board" and "filter" are supported
+   * 
+   * @function lookupListByIdAndType
+   * @param {string} listID - id of a Jira list
+   * @param {string} listType - a supported jira list type, ie: "board", "filter"
+   * @return {<Promise>} - if resolved, the jira object for the list
+   */
+  lookupListByIdAndType(listId, listType) {
+    let listPromise;
+    if (listType === 'board') {
+      listPromise = this.lookupBoardById(listId);
+    } else if (listType === 'filter') {
+      listPromise = this.lookupFilterById(listId);
+    } else {
+      let msg = `lookupListByIdAndType failed with an unknown list type "${listType}"`;
+      logger.info(msg);
+      return Promise.reject(new Error(msg));
+    }
+    return listPromise;
+  }
+
+  /**
    * Lookup a jira board by ID
    * 
    * @function lookupBoardById
@@ -393,11 +429,34 @@ class JiraConnector {
     return request.get(this.convertForProxy(boardUrl), this.jiraReqOpts)
       .then(boardInfo => {
         logger.info(`Found info for boardId: ${boardInfo.id}, name: ${boardInfo.name}`);
+        // Jira's native board object does not return its viewUrl
         boardInfo.viewUrl = this.viewUrlFromBoardId(boardId);
+        boardInfo.type = 'board';
         return boardInfo;
       })
       .catch(e => {
-        logger.info(`getInfoForBoards failed lookup for boardID "${boardId}": ${e.message}`);
+        logger.info(`lookupBoardById failed lookup for boardID:${boardId}: ${e.message}`);
+        return Promise.reject(e);
+      });
+  }
+
+  /**
+   * Lookup a jira filter by ID
+   * 
+   * @function lookupFilterById
+   * @param {string} filterID - id of a Jira filter
+   * @return {<Promise>} - if resolved, the jira object for the filter
+   */
+  lookupFilterById(filterId) {
+    let filterUrl = `${this.jiraLookupFilterApi}/${filterId}`;
+    return request.get(this.convertForProxy(filterUrl), this.jiraReqOpts)
+      .then(filterInfo => {
+        logger.info(`Found info for filterId: ${filterInfo.id}, name: ${filterInfo.name}`);
+        filterInfo.type = 'filter';
+        return filterInfo;
+      })
+      .catch(e => {
+        logger.info(`lookupFilterById failed lookup for filter ID:${filterId}: ${e.message}`);
         return Promise.reject(e);
       });
   }
@@ -414,31 +473,54 @@ class JiraConnector {
   }
 
   /**
-   * Extract the board ID from a jira web URL for the board
-   * This function will also resolve if it is passed a board ID
+   * Extract the issues List ID from a jira web URL
+   * An issues List ID could be a jira board, a filter or some other
+   * type in the future
+   * 
+   * This function will also resolve if it is passed just an ID 
+   * (digit string) and the type
    *
-   * @function getBoardIdFromViewUrl
-   * @param {string} boardUrl - web url of Jira Board to lookup
-   * @return {<Promise>{Integer}} - if resolved, a String with the boardId
+   * @function getIssuesListIdFromViewUrl
+   * @param {string} issuesListUrl - web url of Jira Board to lookup
+   * @param {string} issuesLisType - optional, type of list (ie: board, filter)
+   * @return {<Promise>{Integer}} - if resolved, an object with the list id and type
    */
-  getBoardIdFromViewUrl(boardUrl) {
-    let boardId;
-    // Check if this is already a boardId
-    if (boardId = parseInt(boardUrl)) {
-      return when(boardId);
+  getIssuesListIdFromViewUrl(issuesListUrl, issuesListType=null) {
+    let listId;
+    // TODO return an object instead just an ID
+    let listIdObj = {};
+    // Check if this is already a listId
+    if (listId = parseInt(issuesListUrl)) {
+      if ((issuesListType === 'board') || (issuesListType == 'filter')) {
+        listIdObj.id = listId;
+        listIdObj.type = issuesListType;
+        // TODO return the object instead of just the id
+        return when(listId);
+      } else {
+        return when.reject(new Error(`getIssuesListIdFromViewUrl: ID was supplied without specifying a known listId type`));
+      }
     }
     // Make sure this URL matches our configured JIRA
-    if (!boardUrl.startsWith(this.jira_url)) {
-      return when.reject(new Error(`lookupBoardByUrl: Board URL does not match jira this bot is configured to talk to`));
+    if (!issuesListUrl.startsWith(this.jira_url)) {
+      return when.reject(new Error(`getIssuesListIdFromViewUrl: List URL does not match jira this bot is configured to talk to`));
     }
-    if (!this.boardUrlRegExp.test(boardUrl)) {
-      return when.reject(new Error(`lookupBoardByUrl: Board URL does include expected lookup pattern`));
+    // Check if this URL matches one of our known types
+    if (this.boardUrlRegExp.test(issuesListUrl)) {
+      listIdObj.type = 'board';
+    } else if (this.filterUrlRegExp.test(issuesListUrl)) { 
+      listIdObj.type = 'filter';
+    } else {
+      // Cannot find known list type from URL
+      return when.reject(new Error(`getIssuesListIdFromViewUrl: List URL does include a know list lookup pattern`));
     }
-    let boardIdString = boardUrl.slice(boardUrl.lastIndexOf('=')+1);
-    if (boardId = parseInt(boardIdString)) {
-      return when(boardId);
+    // Extract the list ID from the URL
+    let listIdString = issuesListUrl.slice(issuesListUrl.lastIndexOf('=')+1);
+    if (listId = parseInt(listIdString)) {
+      listIdObj.id = listId;
+      // TODO update the return the listIdObj
+      return when(listId);
     }
-    return when.reject(new Error(`lookupBoardByUrl: BoardId in URL does no appear to be a number as expected`));
+    return when.reject(new Error(`getIssuesListIdFromViewUrl: listId in URL does no appear to be a number as expected`));
   }
 
   /**
@@ -460,9 +542,14 @@ class JiraConnector {
     return this.lookupBoardById(boardId);
   }
 
+  // TODO figure out why this method is called by the cache refresh logic
+  // but a different method is used when a list is first added
   /**
    * 
-   * Recursively fetch all the stories for a given board's URL
+   * Recursively fetch all the stories for a given URL that returns
+   * an issues list.  This could be a board URL, a filter URL or
+   * potentially other types of URLs
+   * 
    * @function getStorysForBoardUrl
    * @param {string} boardUrl - url to get stories from
    * @returns {Promise.Array} - returns array with user stories
@@ -489,20 +576,30 @@ class JiraConnector {
   }
 
   /**
-   * Add a list of issues to a board object
+   * Add a list of issues to a list object
+   * Currently supported types are "board" and "filter"
    * 
-   * @function lookupAndStoreBoardIssues
-   * @param {object} board - a jira board object
-   * @return {<Promise>} - if resolved, board object will have a list of issue objects
+   * @function lookupAndStoreListIssues
+   * @param {object} list - a jira board or filter object
+   * @return {<Promise>} - if resolved, list object will have a list of issue objects
    */
-  lookupAndStoreBoardIssues(board) {
-    let issuesUrl = `${board.self}/issue`;
+  lookupAndStoreListIssues(list) {
+    let issuesUrl;
+    if (list.type === 'board') {
+      issuesUrl = `${list.self}/issue`;
+    } else if (list.type === 'filter') {
+      issuesUrl = list.searchUrl;
+    } else {
+      let msg = `lookupAndStoreListIssues: Could not lookup issues for unknown list type ${list.type}`;
+      logger.error(msg);
+      return Promise.reject(new Error(msg));
+    }
     let options = JSON.parse(JSON.stringify(this.jiraReqOpts));
     return this.getStoriesForABoard(issuesUrl, options)
       .then(stories => {
-        board.stories = stories.map(s => s.key);
-        logger.info(`Got all ${board.stories.length} issues on boardId: ${board.id}, name: ${board.name}`);
-        return(board);
+        list.stories = stories.map(s => s.key);
+        logger.info(`Got all ${list.stories.length} issues for ${list.type} Id:${list.id}, name: ${list.name}`);
+        return(list);
       });
   }
 
