@@ -43,8 +43,6 @@ let groupNotifier = initGroupNotifier();
 
 // JiraEventHandler processes all events, for 1-1 and group spaces
 const JiraEventHandler = require("../jira-event.js");
-// Is this needed?
-// const {group} = require('console');
 const jiraEventHandler = new JiraEventHandler(jira, groupNotifier);
 
 // Set VERBOSE=true to get test logging
@@ -95,6 +93,10 @@ function Bot(title) {
     title
   };
   this.jiraEventMessage = '';
+  this.config = {
+    boards: [],
+    newIssueNotificationConfig: []
+  };
 }
 
 // Handle any requests for bots to message rooms by logging to console
@@ -116,14 +118,58 @@ Bot.prototype.say = function () {
   } else if (typeof args[0] === 'string') {
     this.jiraEventMessage += args[0] + '\n';
   } else {
-    return when.reject(new Error('Invalid function arguments'));
+    return Promise.reject(new Error('Invalid function arguments'));
   }
 };
 
 
 // For test cases just treat replies as a regular message from the
 Bot.prototype.reply = function (parentId, msg) {
-  this.say(msg);
+  return this.say(msg);
+};
+
+// For test cases just log card data in verbose mode
+Bot.prototype.sendCard = function (card) {
+  if (verbose) {
+    console.log(`Bot in space ${this.room.title} sent card:`);
+    console.log(JSON.stringify(card, null, 2));
+  }
+  return Promise.resolve({
+    messageId: TEST_MESSAGE_ID_FOR_CARD,
+    roomId: this.room.id,
+    attachments: [{
+      contentType: "application/vnd.microsoft.card.adaptive",
+      content: card
+    }] 
+  });
+};
+
+// For test cases emulate storage of bot's config 
+Bot.prototype.store = function (storageId, config) {
+  if (storageId === "groupSpaceConfig") {
+    this.config = config;
+  } else if (storageId === 'activeCardMessageId') {
+    this.activeCardMessageId = config;
+  } else {
+    return Promise.reject(new Error(`bot.recall: Unexpected storageId: ${storageId}`));
+  }
+  return Promise.resolve(config);
+};
+
+let TEST_MESSAGE_ID_FOR_CARD = 'Fake Message Id for a card';
+// For test cases lets always find an actviteCardMessageId
+Bot.prototype.recall = function (storageId) {
+  if (storageId === "activeCardMessageId") {
+    if (this.activeCardMessageId) {
+      return Promise.resolve(this.activeCardMessageId);
+    } else {
+      return Promise.resolve(TEST_MESSAGE_ID_FOR_CARD);
+    }
+  } else if (storageId === "groupSpaceConfig") {
+    return Promise.resolve(this.config);
+  } else {
+    return Promise.reject(new Error(`bot.recall: Unexpected storageId: ${storageId}`));
+  }  
 };
 
 // Create our own verion of the Framework object that supports our test cases.
@@ -160,10 +206,21 @@ initTestCases.push(new InitTestCse('bot1 adds boardId 4263', bot1, '4263', 'boar
 initTestCases.push(new InitTestCse('bot2 adds boardId 4263 by web url', bot2, 'https://jira-eng-gpk2.cisco.com/jira/secure/RapidBoard.jspa?rapidView=4263', null, 'resolve', '[Buttons and Cards] Bugs and feedback '));
 initTestCases.push(new InitTestCse('bot2 adds boardId 2885', bot2, '2885', 'board', 'resolve', 'Webex SMB Transition Review'));
 initTestCases.push(new InitTestCse('bot3 adds boardId 4289', bot3, '4289', 'board', 'resolve', '(AX) App Experience, Shared and Foundation'));
-initTestCases.push(new InitTestCse('bot3 adds boardId 428999', bot1, '428999', 'board', 'reject', 'Could not find a board matching 428999'));
-initTestCases.push(new InitTestCse('bot3 adds board via bad jira url', bot1, 'https://jira-foo.foobar.com/jira/secure/RapidBoard.jspa?rapidView=4263', null, 'reject', 'Could not find a board matching https://jira-foo.foobar.com/jira/secure/RapidBoard.jspa?rapidView=4263'));
-initTestCases.push(new InitTestCse('bot3 adds board via bad board url', bot1, 'https://jira-eng-gpk2.cisco.com/jira/secure/SlowBoard.jspa?rapidView=4263', null, 'reject', 'Could not find a board matching https://jira-eng-gpk2.cisco.com/jira/secure/SlowBoard.jspa?rapidView=4263'));
-initTestCases.push(new InitTestCse('bot3 adds board via bad board id query param', bot1, 'https://jira-eng-gpk2.cisco.com/jira/secure/RapidBoard.jspa?rapidView=NameInsteadOfNumber', null, 'reject', 'Could not find a board matching https://jira-eng-gpk2.cisco.com/jira/secure/RapidBoard.jspa?rapidView=NameInsteadOfNumber'));
+initTestCases.push(new InitTestCse('bot3 adds boardId 428999', bot1, '428999', 'board', 'reject', 'Could not find a board or filter matching 428999'));
+initTestCases.push(new InitTestCse('bot3 adds board via bad jira url', bot1, 'https://jira-foo.foobar.com/jira/secure/RapidBoard.jspa?rapidView=4263', null, 'reject', 'Could not find a board or filter matching https://jira-foo.foobar.com/jira/secure/RapidBoard.jspa?rapidView=4263'));
+initTestCases.push(new InitTestCse('bot3 adds board via bad board url', bot1, 'https://jira-eng-gpk2.cisco.com/jira/secure/SlowBoard.jspa?rapidView=4263', null, 'reject', 'Could not find a board or filter matching https://jira-eng-gpk2.cisco.com/jira/secure/SlowBoard.jspa?rapidView=4263'));
+initTestCases.push(new InitTestCse('bot3 adds board via bad board id query param', bot1, 'https://jira-eng-gpk2.cisco.com/jira/secure/RapidBoard.jspa?rapidView=NameInsteadOfNumber', null, 'reject', 'Could not find a board or filter matching https://jira-eng-gpk2.cisco.com/jira/secure/RapidBoard.jspa?rapidView=NameInsteadOfNumber'));
+
+// Mock trigger with attachmentAction to emulate a button press to delete a board
+let deleteBoardButtonPressTrigger = {
+  attachmentAction: {
+    messageId: TEST_MESSAGE_ID_FOR_CARD,
+    inputs: {
+      requestedTask: "updateBoardConfig",
+      boardsToDelete: "4263:board,2885:board"
+    }
+  }
+};
 
 // Build the list of cannonical jira event test objects.
 function TestCase(file, action, author, subject, result) {
@@ -186,16 +243,18 @@ initNotifyTestCases(notifyTestCases);
 runInitTestCases(initTestCases, groupNotifier)
   .then(() => {
     console.log('Ready to start notifying!');
-    // TODO add another environment variable to optionally dump the config to a file
-    // console.log(JSON.stringify(groupNotifier.boardTransitions.boardsInfo, null, 2));
-    //console.log(notifyTestCases[0]);
-    // var jiraEvent = JSON.parse(fs.readFileSync(notifyTestCases[0].file, "utf8"));
-    // jiraEventHandler.processJiraEvent(jiraEvent, framework, checkTestResult(framework, notifyTestCases[0], 0 + 1));
-
-    // Try sending our single test case through the test case runner
-    // In the other test framework tests are initialized inside here
-    // For now we have pre-initialized the notifyTestCases array with a single test case
-    runTests(notifyTestCases, test_dir, jira, groupNotifier);
+    return runTests(notifyTestCases, test_dir, jira, groupNotifier);
+  })
+  // Emulate a button press to delete all boards from bot2
+  .then(() => {
+    console.log('Removing watched boards for one test bot.');
+    return groupNotifier.processAttachmentAction(bot2, deleteBoardButtonPressTrigger);
+  })
+  .then(() => {
+    notifyTestCases = [];
+    initPostDeleteNotifyTestCases(notifyTestCases);
+    console.log('Running notification tests again.');
+    return runTests(notifyTestCases, test_dir, jira, groupNotifier); 
   })
   .catch(e => {
     console.log(`runInitTestCases failed: ${e.message}`);
@@ -213,50 +272,50 @@ function initNotifyTestCases(testCases) {
     
 }
 
+function initPostDeleteNotifyTestCases(testCases) {
+  // One fewer bot is now looking at boards
+  testCases.push(new TestCase(`${test_dir}/jira_issue_updated-transition_buttons_and_cards_bug_board-manual-edit.json`,
+    'changed', 'Edel Joyce', 'status',
+    [
+      '', // nobody with a bot is assigned or mentioned in the description of this ticket
+      `{"markdown":"Edel Joyce transitioned a(n) Epic from Definition to Delivery:\\n* [SPARK-150410](https://jira-eng-gpk2.cisco.com/jira/browse/SPARK-150410): Adding Webex Community to help menu\\n* Components: Client: Android, Client: Desktop (Windows and MacOS), Client: iOS, Client: Web\\n* Team/PT: Webex Growth\\n\\nOn the board: [Buttons and Cards] Bugs and feedback "}`
+    ]));         
+    
+}
 
 async function runInitTestCases(testCases, groupNotifier) {
   if (process.env.USE_PREVIOUSLY_DUMPED_BOARDS_CONFIG) {
-    groupNotifier.boardTransitions.boardsInfo = require(process.env.USE_PREVIOUSLY_DUMPED_BOARDS_CONFIG);
-    console.log(`Using preloaded boards config from ${process.env.USE_PREVIOUSLY_DUMPED_BOARDS_CONFIG}`);
-    // replace the bot objects read from the file with the real bots we just created
-    groupNotifier.boardTransitions.boardsInfo.forEach(board => {
-      let botIds = board.bots.map(bot => bot.id);
-      board.bots = [];
-      botIds.forEach(id => {
-        let bot = _.find(framework.bots, bot => bot.id === id);
-        board.bots.push(bot);
-      });
-    });
-    return Promise.resolve();
-
+    return loadPreviouslyDumpedBoardConfigs(testCases, groupNotifier);
   }
+
   return Promise.all(testCases.map(test => {
-    let result;
     return Promise.race([
       groupNotifier.boardTransitions.watchIssuesListForBot(test.bot, test.listIdOrUrl, test.listType),
       Promisedelay(promiseTimeout, {result: 'timeout', msg: `${test.description} timed out`})
     ])
       .then((boardInfo) => {
         if ('result' in boardInfo) {
-          result = processInitResolve(boardInfo, test, 'timeout');
+          return processInitResolve(boardInfo, test, 'timeout');
         } else if (test.expectedPromise !== 'resolve') {
-          result = processInitResolve(boardInfo, test, 'fail');
+          return processInitResolve(boardInfo, test, 'fail');
         } else if (boardInfo.name !== test.expectedTitleOrError) {
-          result = processInitResolve(boardInfo, test, 'fail');
+          return processInitResolve(boardInfo, test, 'fail');
         } else {
-          result = processInitResolve(boardInfo, test, 'pass');
+          updateBotConfig(test.bot, boardInfo)
+            .catch((e) => {
+              console.error(`Problem storing the config for "${test.decription}: ${e.message}`);
+            });
+          return processInitResolve(boardInfo, test, 'pass');
         }
-        return Promise.resolve(result);
       })
       .catch((e) => {
         if (test.expectedPromise !== 'reject') {
-          result = processInitReject({msg: e.message}, test, 'fail');
+          return processInitReject({msg: e.message}, test, 'fail');
         } else if (e.message != test.expectedTitleOrError) {
-          result = processInitReject({msg: e.message}, test, 'fail');
+          return processInitReject({msg: e.message}, test, 'fail');
         } else {
-          result = processInitReject({msg: e.message}, test, 'pass');
+          return processInitReject({msg: e.message}, test, 'pass');
         }
-        return Promise.resolve(result);
       });
   }))
     .then((results) => {
@@ -293,34 +352,8 @@ async function runInitTestCases(testCases, groupNotifier) {
 }
 
 
-
-// Create the groupNotfier class which will create a boardNotifications object
-function initGroupNotifier() {
-  let groupNotifier = null;
-  if (process.env.ENABLE_GROUP_NOTIFICATIONS) {
-    try {
-      // Create the object for interacting with Jira
-      var GroupNotifications = require('../group-notifier/group-notifications.js');
-      groupNotifier = new GroupNotifications(jira, logger, frameworkConfig);
-    } catch (err) {
-      logger.error('Initialization Failure: ' + err.message);
-      process.exit(-1);
-    }
-  }
-  return groupNotifier;
-}
-
-
-
-
 // Run the tests
-// runTests(testCases, test_dir, jiraConnector, transitionConfig);
-
-async function runTests(testCases, test_dir, jira, transitionConfig) {
-  // Wait for any test initialization to complete...
-  // TODO Add this.  Right now I am pre-initializing a single test case
-  //await initTests(testCases, test_dir, jira, transitionConfig);
-
+async function runTests(testCases) {
   // Loop through the test cases to and send each one to the event processor
   let expectedCallbacks = 0;
   for (var i = 0, len = testCases.length; i < len; i++) {
@@ -338,6 +371,13 @@ async function runTests(testCases, test_dir, jira, transitionConfig) {
   myConsole.log(`Running ${testCases.length} tests expected to generate ${expectedCallbacks} responses.`);
   myConsole.log(`Set environment VERBOSE=true for more details.`);
   myConsole.log(`Will analyze results in ${timerDuration / 1000} seconds...`); 
+  // TODO -- modify this so it doesn't return until the promise gets
+  // resolved in the timeout handler
+  return new Promise((r) => returnAfterTimeout(r, testCases, timerDuration));
+}
+
+// Report test results after our timer expires
+function returnAfterTimeout(resolveMethod, testCases, timerDuration) {
   setTimeout(() => {
     let totalErrors = 0;
     let totalPassed = 0;
@@ -359,11 +399,9 @@ async function runTests(testCases, test_dir, jira, transitionConfig) {
     if (totalErrors) {
       console.error(`Number of errors seen: ${totalErrors}`);
     }
-    process.exit();
+    resolveMethod();
   }, timerDuration);
-}
-
-
+};
 
 // Jira event processor will call us back with the message that a bot sent
 // Check to see if matches our expected result
@@ -480,35 +518,66 @@ function Promisedelay(t, val) {
   });
 };
 
+// Load board Configs from previous run to speed up init
+function loadPreviouslyDumpedBoardConfigs(testCases, groupNotifier) {
+  groupNotifier.boardTransitions.boardsInfo = require(process.env.USE_PREVIOUSLY_DUMPED_BOARDS_CONFIG);
+  console.log(`Using preloaded boards config from ${process.env.USE_PREVIOUSLY_DUMPED_BOARDS_CONFIG}`);
+  // Update each bot's config store
+  groupNotifier.boardTransitions.boardsInfo.forEach(board => {
+    let botIds = board.bots.map(bot => bot.id);
+    let configBoard = JSON.parse(JSON.stringify(board));
+    delete configBoard.stories;
+    delete configBoard.bots;
+    board.bots = [];
+    botIds.forEach((id) => {
+      let bot = _.find(framework.bots, bot => bot.id === id);
+      // replace the bot from disk with our object that includes methods:
+      board.bots.push(bot);
+      updateBotConfig(bot, configBoard)
+        .catch((e) => {
+          console.error(`Failed updating bot's config during init from previous dump: ${e.message}`);
+        });
+    });
+  });
+  return Promise.resolve();
+}
+
+
+// Create the groupNotfier class which will create a boardNotifications object
+function initGroupNotifier() {
+  let groupNotifier = null;
+  if (process.env.ENABLE_GROUP_NOTIFICATIONS) {
+    try {
+      // Create the object for interacting with Jira
+      var GroupNotifications = require('../group-notifier/group-notifications.js');
+      groupNotifier = new GroupNotifications(jira, logger, frameworkConfig);
+    } catch (err) {
+      logger.error('Initialization Failure: ' + err.message);
+      process.exit(-1);
+    }
+  }
+  return groupNotifier;
+}
+
 function processInitResolve(resObj, test, status) {
   resObj.testDescription = test.description;
   resObj.testStatus = status;
   resObj.expectedBoardTitle = test.expectedTitleOrError;
-  return resObj;
+  return Promise.resolve(resObj);
 }
 function processInitReject(resObj, test, status) {
   resObj.testDescription = test.description;
   resObj.testStatus = status;
   resObj.expectedErrorMessage = test.expectedTitleOrError;
-  return resObj;
+  return Promise.resolve(resObj);
 }
 
-// Run the tests
-//runTests(testCases, test_dir, jira, transitionConfig);
-
-async function initTests(testCases, test_dir, jiraC, transitionConfig) {
-  // If configured to use TR Boards as filters, load in the initial cache of issues
-  if (process.env.JIRA_TRANSITION_BOARDS) {
-    try { 
-      console.info('Found Transition Boards to filter on, will try to read all their issues..');
-      await jira.initTRBoardCache();
-    } catch (e) {
-      console.error('initTRBoardCache failed to lookup all issues on TR boards.  Check configuration. ' +
-        'TR Notifications will be sent without this filter');
-      process.exit();
-    }
-  }
-  testCases.initTestCases(testCases, test_dir, jira.getJiraUrl(), transitionConfig);
+function updateBotConfig(bot, board) {
+  return bot.recall('groupSpaceConfig')
+    .then((config) => {
+      config.boards.push(board);
+      return bot.store('groupSpaceConfig', config);
+    });
 }
 
 // async function runTests(testCases, test_dir, jira, transitionConfig) {
@@ -676,12 +745,3 @@ function showExpected(msg, test) {
   }
 }
 
-
-function exitWithTransitionConfigError() {
-  console.error(`To configure the bot to notify for jira transitions ALL of the environment variables must be set:\n` +
-  `  - TRANSITION_PROJECTS: - list of jira projects to notify for\n`+
-  `  - TRANSITION_STATUS_TYPES: - list of jira status values to notify for\n`+
-  `  - TRANSITION_ISSUE_TYPES: - list of jira issue types to notify for\n\n`+
-  ` All values should be comma separated lists with no spaces.  Capitalization must match the jira configuration.`);
-  process.exit(0);
-}
