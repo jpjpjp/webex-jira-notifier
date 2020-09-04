@@ -6,12 +6,17 @@ var _ = require('lodash');
 /**
  * An optional module for the jira notifier bot.
  * When enabled it can track activity on "jira boards"
+ * A board can be a board as seen under the "Boards" menu
+ * or it can simply be the list of issues associated with
+ * a filter that drives any other type of board,
+ * such as a Dashboard, Portfolio Plan, etc
+ * 
  * This is one of the types of notifications supported in 
  * group spaces.
  *
  * If an issue is updated, this module can check to 
  * see if the update contitutes a "transition" (status change)
- * and if the issue is on a watched board it can notify 
+ * and if the issue is on a watched list/board it can notify 
  * the group space that requested updates on the board
  *
  * @module BoardTransitions
@@ -33,7 +38,7 @@ class BoardTransitions {
     // Check if our bot was configured with a Transition Board Cache Duration
     this.boardCacheDuration = (cacheDuration) ? cacheDuration : 6 * 60 * 60 * 1000;  // six hours
     // Boards to cache on startup
-    this.boardIds = [];
+    this.listIdObjs = [];
     this.boardsInfo = [];
     this.pendingBotAdds = [];
   }
@@ -51,51 +56,60 @@ class BoardTransitions {
    */
   watchIssuesListForBot(bot, listIdString, listIdType = null) {
     return this.jira.getIssuesListIdFromViewUrl(listIdString, listIdType)
-    .then((boardId) => {
-// TEMPORARY UNTIL getIssuesListIdFromViewUrl returns object
-listIdType = 'board';
-      this.logger.info(`Space "${bot.room.title}" asked to watch listIdObj "${boardId}"`);
+    .then((listIdObj) => {
+      this.logger.info(`Space "${bot.room.title}" asked to watch a ${listIdObj.type}, ID:${listIdObj.id}`);
+      let listId = listIdObj.id;
+      let listType = listIdObj.type;
 
-      if (-1 != this.boardIds.indexOf(boardId)) {
+      if (-1 != this.listIdObjs.findIndex(idObj =>
+        ((idObj.id == listId) && (idObj.type == listType)))) {
         // This board has already been requested.  Is it cached?
-        let board = _.find(this.boardsInfo, board => board.id === boardId); 
-        if (board) {
-          this.logger.info(`${boardId}:"${board.name}" already in cache.  Adding this bot to the list of followers.`);
-          this.addBotToBoardInfo(bot, board);
-          return new Promise((r) => returnWhenNotPending(r, this.pendingBotAdds,boardId, bot, 10, this));
+        let list = _.find(this.boardsInfo, list => 
+          ((list.id === listId) && (list.type === listType))); 
+        if (list) {
+          this.logger.info(`${listType} ${listId}:"${list.name}" already in cache.  Adding this bot to the list of followers.`);
+          this.addBotToListInfo(bot, list);
+          // TODO update NotPending logic to check for type as well as id
+          return new Promise((r) => returnWhenNotPending(r, this.pendingBotAdds,listIdObj, bot, 10, this));
         } else {
-          // Board requested but not cached yet, add this bot to the 
+          // List requested but not cached yet, add this bot to the 
           // list of bots to be added to cached info when ready
-          this.logger.info(`This board has been requestd but is not yet in cache.  Will add this bot when cache is ready.`);
-          this.pendingBotAdds.push({boardId, bot});
+          this.logger.info(`This ${listType} has been requestd but is not yet in cache.  Will add this bot when cache is ready.`);
+          // TODO update Pending logic to check for type as well as id
+          this.pendingBotAdds.push({listIdObj, bot});
           // return when the bot has been added to the boardsId list
-          return new Promise((r) => returnWhenNotPending(r, this.pendingBotAdds,boardId, bot, 10, this));
+          // TODO update Pending logic to check for type as well as id
+          return new Promise((r) => returnWhenNotPending(r, this.pendingBotAdds,listIdObj, bot, 10, this));
         }
       } else {
-        this.logger.info(`This is a new board.  Will validate it and add stories to cache.`);
-        this.boardIds.push(boardId);
-        this.pendingBotAdds.push({boardId, bot});
+        this.logger.info(`This is a new ${listType}.  Will validate it and add stories to cache.`);
+        this.listIdObjs.push(listIdObj);
+          // TODO update Pending logic to check for type as well as id
+          this.pendingBotAdds.push({listIdObj, bot});
 //        return this.jira.lookupBoardById(boardId)
-        return this.jira.lookupListByIdAndType(boardId, listIdType)
-        .then((board) => this.jira.lookupAndStoreListIssues(board))
-        .then((board) => {
-          this.logger.info(`${boardId} is a valid id: "${board.name}" Added ${board.stories.length} stories to cache.`);
-          this.addBotToBoardInfo(bot, board);
-          this.addBoardToBoardsInfo(board);
+        return this.jira.lookupListByIdAndType(listId, listType)
+        .then((list) => this.jira.lookupAndStoreListIssues(list))
+        .then((list) => {
+          this.logger.info(`${listId} is a valid ${listType}: "${list.name}" Added ${list.stories.length} stories to cache.`);
+          this.addBotToListInfo(bot, list);
+          this.addBoardToBoardsInfo(list);
+          // TODO update Pending logic to check for type as well as id
           this.updateBoardInfoWithPendingBots();
-          return  new Promise((r) => returnWhenNotPending(r, this.pendingBotAdds,boardId, bot, 10, this));
+          return  new Promise((r) => returnWhenNotPending(r, this.pendingBotAdds,listIdObj, bot, 10, this));
         })
         .catch(e => {
-          this.logger.warn(`watchIssuesListForBot: Failed getting info for board ${boardId}, requested in space "${bot.room.title}": ${e.message}`);
+          this.logger.warn(`watchIssuesListForBot: Failed getting info for ${listType}:${listId}, requested in space "${bot.room.title}": ${e.message}`);
           // remove any pending bots waiting for this board
-          this.pendingBotAdds = _.reject(this.pendingBotAdds, {'boardId': boardId});
-          this.boardIds = this.boardIds.filter(id => id !== boardId); 
+          // TODO update Pending logic to check for type as well as id
+          this.pendingBotAdds = _.reject(this.pendingBotAdds, {'boardId': listId});
+          this.listIdObjs = this.listIdObjs.filter(idObj => 
+            (!((idObj.id == listId) && (idObj.type == listType)))); 
           return when.reject(e);
         });
       }
     })
     .catch((e) => {
-      let msg = `Could not find a board matching ${listIdString}`;
+      let msg = `Could not find a board or filter matching ${listIdString}`;
       this.logger.info(`BoardTransition:watchIssuesListForBot: ${msg}. ` +
         `Requested by bot from spaceID:${bot.room.id}\nError:${e.message}`);
       return when.reject(new Error(`${msg}`));
@@ -111,11 +125,15 @@ listIdType = 'board';
   updateBoardInfoWithPendingBots() {
     this.logger.debug(`Checking ${this.pendingBotAdds.length} pending bot/board requests against ${this.boardsInfo.length} cached boards`);
     for(let i = this.pendingBotAdds.length -1; i >= 0 ; i--) {
-      let botBoardInfo = this.pendingBotAdds[i];
-      let board = _.find(this.boardsInfo, board => board.id === botBoardInfo.boardId); 
+      let botListInfo = this.pendingBotAdds[i];
+      let pendingId = botListInfo.listIdObj.id;
+      let pendingType = botListInfo.listIdObj.type;
+      let waitingBot = botListInfo.bot;
+      let board = _.find(this.boardsInfo, board => 
+        ((board.id === pendingId) && (board.type === pendingType))); 
       if (board) {
-        this.logger.info(`BoardId ${botBoardInfo.boardId} now in cache.  Bot for ${botBoardInfo.bot.room.title} will now notify for its transitions`);
-        this.addBotToBoardInfo(botBoardInfo.bot, board);
+        this.logger.info(`${pendingType}:${pendingId} now in cache.  Bot for ${waitingBot.room.title} will now notify for its transitions`);
+        this.addBotToListInfo(waitingBot, board);
         this.pendingBotAdds.splice(i, 1);
       }
     }
@@ -126,15 +144,16 @@ listIdType = 'board';
    * Return the public info about board that a bot might need
    * 
    * @function getPublicBoardInfo
-   * @param {string} boardIdString - id of the board bot wants to watch
+   * @param {string} listIdObj - list id/type bot wants to watch
    */
-  getPublicBoardInfo(boardId) {
-    let board = _.find(this.boardsInfo, board => board.id === boardId);
+  getPublicBoardInfo(listIdObj) {
+    let board = _.find(this.boardsInfo, board => 
+      ((board.id === listIdObj.id) && (board.type === listIdObj.type)))
     if (board) {
-      return {id: board.id, name: board.name, viewUrl: board.viewUrl, numStories: board.stories.length};
+      return {id: board.id, type: listIdObj.type, name: board.name, viewUrl: board.viewUrl, numStories: board.stories.length};
     } else {
-      this.logger.warn(`getPublicBoardInfo failed to find board with id ${boardId}.  Returning empty object`)
-      return {id: boardId, name: "Not Found", numStories: 0};
+      this.logger.warn(`getPublicBoardInfo failed to find ${listIdObj.type} with id ${listIdObj.id}.  Returning empty object`)
+      return {id: listIdObj.Id, type: listIdObj.type, name: "Not Found", numStories: 0};
     }
   } 
 
@@ -206,20 +225,22 @@ listIdType = 'board';
       let attachmentAction = trigger.attachmentAction;
       let inputs = attachmentAction.inputs;
       let config = await bot.recall('groupSpaceConfig');
-      if (inputs.boardIdOrUrl) {
+      if ((inputs.listIdOrUrl) && (inputs.listType)) {
         // Check if the requested board is already being watched
-        let board = _.find(config.boards, board => board.id === parseInt(inputs.boardIdOrUrl)); 
+        let board = _.find(config.boards, board => 
+          ((board.id === parseInt(inputs.listIdOrUrl)) &&
+           (board.type === inputs.listType))); 
         if (!board) {
-          board = _.find(config.boards, board => board.viewUrl === inputs.boardIdOrUrl);  
+          board = _.find(config.boards, board => board.viewUrl === inputs.listIdOrUrl);  
         }
         if (board) {
           return bot.reply(attachmentAction,
             `I'm already watching [${board.name}](${board.viewUrl}) for this space`);
         }
         return bot.reply(trigger.attachmentAction, 
-          `Looking up info for board: ${inputs.boardIdOrUrl}.  This can take several minutes....`)
+          `Looking up info for board: ${inputs.listIdOrUrl}.  This can take several minutes....`)
           .then(() => {
-            return this.watchIssuesListForBot(bot, inputs.boardIdOrUrl, /* TODO Add type here */)
+            return this.watchIssuesListForBot(bot, inputs.listIdOrUrl, inputs.listType)
             .catch((e) => {
               e.boardProblemType = 'lookup';
               return Promise.reject(e);
@@ -272,37 +293,42 @@ listIdType = 'board';
    * 
    * @function deleteBoardsForBot
    * @param {object} bot - bot object for space requesting board notifications
-   * @param {string} boardIds - a comma seperated list of board IDs to remove
+   * @param {string} listIdObjs - a comma seperated list of listId:listType pairs to delete
    * @param {object} config - board's configuration object
    * @param {object} attachmentAction - attachmentAction that caused this
    * @returns {Promise.<Object>} - a public board object with id, name, and num of stories
    */
-  deleteBoardsForBot(bot, boardIds, config, attachmentAction) {
-    let boardIdList = boardIds.split(',');
-    boardIdList.forEach((boardIdString) => {
-      let boardId = parseInt(boardIdString);
-      let index = config.boards.findIndex(board => board.id === boardId)
+  deleteBoardsForBot(bot, listIdObjs, config, attachmentAction) {
+    let listIds = listIdObjs.split(',');
+    listIds.forEach((listIdString) => {
+      let listInfo = listIdString.split(':')
+      let listId = parseInt(listInfo[0]);
+      let listType = listInfo[1];
+      // Is this a board this bot is watching?
+      let index = config.boards.findIndex(board => 
+        ((board.id === listId) && (board.type === listType)))
       if (index >= 0) {
-        let boardInfo = _.find(this.boardsInfo, board => board.id == boardId)
-        if (boardInfo) {
-          let botIndex = boardInfo.bots.findIndex(b => b.id === bot.id);
+        let listInfo = _.find(this.boardsInfo, board => 
+          ((board.id === listId) && (board.type === listType)))
+          if (listInfo) {
+          let botIndex = listInfo.bots.findIndex(b => b.id === bot.id);
           if (botIndex >= 0) {
-            boardInfo.bots.splice(botIndex, 1)
-            if (!boardInfo.bots.length) {
-              this.logger.info(`bot in space "${bot.room.title}" asked to stop watching board` +
-              `with ID ${boardId}. This is the last bot watching this board so we will remove` +
-              `it from the list of boards we are caching info for.`);
-              this.boardsInfo = _.reject(this.boardsInfo, {'id': boardId});
+            listInfo.bots.splice(botIndex, 1)
+            if (!listInfo.bots.length) {
+              this.logger.info(`bot in space "${bot.room.title}" asked to stop watching ${listType} ` +
+              `with ID ${listId}. This is the last bot watching this ${listType} so we will remove ` +
+              `it from the list of ${listType}s we are caching info for.`);
+              this.boardsInfo = _.reject(this.boardsInfo, {'id': listId, 'type': listType});
             }
           } else {
-            this.logger.warn(`bot in space "${bot.room.title}" asked to stop watching board` +
-            `with ID ${boardId}, but the bot is missing from the boardInfo bot array.  Ignoring.`);
+            this.logger.warn(`bot in space "${bot.room.title}" asked to stop watching ${listType}` +
+            `with ID ${boardId}, but the bot is missing from the list of bots watching it.  Ignoring.`);
           }
         }
         config.boards.splice(index, 1)
       } else {
-        this.logger.warn(`bot in space "${bot.room.title}" asked to stop watching board` +
-          `with ID ${boardId}, but it is not in the config.  Ignoring.`);
+        this.logger.warn(`bot in space "${bot.room.title}" asked to stop watching ${listType}` +
+          ` with ID ${listId}, but it is not in the config.  Ignoring.`);
       }
     });
     return bot.store('groupSpaceConfig', config);
@@ -482,24 +508,25 @@ listIdType = 'board';
     };
 
   /**
-   * Add a bot to the list of spaces wanting notifications for a board
+   * Add a bot to the list of spaces wanting notifications for 
+   * a list (ie: a board or a filter)
    * Don't add if it already exists
    * 
    * @private
-   * @function addBotToBoardInfo
+   * @function addBotToListInfo
    * @param {Object} bot - bot for space to be notified of transitions
-   * @param {Object} board - board info object for desired board
+   * @param {Object} list - board info object for desired board
    */
-  addBotToBoardInfo(bot, board) {
-      if (!('bots' in board)) {
-        return board.bots = [bot];
+  addBotToListInfo(bot, list) {
+      if (!('bots' in list)) {
+        return list.bots = [bot];
       }
-      let dupBot = _.find(board.bots, b => b.id === bot.id);
+      let dupBot = _.find(list.bots, b => b.id === bot.id);
       if (!dupBot) {
-        board.bots.push(bot);
+        list.bots.push(bot);
       }
       // No warning if this IS a duplicate.  There are scenarios where
-      // multiple bots could ask for the same board before it is fully cached
+      // multiple bots could ask for the same list before it is fully cached
       // In these cases its possible that the logic that cleans up the 
       // pending bot queue could try to push a pending bot after it was
       // already added in the list callback
@@ -546,24 +573,26 @@ module.exports = BoardTransitions;
  * @private
  * @function returnWhenNotPending
  * @param {Promise} resolveMethod - promie to resolve
- * @param {Array} pendingList - list of bot/boards still pending
- * @param {Integer} boardId - boardId to match
+ * @param {Array} pendingList - list of bot/list pairs still pending
+ * @param {Integer} listIdObj - listIdObj to match
  * @param {Object} bot - bot to match
  * @param {Integer} sleepSeconds - seconds to sleep
  * @param {Object} transitionObj - instance of the boardTransitions object that called
  * @returns {Promise.Array} - returns a public board object when found
  */
-returnWhenNotPending = function (resolvedMethod, pendingList, boardId, bot, sleepSeconds, transitionObj) {
-  let botBoardPair = _.find(pendingList, pair => {
-    return ((pair.boardId === boardId) && (pair.bot.id === bot.id));
+returnWhenNotPending = function (resolvedMethod, pendingList, listIdObj, bot, sleepSeconds, transitionObj) {
+  let botListPair = _.find(pendingList, pair => {
+    return ((pair.listIdObj.id === listIdObj.id) && 
+      (pair.listIdObj.type === listIdObj.type) &&
+      (pair.bot.id === bot.id));
   });
 
-  if (!botBoardPair) {
-    let boardInfo = transitionObj.getPublicBoardInfo(boardId);
+  if (!botListPair) {
+    let boardInfo = transitionObj.getPublicBoardInfo(listIdObj);
     resolvedMethod(boardInfo);
   } else {
     setTimeout(returnWhenNotPending.bind(null,
-      resolvedMethod, transitionObj.pendingBotAdds, boardId, bot, sleepSeconds, transitionObj
+      resolvedMethod, transitionObj.pendingBotAdds, listIdObj, bot, sleepSeconds, transitionObj
     ), sleepSeconds * 1000); // try again after timout
   }
 }
