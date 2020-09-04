@@ -114,8 +114,8 @@ class GroupStatus {
         //   value: board.id
         // });
         deleteChoices.items.push({
-          choice: `${board.id}: ${board.name}`,
-          value: `${board.id}`
+          choice: `${board.type} ${board.id}: ${board.name}`,
+          value: `${board.id}:${board.type}`
         });
 
       });
