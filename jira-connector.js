@@ -487,15 +487,13 @@ class JiraConnector {
    */
   getIssuesListIdFromViewUrl(issuesListUrl, issuesListType=null) {
     let listId;
-    // TODO return an object instead just an ID
     let listIdObj = {};
     // Check if this is already a listId
     if (listId = parseInt(issuesListUrl)) {
       if ((issuesListType === 'board') || (issuesListType == 'filter')) {
         listIdObj.id = listId;
         listIdObj.type = issuesListType;
-        // TODO return the object instead of just the id
-        return when(listId);
+        return when(listIdObj);
       } else {
         return when.reject(new Error(`getIssuesListIdFromViewUrl: ID was supplied without specifying a known listId type`));
       }
@@ -517,8 +515,7 @@ class JiraConnector {
     let listIdString = issuesListUrl.slice(issuesListUrl.lastIndexOf('=')+1);
     if (listId = parseInt(listIdString)) {
       listIdObj.id = listId;
-      // TODO update the return the listIdObj
-      return when(listId);
+      return when(listIdObj);
     }
     return when.reject(new Error(`getIssuesListIdFromViewUrl: listId in URL does no appear to be a number as expected`));
   }
