@@ -5,7 +5,7 @@
 /*jshint esversion: 6 */  // Help out our linter
 
 // When running locally read environment variables from a .env file
-require('dotenv').config();
+//require('dotenv').config();
 const when = require('when');
 const request = require('request-promise');
 const logger = require('./logger');
@@ -453,6 +453,10 @@ class JiraConnector {
       .then(filterInfo => {
         logger.info(`Found info for filterId: ${filterInfo.id}, name: ${filterInfo.name}`);
         filterInfo.type = 'filter';
+        // For some reason board.id is a number and filter.id is a string
+        // Lets convert here to be consistent
+        // TODO -- how hard would it be to go the other way?
+        filterInfo.id = parseInt(filterInfo.id);
         return filterInfo;
       })
       .catch(e => {
@@ -539,41 +543,42 @@ class JiraConnector {
     return this.lookupBoardById(boardId);
   }
 
-  // TODO figure out why this method is called by the cache refresh logic
-  // but a different method is used when a list is first added
-  /**
-   * 
-   * Recursively fetch all the stories for a given URL that returns
-   * an issues list.  This could be a board URL, a filter URL or
-   * potentially other types of URLs
-   * 
-   * @function getStorysForBoardUrl
-   * @param {string} boardUrl - url to get stories from
-   * @returns {Promise.Array} - returns array with user stories
-   */
-  getStoriesForBoardUrl(boardUrl) {
-    let url = `${boardUrl}/issue`;
-    let options = JSON.parse(JSON.stringify(this.jiraReqOpts));
-    let stories = null;
-    return request.get(this.convertForProxy(url), options)
-      .then(issuesListObj => {
-        if (!stories) {
-          stories = [];
-        }
-        if (issuesListObj.total) {
-          stories = stories.concat(issuesListObj.issues);
-        }
-        if (issuesListObj.issues.length === issuesListObj.maxResults) {
-          options.qs = {startAt: stories.length};
-          logger.debug(`Fetching eligible transtion stories from ${url}/?startAt=${stories.length}`);
-          return this.getStoriesForABoard(url, options, stories);
-        }
-        return stories;
-      });
-  }
+  // // TODO figure out why this method is called by the cache refresh logic
+  // // but a different method is used when a list is first added
+  // /**
+  //  * 
+  //  * Recursively fetch all the stories for a given URL that returns
+  //  * an issues list.  This could be a board URL, a filter URL or
+  //  * potentially other types of URLs
+  //  * 
+  //  * @function getStoriesForABoard
+  //  * @param {string} boardUrl - url to get stories from
+  //  * @returns {Promise.Array} - returns array with user stories
+  //  */
+  // getStoriesForABoardUrl(boardUrl) {
+  //   let url = `${boardUrl}/issue`;
+  //   let options = JSON.parse(JSON.stringify(this.jiraReqOpts));
+  //   let stories = null;
+  //   return request.get(this.convertForProxy(url), options)
+  //     .then(issuesListObj => {
+  //       if (!stories) {
+  //         stories = [];
+  //       }
+  //       if (issuesListObj.total) {
+  //         stories = stories.concat(issuesListObj.issues);
+  //       }
+  //       if (issuesListObj.issues.length === issuesListObj.maxResults) {
+  //         options.qs = {startAt: stories.length};
+  //         logger.debug(`Fetching eligible transtion stories from ${url}/?startAt=${stories.length}`);
+  //         return this.getStoriesFromUrl(url, options, stories);
+  //       }
+  //       return stories;
+  //     });
+  // }
+
 
   /**
-   * Add a list of issues to a list object
+   * Add a list of issue keys to a list object
    * Currently supported types are "board" and "filter"
    * 
    * @function lookupAndStoreListIssues
@@ -591,45 +596,44 @@ class JiraConnector {
       logger.error(msg);
       return Promise.reject(new Error(msg));
     }
-    let options = JSON.parse(JSON.stringify(this.jiraReqOpts));
-    return this.getStoriesForABoard(issuesUrl, options)
-      .then(stories => {
+    return this.getStoriesFromUrl(issuesUrl)
+      .then((stories) => {
         list.stories = stories.map(s => s.key);
         logger.info(`Got all ${list.stories.length} issues for ${list.type} Id:${list.id}, name: ${list.name}`);
         return(list);
       });
   }
 
-  /**
-   * Initialize jira calls to create a cache of issue keys that are on boards 
-   * that users want to be notified about
-   * 
-   * @function initTRBoardCache
-   * @return {<Promise>} - if resolved, config is initiatialized
-   */
-  initTRBoardCache() {
-    // First validate that all configured boards are available
-    return this.getInfoForBoards(this.jiraTransitionBoards)
-      .then(boards => {
-        this.transitionBoards = boards;
-        return this.getStoriesForBoards(boards);
-      }).then(boardsWithStories => {
-        this.transitionStories = boardsWithStories;
-        // Then read in all the issues on each of those boards
-        // We set an interval timer here so that this cache is 
-        // periodically refereshed
-        setInterval(() => {
-          this.getStoriesForBoards(this.transitionBoards)
-            .then(boardsWithStories => {
-              this.transitionStories = boardsWithStories;
-            }).catch(e => {
-              logger.error(`jira-connector failed getting issues for transition boards: ${e.message}`);
-              logger.error(`Will use existing cache of eligible transition ` +
-                        `stories and attempt to refresh again in ${this.transitionCacheDuration/1000} seconds`);
-            });
-        }, this.transitionCacheDuration);
-      });
-  }
+  // /**
+  //  * Initialize jira calls to create a cache of issue keys that are on boards 
+  //  * that users want to be notified about
+  //  * 
+  //  * @function initTRBoardCache
+  //  * @return {<Promise>} - if resolved, config is initiatialized
+  //  */
+  // initTRBoardCache() {
+  //   // First validate that all configured boards are available
+  //   return this.getInfoForBoards(this.jiraTransitionBoards)
+  //     .then(boards => {
+  //       this.transitionBoards = boards;
+  //       return this.getStoriesForBoards(boards);
+  //     }).then(boardsWithStories => {
+  //       this.transitionStories = boardsWithStories;
+  //       // Then read in all the issues on each of those boards
+  //       // We set an interval timer here so that this cache is 
+  //       // periodically refereshed
+  //       setInterval(() => {
+  //         this.getStoriesForBoards(this.transitionBoards)
+  //           .then(boardsWithStories => {
+  //             this.transitionStories = boardsWithStories;
+  //           }).catch(e => {
+  //             logger.error(`jira-connector failed getting issues for transition boards: ${e.message}`);
+  //             logger.error(`Will use existing cache of eligible transition ` +
+  //                       `stories and attempt to refresh again in ${this.transitionCacheDuration/1000} seconds`);
+  //           });
+  //       }, this.transitionCacheDuration);
+  //     });
+  // }
 
   /**
    * Is issue in our TR Notification Filter Cache
@@ -680,7 +684,7 @@ class JiraConnector {
     return Promise.all(boards.map(board => {
       let issuesUrl = `${board.self}/issue`;
       let options = JSON.parse(JSON.stringify(this.jiraReqOpts));
-      return this.getStoriesForABoard(issuesUrl, options)
+      return this.getStoriesFromUrl(issuesUrl, options)
         .then(stories => {
           board.stories = stories.map(s => s.key);
           logger.info(`Got all ${board.stories.length} issues on boardId: ${board.id}, name: ${board.name}`);
@@ -694,12 +698,16 @@ class JiraConnector {
    * 
    * Recursively fetch all the stories for a given board
    * @private
-   * @function getStorysForBoard
+   * @function getStoriesFromUrl
    * @param {string} url - url to get stories from
-   * @param {Object} options - request options
+   * @param {Object} options - optional request options 
+   * @param {Array} stories - stories collected so far
    * @returns {Promise.Array} - returns array with user stories
    */
-  getStoriesForABoard(url, options, stories) {
+  getStoriesFromUrl(url, options=null, stories=null) {
+    if (!options) {
+      options = JSON.parse(JSON.stringify(this.jiraReqOpts));
+    }
     return request.get(this.convertForProxy(url), options)
       .then(issuesListObj => {
         if (!stories) {
@@ -711,7 +719,7 @@ class JiraConnector {
         if (issuesListObj.issues.length === issuesListObj.maxResults) {
           options.qs = {startAt: stories.length};
           logger.debug(`Fetching eligible transtion stories from ${url}/?startAt=${stories.length}`);
-          return this.getStoriesForABoard(url, options, stories);
+          return this.getStoriesFromUrl(url, options, stories);
         }
         return stories;
       });

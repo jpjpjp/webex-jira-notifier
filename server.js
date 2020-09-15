@@ -4,7 +4,10 @@ Jira ticket and/or if it is assigned to them.
 */
 /*jshint esversion: 6 */  // Help out our linter
 
+// When running locally read environment variables from a .env file
+require('dotenv').config();
 
+// Packages for building a bot as an express app
 var Framework = require('webex-node-bot-framework');
 var express = require('express');
 var bodyParser = require('body-parser');
@@ -12,89 +15,10 @@ var logger = require('./logger');
 var app = express();
 app.use(bodyParser.json({limit: '50mb'}));
 
-// When running locally read environment variables from a .env file
-require('dotenv').config();
-logger = require('./logger');
+// Details about this instance of the app
 const package_version = require('./package.json').version;
 logger.info(`Running app version: ${package_version}`);
 logger.info(`Running node version: ${process.version}`);
-
-// This section shoudl be removed after groupNotifications works...
-// Check if we are configured to notify certain group spaces about
-// certain types of issues transitioning
-let transitionConfig = {};
-if ((process.env.TRANSITION_PROJECTS) || (process.env.TRANSITION_STATUS_TYPES) ||
-  (process.env.TRANSITION_ISSUE_TYPES) || (process.env.TRANSITION_SPACE_IDS)) {
-  if (process.env.TRANSITION_SPACE_IDS) {
-    transitionConfig.trSpaceIds = process.env.TRANSITION_SPACE_IDS.split(/,\s*/);
-  } else {
-    exitWithTransitionConfigError();
-  }
-  if (process.env.TRANSITION_PROJECTS) {
-    transitionConfig.projects = process.env.TRANSITION_PROJECTS.split(/,\s*/);
-  } else {
-    exitWithTransitionConfigError();
-  }
-  if (process.env.TRANSITION_STATUS_TYPES) {
-    transitionConfig.statusTypes = process.env.TRANSITION_STATUS_TYPES.split(/,\s*/);
-  } else {
-    exitWithTransitionConfigError();
-  }
-  if (process.env.TRANSITION_ISSUE_TYPES) {
-    transitionConfig.issueTypes = process.env.TRANSITION_ISSUE_TYPES.split(/,\s*/);
-  } else {
-    exitWithTransitionConfigError();
-  }
-  transitionConfig.trSpaceBots = [];
-}
-
-// Check if we are configured to notify certain group spaces about
-// new issues being created.   The rules for configuration the 
-// NOTIFICATION_SPACE_ID environment variable is
-// SpaceID+comma seperated component list+comma sep. teams:PT list/
-// EG:
-// roomId+client:foo,server:bar+team1:pt1,team2:pt2/roomId2....
-
-// let groupSpaceConfig = {
-//   transitionConfig,
-//   newIssueConfigs: []
-// };
-// if (process.env.NOTIFICATION_SPACE_IDS) {
-//   let spaces = process.env.NOTIFICATION_SPACE_IDS.split('/');
-//   spaces.forEach(space => {
-//     let config = space.split('+');
-//     let roomId = config.shift();
-//     if (!config.length) {
-//       logger.error(`Cannot read filter info for Notification space: ${roomId}\n` +
-//        `Syntax: NOTIFICATIONS_SPACE_IDS=roomId1+component1,component2/roomId2:component1,...`);
-//       process.exit(0); 
-//     }
-//     let components = config.shift();
-//     components = components.split(/,\s*/);
-//     let teams = [];
-//     if (config.length) {
-//       let teamsList = config[0].split(/,\s*/);
-//       teamsList.forEach(team => {
-//         team = team.split(':');
-//         if (team.length !== 2) {
-//           logger.error(`Invalid Team PT specified in NOTIFICATION_SPACE_IDS for space:${roomId}`);
-//           logger.error(process.env.NOTIFICATION_SPACE_IDS);
-//           logger.error('Expected Teams/PT in format "Team Name:PT" seperated by commas');
-//         } else {
-//           teams.push({
-//             team: team[0],
-//             pt: team[1]
-//           });
-//         }
-//       });
-//     }
-//     groupSpaceConfig.newIssueConfigs.push({
-//       roomId,
-//       components,
-//       teams
-//     });
-//   });
-// }
 
 // Helper class for caling Jira APIs
 let jira = {};
@@ -126,9 +50,12 @@ if ((process.env.TOKEN) && (process.env.PORT)) {
   return;
 }
 
-// If configured enable the Group Notifications Module
+// If configured enable the Group Notifications Module, which allows
+// the bot to run in group spaces and notify about transitions and/or
+// new issues that belong to a certain board or filter.
 // Note this REQUIRES that the framework config include the
-// restrictToEmailDomains parameter to be set 
+// restrictToEmailDomains parameter to be set so outside organizations
+// cannot access details about your jira 
 let groupNotifier = null;
 if (process.env.ENABLE_GROUP_NOTIFICATIONS) {
   try {
@@ -141,32 +68,16 @@ if (process.env.ENABLE_GROUP_NOTIFICATIONS) {
   }
 }
 
-
-// Helper classes for dealing with Jira Webhook events
+// This object will process webhook events from jira
 let jiraEventHandler = {};
 try {
   const JiraEventHandler = require("./jira-event.js");
-//  jiraEventHandler = new JiraEventHandler(jira, groupSpaceConfig);
+  //  jiraEventHandler = new JiraEventHandler(jira, groupSpaceConfig);
   jiraEventHandler = new JiraEventHandler(jira, groupNotifier);
 } catch (err) {
   logger.error('Initialization Failure while creating Jira Event Handler: ' + err.message);
   process.exit(-1);
 }
-
-// Old way...
-// If configured to use TR Boards as transition notification filters, 
-// load in the initial cache of all the issues on those boards
-// if (process.env.JIRA_TRANSITION_BOARDS) {
-//   logger.info('Found Transition Boards to filter on, will try to read all their issues..');
-//   jira.initTRBoardCache()
-//     .then(() => {
-//       logger.info(`Jira Transition Board issue cache is now populated.  Notifying only on those issues`);
-//     }).catch(e => {
-//       logger.error(`Failed to lookup all issues on TR boards: ${e.message}.\n` +
-//         `Check config set in environment JIRA_TRANSITION_BOARDS: ${process.env.JIRA_TRANSITION_BOARDS}.\n` +
-//         `Transition notifications will be sent without this filter`);
-//     });
-// }
 
 // This bot uses the framework's Mongo persistent storage driver
 // Read in the configuration and get it ready to initialize
@@ -233,7 +144,6 @@ framework.messageFormat = 'markdown';
 logger.info("Starting framework, please wait...");
 if (typeof mConfig.mongoUri === 'string') {
   // Initialize our mongo storage driver and the the bot framework.
-  //let MongoStore = require('webex-node=bot-framework/storage/mongo');
   let MongoStore = require('./node_modules/webex-node-bot-framework/storage/mongo.js');
   let mongoStore = new MongoStore(mConfig);
   mongoStore.initialize()
@@ -251,64 +161,30 @@ if (typeof mConfig.mongoUri === 'string') {
     });
 }
 
-
+// Wow, that was a lot of setup.   Now we are ready to process events
+// From the webex bot framework or from jira
+// This handler is called when the framework has finished initializing
 framework.on("initialized", function () {
   logger.info("framework initialized successfully! [Press CTRL-C to quit]");
-  if ((adminSpaceId) && (!adminsBot)) {
-    // Our admin space was not one of the ones found during initialization
-    logger.verbose('Attempting to force spawn of the bot for the Admin space');
-    framework.webex.memberships.list({
-      roomId: adminSpaceId,
-      personId: framework.person.id
-    })
-      .then((memberships) => {
-        if ((memberships.items) && (memberships.items.length)) {
-          framework.spawn(memberships.items[0]);
-        }
-      })
-      .catch((e) => logger.error(`Failed trying to force spawn of admin bot: ${e.message}`));
-  }
 });
 
 // Called when the framework discovers a space our bot is in.
 // At startup, (before the framework is fully initialized), this
-// is called when the framework discovers an existing spaces.
-// After initialization, if our bot is added to a new space the 
+// is called when the framework discovers an existing space.
+// If a bot is added to a new space after our app was started, the
 // framework processes the membership:created event, creates a
 // new bot object and generates this event with the addedById param
-// The framework can also "lazily" discover older spaces that it missed
-// during startup when any kind of activity occurs there.  In these
-// cases addedById will always be null
 // TL;DR we use the addedById param to see if this is a new space for our bot
 framework.on('spawn', function (bot, id, addedById) {
   // Do some housekeeping if the bot for our admin space hasn't spawned yet
   if (!adminsBot) {
     tryToInitAdminBot(bot, framework);
   }
-  // By design we leave group spaces we were added to.
+  // Only stay in group spaces if the Group Notification module is enabled
   if (bot.isGroup) {
-    // The only exception for this is any TR notification spaces
-    // TODO = may want to enforce membership rules here:
-    let groupIsAuthorized = false;
-    // if (-1 !== (index = transitionConfig.trSpaceIds.indexOf(bot.room.id))) {
-    //   logger.info(`Found a TR Notification Group Space: ${bot.room.title}`);
-    //   groupIsAuthorized = true;
-    //   transitionConfig.trSpaceBots.push(bot);
-    // }
-    // if (-1 !== (index = groupSpaceConfig.newIssueConfigs.findIndex(s => s.roomId === bot.room.id))) {
-    //   logger.info(`Found a New Issue Notification Group Space: ${bot.room.title}`);
-    //   groupIsAuthorized = true;
-    //   let config = groupSpaceConfig.newIssueConfigs[index];
-    //   config.bot = bot;
-    // }
-    if ((!groupIsAuthorized) && (groupNotifier !== null)) {
-      // THe logic above should eventually go away, then I just need this check
-      //if (groupNotifier !== null) {
-      groupIsAuthorized = true;
-      
+    if (groupNotifier !== null) {
       groupNotifier.onSpawn(bot, addedById, adminsBot);
-    } 
-    if (!groupIsAuthorized) {
+    } else {
       logger.info(`Leaving Group Space: ${bot.room.title}`);
       bot.say("Hi! Sorry, I only work in one-on-one rooms at the moment.  Goodbye.")
         .finally(() => {
@@ -326,8 +202,8 @@ framework.on('spawn', function (bot, id, addedById) {
     // Framework discovered an existing space with our bot, log it
     if (!framework.initialized) {
       logger.info(`During startup framework spawned bot in existing room: ${bot.room.title}`);
-      // An instance of the bot has been added to a room
     } else {
+      // This case occurs only if maxStartupSpaces was set in framework config
       logger.info(`Bot object spawn() in existing room: "${bot.room.title}" ` +
         `where activity has occured since our server started`);
     }
@@ -351,75 +227,185 @@ framework.on('spawn', function (bot, id, addedById) {
   }
 });
 
+// Called when our bot is removed from a space or if the membership
+// has changed in such a way as to violate membership rules set via
+// the restrictedToEmailDomains or guideEmails config parameters
 framework.on('despawn', function (bot) {
-  let index;
   if (bot.isGroup) {
-    if (-1 !==
-       (index = transitionConfig.trSpaceBots.findIndex(trBot => bot.room.id === trBot.room.id))) {
-      logger.info(`Bot left a TR notification Group Space: ${bot.room.title}`);
-      transitionConfig.trSpaceBots 
-          transitionConfig.trSpaceBots.splice(index, 1);
-    } 
-    if (-1 !==
-        (index = groupSpaceConfig.newIssueConfigs.findIndex(s => s.roomId === bot.room.id))) { 
-      logger.info(`Bot left a New Issue notification Group Space: ${bot.room.title}`);
-      delete groupSpaceConfig.newIssueConfigs[index].bot;
-    }
     groupNotifier.onDespawn(bot);
   }
 });
 
-function sayNewFunctionalityMessage(bot) {
-  bot.say('Not sure if you noticed, but I haven\'t been doing a good job lately of notifying you ' +
-    'about all the jira issues you aren\'t explicitly mentioned in. ' +
-    'I\'ve recently been redeployed in a network configuration that should ' +
-    'give me better access to info about watchers and assignees too. ' +
-    'Remember you can always type **help** to learn how to change the '+
-    'things I notify you about.\n\n' +
-    'I\'ve also learned a new trick.  If you reply to one of my notifications, I will post ' +
-    'the content of that message as a new comment on that jira issue on your behalf.  Get more done in Teams!\n\n' +
-    '\n\nI don\'t have access to every project in jira, so if you find this isn\'t working for you, please ' +   
-    'post a message in the [Ask JiraNotification Bot space](https://eurl.io/#Hy4f7zOjG). That way we can ' +
-    'work with the project admin to add me to the project.\n\n' +
-    'Finally, if you find me useful, consider telling your teammates about me and help them ' +
-    'get more done in Teams too.\n\n'
-  );
-  bot.store('newFunctionalityMsg2', true);
-}
+/***
+ * Process any button presses on cards this bot has posted
+ */
+framework.on('attachmentAction', async (bot, trigger) => {
+  if (bot.isDirect) {
+    return logger.error(`Got an unexpected button press event in space with ${bot.isDirectTo}.  Ignoring.`);
+  }
+  groupNotifier.processAttachmentAction(bot, trigger);
+});
 
 
+/****
+## Process incoming messages
+   The framework will call the appropriate framework.hears() function
+   when the message to the bot matches the expression or text 
+****/
+
+var responded = false;
+var status_words = /^\/?(status|are you (on|working))( |.|$)/i;
+framework.hears(status_words, function (bot/*, trigger*/) {
+  logger.verbose('Processing Status Request for ' + bot.isDirectTo);
+  postInstructions(bot, /*status_only=*/true);
+  responded = true;
+});
+
+var no_watcher_words = /^\/?(no watcher)s?( |.|$)/i;
+framework.hears(no_watcher_words, function (bot/*, trigger*/) {
+  logger.verbose('Processing Disable Watcher Notifications Request for ' + bot.isDirectTo);
+  if (bot.isGroup) {return;}
+  toggleWatcherMsg(bot, false);
+  responded = true;
+});
+
+var yes_watcher_words = /^\/?(yes watcher)s?( |.|$)/i;
+framework.hears(yes_watcher_words, function (bot/*, trigger*/) {
+  logger.verbose('Processing Enable Watcher Notifications Request for ' + bot.isDirectTo);
+  if (bot.isGroup) {return;}
+  toggleWatcherMsg(bot, true);
+  responded = true;
+});
+
+var no_notifyself_words = /^\/?(no notify ?self)( |.|$)/i;
+framework.hears(no_notifyself_words, function (bot/*, trigger*/) {
+  logger.verbose('Processing Disable Notifications Made by user Request for ' + bot.isDirectTo);
+  if (bot.isGroup) {return;}
+  toggleNotifySelf(bot, false);
+  responded = true;
+});
+
+var yes_notifyself_words = /^\/?(yes notify ?self)( |.|$)/i;
+framework.hears(yes_notifyself_words, function (bot/*, trigger*/) {
+  logger.verbose('Processing Enable Notifications Made by user Request for ' + bot.isDirectTo);
+  if (bot.isGroup) {return;}
+  toggleNotifySelf(bot, true);
+  responded = true;
+});
+
+var exit_words = /^\/?(exit|goodbye|mute|leave|shut( |-)?up)( |.|$)/i;
+framework.hears(exit_words, function (bot/*, trigger*/) {
+  logger.verbose('Processing Exit Request for ' + bot.isDirectTo);
+  if (bot.isGroup) {return;}
+  setAskedExit(bot, true);
+  updateAdmin(bot.isDirectTo + ' asked me to turn off notifications');
+  responded = true;
+});
+
+var return_words = /^\/?(talk to me|return|un( |-)?mute|come( |-)?back)( |.|$)/i;
+framework.hears(return_words, function (bot/*, trigger*/) {
+  logger.verbose('Processing Return Request for ' + bot.isDirectTo);
+  if (bot.isGroup) {return;}
+  setAskedExit(bot, false);
+  updateAdmin(bot.isDirectTo + ' asked me to start notifying them again');
+  responded = true;
+});
+
+var project_words = /^\/?(projects)( |.|$)/i;
+framework.hears(project_words, function (bot/*, trigger*/) {
+  logger.verbose('Processing Projects Request for ' + bot.isDirectTo);
+  if (bot.isGroup) {return;}
+  if (process.env.JIRA_PROJECTS) {
+    bot.say(`The projects that I can lookup watchers in are: ` + 
+      `${jira.jiraAllowedProjects.join(', ')}\n` +
+      `\n\nThe projects that denied permission to my lookup watcher requests since my last restart are: ` +
+      `${jira.jiraDisallowedProjects.join(', ')}\n\n` +
+      `If you are interested in being notified about tickets in any of these denied projects, ` +
+      ` or ones in projects not listed here, please post a message in the ` +
+      `[Ask JiraNotification Bot space](https://eurl.io/#Hy4f7zOjG) and we can find ` +
+      `an appropriate project admin to help get me access.`);
+  } else {
+    bot.say('Sorry, I cannot access the list of projects I am allowed to view right now.');
+  }
+  responded = true;
+});
+
+framework.hears('/showadmintheusers', function (bot/*, trigger*/) {
+  logger.verbose('Processing /showadmintheusers Request for ' + bot.isDirectTo);
+  updateAdmin('The following people are using me:', true);
+  responded = true;
+});
+
+var reply_words = /^\/?reply/i;
+framework.hears(reply_words, function (bot, trigger) {
+  logger.verbose('Processing reply request from ' + bot.isDirectTo);
+  if (bot.isGroup) {return;}
+  if (trigger.message.parentId) {
+    // Handle threaded replies in the catch-all handler
+    return;
+  }
+  bot.recall('lastNotifiedIssue')
+    .then((lastNotifiedIssue) => {
+      if ((lastNotifiedIssue) && (lastNotifiedIssue.storyUrl)) {
+        let comment = trigger.args.slice(1).join(" ");
+        jira.addComment(lastNotifiedIssue.storyUrl,
+          lastNotifiedIssue.storyKey,
+          comment, bot, bot.isDirectTo);
+      } else {
+        bot.reply(trigger.message, 'Sorry, cannot find last notification to reply to. ' +
+          'Please click the link above and update directly in jira.');
+      }
+    }).catch((e) => {
+      logger.warn('Failure in reply handler: ' + e.message);
+      bot.reply(trigger.message, 'Sorry, cannot find last notification to reply to. ' +
+        'Please click the link above and update directly in jira.');
+    });
+  responded = true;
+});
+
+// var help_words = /^\/?help/i;
+// framework.hears(help_words, function (bot/*, trigger*/) {
+framework.hears('help', function (bot/*, trigger*/) {
+  postInstructions(bot);
+  responded = true;
+});
+
+// Respond to unexpected input
+framework.hears(/.*/, function (bot, trigger) {
+  if (!responded) {
+    if (bot.isGroup) {
+      if (trigger.args[0] === botName) {
+        trigger.args.shift();
+        trigger.text = trigger.args.join(' ');
+        return processGroupSpaceCommand(bot, trigger);
+      }
+    }
+    if (trigger.message.parentId) {
+      // TODO:  Unless this is a request to delete a notification
+      // Handle threaded replies as a request to post a comment
+      logger.info(`Posting a comment as a reply in space: "${bot.room.title}"`);
+      jira.postCommentToParent(bot, trigger);
+    } else {
+      let text = trigger.text;
+      bot.reply(trigger.message, 'Don\'t know how to respond to "' + text + '"' +
+        '.  Enter **help** for info on what I do understand.');
+      logger.info('Bot did not know how to respond to: ' + text +
+        ', from ' + bot.isDirectTo);
+    }
+  }
+  responded = false;
+});
+
+/*
+ * Helper methods called by the handlers
+ */
 async function postInstructions(bot, status_only = false, instructions_only = false) {
   try {
     if (bot.isGroup) {
-      let also = '';
-      let msg = '';
-      if (-1 !== transitionConfig.trSpaceIds.indexOf(bot.room.id)) {
-        msg = 'I will send notifications to this space about transitions. ' +
-        `My current configuration is as follows: \n` +
-        `* Jira Projects: ${transitionConfig.projects.join(', ')}\n` +
-        `* Issue Types:   ${transitionConfig.issueTypes.join(', ')}\n` +
-        `* Transition to: ${transitionConfig.statusTypes.join(',')}\n\n`;
-        also = 'also ';
-      } 
-      if (-1 != groupSpaceConfig.newIssueConfigs.findIndex(s => s.roomId === bot.room.id)) {
-        let config = groupSpaceConfig.newIssueConfigs.find(s => s.roomId === bot.room.id);
-        let teamString = '';
-        if (config.teams.length) {
-          config.teams.forEach(t => {
-            teamString += `${t.team}:${t.pt}, `;
-          });
-          teamString = teamString.substring(0, teamString.length - 2);
-        }
-        msg += `I will ${also}send notifications to this space about new issues. ` +
-        `My current configuration is as follows: \n` +
-        `* Issue Types: Bug\n` +
-        `* Components: ${config.components.join(',')}\n` +
-        `* Team/PT(s): ${teamString}\n\n`;
-      }
-      msg += `I don't currently support any commands in group spaces, ` +
-      `but if you message me in a 1-1 space I can give you personalized notifications.`;
-      await bot.say(msg);
+      logger.verbose('Processing help Request for ' + bot.room.title);
+      groupNotifier.groupStatus.postStatusCard(bot);
     } else {
+      logger.verbose('Processing help Request for ' + bot.isDirectTo);
       let msg = "I will look for Jira tickets that are assigned to, or that mention " +
       bot.isDirectTo + " and notify you so you can check out the ticket immediately.  " +
       "\n\nIf you'd like to comment on a ticket I notified you about you can post " +
@@ -463,7 +449,10 @@ async function postInstructions(bot, status_only = false, instructions_only = fa
           }
         }
         if (status_only) {
-          msg += '\n\nType **help** to learn how to change your Notification state.';
+          msg += '\n\nType **help** to learn how to change your Notification state.\n\n' +
+            'Add me to a group space to get notifications about **all** issues related to a jira board or filter.';
+        } else {
+          msg += '\n\nAdd me to a group space to get notifications about **all** issues related to a jira board or filter.'; 
         }
         await bot.say(msg);
         logger.debug('Status for ' + bot.isDirectTo + ': ' + JSON.stringify(userConfig, null, 2));
@@ -642,181 +631,26 @@ function tryToInitAdminBot(bot, framework) {
   }
 }
 
-function exitWithTransitionConfigError() {
-  console.error(`To configure the bot to notify for jira transitions ALL of the environment variables must be set:\n` +
-  `  - TRANSITION_SPACE_IDS: - list of roomIds I should post TR info to\n`+
-  `  - TRANSITION_PROJECTS: - list of jira projects to notify for\n`+
-  `  - TRANSITION_STATUS_TYPES: - list of jira status values to notify for\n`+
-  `  - TRANSITION_ISSUE_TYPES: - list of jira issue types to notify for\n\n`+
-  ` All values should be comma separated lists without spaces between entries.`);
-  process.exit(0);
-}
+// This function is handy when we want to notify all users, once,
+// about new functionality changes
+// function sayNewFunctionalityMessage(bot) {
+//   bot.say('Not sure if you noticed, but I haven\'t been doing a good job lately of notifying you ' +
+//     'about all the jira issues you aren\'t explicitly mentioned in. ' +
+//     'I\'ve recently been redeployed in a network configuration that should ' +
+//     'give me better access to info about watchers and assignees too. ' +
+//     'Remember you can always type **help** to learn how to change the '+
+//     'things I notify you about.\n\n' +
+//     'I\'ve also learned a new trick.  If you reply to one of my notifications, I will post ' +
+//     'the content of that message as a new comment on that jira issue on your behalf.  Get more done in Teams!\n\n' +
+//     '\n\nI don\'t have access to every project in jira, so if you find this isn\'t working for you, please ' +   
+//     'post a message in the [Ask JiraNotification Bot space](https://eurl.io/#Hy4f7zOjG). That way we can ' +
+//     'work with the project admin to add me to the project.\n\n' +
+//     'Finally, if you find me useful, consider telling your teammates about me and help them ' +
+//     'get more done in Teams too.\n\n'
+//   );
+//   bot.store('newFunctionalityMsg2', true);
+// }
 
-/***
- * Process any button presses on cards this bot has posted
- */
-framework.on('attachmentAction', async (bot, trigger) => {
-  if (bot.isDirect) {
-    return logger.error(`Got an unexpected button press event in space with ${bot.isDirectTo}.  Ignoring.`);
-  }
-  groupNotifier.processAttachmentAction(bot, trigger);
-});
-
-
-/****
-## Process incoming messages
-   The framework will call the appropriate framework.hears() function
-   when the message to the bot matches the expression or text 
-****/
-
-var responded = false;
-var status_words = /^\/?(status|are you (on|working))( |.|$)/i;
-framework.hears(status_words, function (bot/*, trigger*/) {
-  logger.verbose('Processing Status Request for ' + bot.isDirectTo);
-  postInstructions(bot, /*status_only=*/true);
-  responded = true;
-});
-
-var no_watcher_words = /^\/?(no watcher)s?( |.|$)/i;
-framework.hears(no_watcher_words, function (bot/*, trigger*/) {
-  logger.verbose('Processing Disable Watcher Notifications Request for ' + bot.isDirectTo);
-  if (bot.isGroup) {return;}
-  toggleWatcherMsg(bot, false);
-  responded = true;
-});
-
-var yes_watcher_words = /^\/?(yes watcher)s?( |.|$)/i;
-framework.hears(yes_watcher_words, function (bot/*, trigger*/) {
-  logger.verbose('Processing Enable Watcher Notifications Request for ' + bot.isDirectTo);
-  if (bot.isGroup) {return;}
-  toggleWatcherMsg(bot, true);
-  responded = true;
-});
-
-var no_notifyself_words = /^\/?(no notify ?self)( |.|$)/i;
-framework.hears(no_notifyself_words, function (bot/*, trigger*/) {
-  logger.verbose('Processing Disable Notifications Made by user Request for ' + bot.isDirectTo);
-  if (bot.isGroup) {return;}
-  toggleNotifySelf(bot, false);
-  responded = true;
-});
-
-var yes_notifyself_words = /^\/?(yes notify ?self)( |.|$)/i;
-framework.hears(yes_notifyself_words, function (bot/*, trigger*/) {
-  logger.verbose('Processing Enable Notifications Made by user Request for ' + bot.isDirectTo);
-  if (bot.isGroup) {return;}
-  toggleNotifySelf(bot, true);
-  responded = true;
-});
-
-var exit_words = /^\/?(exit|goodbye|mute|leave|shut( |-)?up)( |.|$)/i;
-framework.hears(exit_words, function (bot/*, trigger*/) {
-  logger.verbose('Processing Exit Request for ' + bot.isDirectTo);
-  if (bot.isGroup) {return;}
-  setAskedExit(bot, true);
-  updateAdmin(bot.isDirectTo + ' asked me to turn off notifications');
-  responded = true;
-});
-
-var return_words = /^\/?(talk to me|return|un( |-)?mute|come( |-)?back)( |.|$)/i;
-framework.hears(return_words, function (bot/*, trigger*/) {
-  logger.verbose('Processing Return Request for ' + bot.isDirectTo);
-  if (bot.isGroup) {return;}
-  setAskedExit(bot, false);
-  updateAdmin(bot.isDirectTo + ' asked me to start notifying them again');
-  responded = true;
-});
-
-var project_words = /^\/?(projects)( |.|$)/i;
-framework.hears(project_words, function (bot/*, trigger*/) {
-  logger.verbose('Processing Projects Request for ' + bot.isDirectTo);
-  if (bot.isGroup) {return;}
-  if (process.env.JIRA_PROJECTS) {
-    bot.say(`The projects that I can lookup watchers in are: ` + 
-      `${jira.jiraAllowedProjects.join(', ')}\n` +
-      `\n\nThe projects that denied permission to my lookup watcher requests since my last restart are: ` +
-      `${jira.jiraDisallowedProjects.join(', ')}\n\n` +
-      `If you are interested in being notified about tickets in any of these denied projects, ` +
-      ` or ones in projects not listed here, please post a message in the ` +
-      `[Ask JiraNotification Bot space](https://eurl.io/#Hy4f7zOjG) and we can find ` +
-      `an appropriate project admin to help get me access.`);
-  } else {
-    bot.say('Sorry, I cannot access the list of projects I am allowed to view right now.');
-  }
-  responded = true;
-});
-
-framework.hears('/showadmintheusers', function (bot/*, trigger*/) {
-  logger.verbose('Processing /showadmintheusers Request for ' + bot.isDirectTo);
-  updateAdmin('The following people are using me:', true);
-  responded = true;
-});
-
-var reply_words = /^\/?reply/i;
-framework.hears(reply_words, function (bot, trigger) {
-  logger.verbose('Processing reply request from ' + bot.isDirectTo);
-  if (bot.isGroup) {return;}
-  if (trigger.message.parentId) {
-    // Handle threaded replies in the catch-all handler
-    return;
-  }
-  bot.recall('lastNotifiedIssue')
-    .then((lastNotifiedIssue) => {
-      if ((lastNotifiedIssue) && (lastNotifiedIssue.storyUrl)) {
-        let comment = trigger.args.slice(1).join(" ");
-        jira.addComment(lastNotifiedIssue.storyUrl,
-          lastNotifiedIssue.storyKey,
-          comment, bot, bot.isDirectTo);
-      } else {
-        bot.reply(trigger.message, 'Sorry, cannot find last notification to reply to. ' +
-          'Please click the link above and update directly in jira.');
-      }
-    }).catch((e) => {
-      logger.warn('Failure in reply handler: ' + e.message);
-      bot.reply(trigger.message, 'Sorry, cannot find last notification to reply to. ' +
-        'Please click the link above and update directly in jira.');
-    });
-  responded = true;
-});
-
-// var help_words = /^\/?help/i;
-// framework.hears(help_words, function (bot/*, trigger*/) {
-framework.hears('help', function (bot/*, trigger*/) {
-  if (bot.isDirect) {
-    logger.verbose('Processing help Request for ' + bot.isDirectTo);
-    postInstructions(bot);
-  } else {
-    logger.verbose('Processing help Request for ' + bot.room.title);
-    groupNotifier.groupStatus.postStatusCard(bot);
-  }
-  responded = true;
-});
-
-// Respond to unexpected input
-framework.hears(/.*/, function (bot, trigger) {
-  if (!responded) {
-    if (bot.isGroup) {
-      if (trigger.args[0] === botName) {
-        trigger.args.shift();
-        trigger.text = trigger.args.join(' ');
-        return processGroupSpaceCommand(bot, trigger);
-      }
-    }
-    if (trigger.message.parentId) {
-      // TODO:  Unless this is a request to delete a notification
-      // Handle threaded replies as a request to post a comment
-      logger.info(`Posting a comment as a reply in space: "${bot.room.title}"`);
-      jira.postCommentToParent(bot, trigger);
-    } else {
-      let text = trigger.text;
-      bot.reply(trigger.message, 'Don\'t know how to respond to "' + text + '"' +
-        '.  Enter **help** for info on what I do understand.');
-      logger.info('Bot did not know how to respond to: ' + text +
-        ', from ' + bot.isDirectTo);
-    }
-  }
-  responded = false;
-});
 
 /****
 ## Server config & housekeeping
@@ -843,23 +677,6 @@ app.post('/jira', function (req, res) {
   } catch (e) {
     logger.warn('Error processing Jira Event Webhook:' + e);
     logger.warn('Ignoring: ' + JSON.stringify(jiraEvent));
-    res.status(400);
-  }
-  res.end();
-});
-
-// Jira Fitter Match Webhook 
-app.post('/jiraFilterHits/:roomId', function (req, res) {
-  console.log('Got a hit on jiraFilterHits rout with roomId:' + req.params.roomId);
-  let jiraEvent = {};
-  try {
-    jiraEvent = req.body;
-    if (typeof jiraEvent.webhookEvent !== 'undefined') {
-      jiraEventHandler.processJiraFilterEvent(jiraEvent, framework, req.params.roomId);
-    }
-  } catch (e) {
-    logger.warn('Error processing Jira Filter Match Event Webhook:' + e);
-    logger.warn('Ignoring: ' + JSON.stringify(jiraEvent, req.params.id));
     res.status(400);
   }
   res.end();

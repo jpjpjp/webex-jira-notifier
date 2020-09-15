@@ -4,8 +4,6 @@
 // in a room with our bot
 /*jshint esversion: 6 */  // Help out our linter
 
-// When running locally read environment variables from a .env file
-require('dotenv').config();
 logger = require('./logger');
 let when = require('when');
 
@@ -111,11 +109,9 @@ function processIssueEvent(jiraEvent, framework, jira, groupSpaceConfig, cb) {
 
     // Evaluate and potentially notify group spaces about this event
     if ((groupSpaceConfig) && (typeof groupSpaceConfig === 'object')) {
-      groupSpaceConfig.evaluateForGroupSpaceNotification(framework, msgElements, this, cb);
+      groupSpaceConfig.evaluateForGroupSpaceNotification(msgElements, 
+        buildWatcherOrAssigneeMessage, cb);
     }
-
-    // Evaluate and potentially notify spaces about new issues being created
-    // evaluateForNewIssueNotifications(framework, msgElements, groupSpaceConfig.newIssueConfigs, jira, cb);
 
     // Wait for and process the watchers (if any)
     if (!watcherPromise) {
@@ -375,64 +371,6 @@ function notifyBotUsers(framework, recipientType, msgElements, emails, jira, cb)
     }
   });
 }
-
-// Some version of this will eventually go in the to be developed
-// new issue notification module
-function evaluateForNewIssueNotifications(framework, msgElements, configs, jira, cb) {
-  try {
-    // Is this issue event a New Issue Notification candidate?
-    if ((msgElements.jiraEvent.webhookEvent !== 'jira:issue_created') || 
-      // Initial version only supports bugs
-      (msgElements.issueType != 'Bug')) {
-      return;
-    }
-    let issue = msgElements.jiraEvent.issue;
-
-    // We have a new issue, lets see if any spaces want to be notified about it
-    configs. forEach(spaceConfig => {
-      // Is it for a component or team/PT this space cares about?
-      let commonComponents = [];
-      let commonTeams = [];
-      if ((spaceConfig?.components?.length) && (issue?.fields?.components?.length)) {
-        commonComponents = issue.fields.components.filter(c => {
-          return (-1 != spaceConfig.components.indexOf(c.name));
-        });
-      }
-
-      if (!commonComponents.length) {
-        // Check to see if there is a matching Team/PT trigger
-        let teamPt = issue?.fields?.customfield_11800 
-        if ((spaceConfig?.teams?.length) && (typeof teamPt === 'object')) {
-            commonTeams = spaceConfig.teams.filter(t => {
-              return ((t.team === teamPt?.value) && (t.pt === teamPt?.child?.value));
-            });    
-          }
-      }
-      if ((commonComponents.length) || (commonTeams.length)) {
-        let msg = buildWatcherOrAssigneeMessage(msgElements, null, jira)
-        let bot = spaceConfig.bot;
-        if (bot) {
-          logger.info('Sending a new issue notification to ' + bot.room.title + ' about ' + msgElements.issueKey);
-          bot.say({markdown: msg});
-          // Store the key of the last notification in case the user wants to reply
-          let lastNotifiedIssue = {
-            storyUrl: msgElements.issueSelf,
-            storyKey: msgElements.issueKey
-          };
-          bot.store('lastNotifiedIssue', lastNotifiedIssue);
-          if (cb) {cb(null, bot);}
-        }
-      }
-
-    });
-
-  } catch(e) {
-    logger.error(`evaluateForNewIssueNotifications() caught exception: ${e.message}`);
-    createTestCase(e, msgElements.jiraEvent, framework, 'evaluate-for-tr-error'); 
-    return;  
-  }
-}
-
 
 function sendWebexNotification(bot, recipientType, userConfig, msgElements, jira, cb) {
   if ((bot.isDirectTo === msgElements.authorEmail) &&

@@ -1,9 +1,6 @@
 // group-notifications.js
 /*jshint esversion: 6 */  // Help out our linter
 
-// When running locally read environment variables from a .env file
-require('dotenv').config();
-
 /**
  * An optional module for the jira notifier bot.
  * By default this bot only sends notifications in 1-1 spaces
@@ -76,9 +73,23 @@ class GroupNotifications {
       this.boardTransitions = null;
     }
 
-    // TODO add NEW_ISSUE_NOTIFICATION setup
+    if (process.env.ENABLE_NEW_ISSUE_NOTIFICATIONS) {    
+      try {
+        // Create the object for managing new issue notifications
+        var NewIssueNotifications = require('./new-issue-notifications.js');
+        this.newIssueNotifications = new NewIssueNotifications(
+          this.jira, this.groupStatus, this.logger);
+      } catch (err) {
+        logger.error('Failure during NewIssueNotifications module initialization: ' + err.message);
+        process.exit(-1);
+      }
+    } else {
+      this.newIssueNotifications = null;
+    }
+
   }
 
+  
   /**
    * spawn handler for a group spaces
    * 
@@ -132,7 +143,7 @@ class GroupNotifications {
       .then((config) => {
         if (config?.boards?.length) {
           config.boards.forEach(board => {
-            this.boardTransitions.watchIssuesListForBot(bot, board.id);
+            this.boardTransitions.watchIssuesListForBot(bot, board.id, board.type);
           })
         }
         // ToDo handle new issue notification configurations
@@ -212,14 +223,19 @@ class GroupNotifications {
   /**
    * Evaluate and potentially notify group spaces about this event
    * 
-   * @param {object} framework -- the framework with the array of active bot objects
    * @param {object} msgElement - the data needed to create a notification for this jira event
-   * @param {object} notifier - the jira notifier object
+   * @param {function} createMessageFn -- function to create a jira event notification message
    * @param {function} cb - the (optional) callback function used by the test framework
    */
-  evaluateForGroupSpaceNotification(framework, msgElements, notifier, cb) {
+  evaluateForGroupSpaceNotification(msgElements, createMessageFn, cb) {
     if (this.boardTransitions) {
-      this.boardTransitions.evaluateForTransitionNotification(framework, msgElements, notifier, cb)
+      this.boardTransitions.evaluateForTransitionNotification(msgElements,
+        this.sendNotification, cb);
+      // TODO -- Add new issues to watched filter caches
+    }
+    if (this.newIssueNotifications) {
+      this.newIssueNotifications.evaluateForNewIssueNotifications(msgElements, 
+        createMessageFn, this.sendNotification, cb);
     }
   }
 
@@ -258,6 +274,31 @@ class GroupNotifications {
       return bot.reply(attachmentAction, 
         `Had a problem processing that request.  Error has been logged.`);
     }
+  }
+
+  /**
+   * Send a notification to a group space
+   * 
+   * @param {object} bot - bot instance that will post the message
+   * @param {object} msgElements - elements that make up the message
+   * @param {string} message - the notification to send
+   * @param {function} callback - callback (used by testing framework)
+   */
+  sendNotification(bot, msgElements, message, callback) {
+    // Store the key of the last notification in case the user wants to reply
+    let lastNotifiedIssue = {
+      storyUrl: msgElements.issueSelf,
+      storyKey: msgElements.issueKey
+    };
+    bot.store('lastNotifiedIssue', lastNotifiedIssue)
+      .catch((e) => {
+        this.logger.error(`groupNotifier:sendNotification(): ` +
+          `Unable to store the messageId of the last notifiation sent to space` +
+          `${bot.room.title}: ${e.message}`);
+      });
+    let sayPromise = bot.say({markdown: message});
+    if (callback) {callback(null, bot);}
+    return sayPromise;
   }
 
 

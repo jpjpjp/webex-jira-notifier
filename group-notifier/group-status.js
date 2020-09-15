@@ -1,8 +1,5 @@
 // group-status.js
 
-// When running locally read environment variables from a .env file
-require('dotenv').config();
-
 // The Adaptive Cards Template SDK helps us populate a card design
 // template with values from a data source
 var ACData = require("adaptivecards-templating");
@@ -107,7 +104,7 @@ class GroupStatus {
         items: []
       };
       config.boards.forEach((board) =>{
-        configList +=`* [${board.name}](${board.webUrl})\n`;
+        configList +=`* [${board.name}](${board.viewUrl})\n`;
         // In the current template the Input.ChoiceSet is the 2nd element in the body array
         // deleteBoardButton.card.body[2].choices.push({
         //   title: `${board.id}: ${board.name}`,
@@ -148,6 +145,7 @@ class GroupStatus {
       return bot.sendCard(card)
         .then((message => bot.store('activeCardMessageId', message.id)));
     } catch (e) {
+      bot.say(`I had a problem getting your configuration.`);
       return Promise.reject(e);
     }
   }

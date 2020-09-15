@@ -99,9 +99,9 @@ class BoardTransitions {
         })
         .catch(e => {
           this.logger.warn(`watchIssuesListForBot: Failed getting info for ${listType}:${listId}, requested in space "${bot.room.title}": ${e.message}`);
-          // remove any pending bots waiting for this board
-          // TODO update Pending logic to check for type as well as id
-          this.pendingBotAdds = _.reject(this.pendingBotAdds, {'boardId': listId});
+          this.pendingBotAdds = _.reject(this.pendingBotAdds, b => 
+            ((b.listIdObj.id ===listIdObj.id) && (b.listIdObj.type === listIdObj.type) &&
+              (b.bot.id === bot.id)));
           this.listIdObjs = this.listIdObjs.filter(idObj => 
             (!((idObj.id == listId) && (idObj.type == listType)))); 
           return when.reject(e);
@@ -109,7 +109,9 @@ class BoardTransitions {
       }
     })
     .catch((e) => {
-      let msg = `Could not find a board or filter matching ${listIdString}`;
+      let type = (listIdType) ? listIdType : 'board or filter';
+      if (typeof listIdObj === 'object') {type = listIdObj.type;}
+      let msg = `Could not find a ${type} matching ${listIdString}`;
       this.logger.info(`BoardTransition:watchIssuesListForBot: ${msg}. ` +
         `Requested by bot from spaceID:${bot.room.id}\nError:${e.message}`);
       return when.reject(new Error(`${msg}`));
@@ -161,12 +163,11 @@ class BoardTransitions {
    * Evaluate and potentially notify group spaces about 
    * transitions occuring on watched boards
    * 
-   * @param {object} framework -- the framework with the array of active bot objects
    * @param {object} msgElement - the data needed to create a notification for this jira event
-   * @param {object} notifier - the jira notifier object
+   * @param {function} sendMessageFn - the group notifier objects function to send notifications
    * @param {function} cb - the (optional) callback function used by the test framework
    */
-  evaluateForTransitionNotification(framework, msgElements, notifier, cb) {
+  evaluateForTransitionNotification(msgElements, sendMessageFn, cb) {
     try {
       // No point evaluating if no one is listening...
       if (!this?.boardsInfo?.length) { 
@@ -177,40 +178,19 @@ class BoardTransitions {
       (msgElements.action !== 'status') || (typeof msgElements.jiraEvent.issue.fields !== 'object')) {
         return;
       }
-      let issue = msgElements.jiraEvent.issue;
-  
-      // We have a status related event.
-      // Check if it is one of the projects we care about
-      // if ((!config?.projects?.length) || (!issue?.fields?.project?.key) ||
-      //   (-1 === config.projects.findIndex(project => issue.fields.project.key.toLowerCase() === project.toLowerCase()))) {
-      //   return;
-      // }
-    
-      // We have a status related event for a project we are interested in.
-      // Check if it is one of the issue types we care about
-      // if ((!config?.issueTypes?.length) || (!issue?.fields?.issuetype?.name) ||
-      //   (-1 === config.issueTypes.findIndex(type => issue.fields.issuetype.name.toLowerCase() === type.toLowerCase()))) {
-      //   return;
-      // }
-  
-      // Is this a transition to a status that we are monitoring?
-      // if ((!config?.statusTypes) || (!msgElements?.updatedTo) ||
-      //   (-1 === config.statusTypes.findIndex(status => msgElements.updatedTo.toLowerCase() === status.toLowerCase()))) {
-      //     return;
-      // }
 
       // This is a candidate. Is it on any of the boards we are watching?
       if (this.boardsInfo.length) {
         let boards = this.issueOnWatchedBoard(msgElements.issueKey);
         if (boards.length) {
-          this.notifyTransitionSpaces(msgElements, boards, cb);
+          this.notifyTransitionSpaces(msgElements, boards, sendMessageFn, cb);
         }
       } 
       
     } catch(e) {
-      logger.error(`evaluateForTransitionNotification() caught exception: ${e.message}`);
-      notifier.createTestCase(e, msgElements.jiraEvent, framework, 'evaluate-for-tr-error'); 
-      return;  
+      return Promise.reject(new Error(
+        `evaluateForTransitionNotification() caught exception: ${e.message}`
+      ));
     }
   }
 
@@ -238,7 +218,7 @@ class BoardTransitions {
             `I'm already watching [${board.name}](${board.viewUrl}) for this space`);
         }
         return bot.reply(trigger.attachmentAction, 
-          `Looking up info for board: ${inputs.listIdOrUrl}.  This can take several minutes....`)
+          `Looking up info for ${inputs.listType}: ${inputs.listIdOrUrl}.  This can take several minutes....`)
           .then(() => {
             return this.watchIssuesListForBot(bot, inputs.listIdOrUrl, inputs.listType)
             .catch((e) => {
@@ -252,9 +232,10 @@ class BoardTransitions {
           })
           .then(() => this.groupStatus.postSuccessCard(bot))
           .catch((e) => {
-            if (e.boardProblemType = 'lookup') {
+            if (e.boardProblemType === 'lookup') {
               return bot.reply(trigger.attachmentAction,
-                `Unable to add board: ${e.message}`);
+                `Unable to add board: ${e.message}.\n\n` +
+                `Make sure the permissions for the ${inputs.listType} allow fall jira users to view it.`);
             }
             this.logger.error(`Failed setting up a new board in space "${bot.room.title}": ${e.message}`);
             this.logger.error(`trigger from card: ${JSON.stringify(trigger, null, 2)}`);
@@ -318,7 +299,8 @@ class BoardTransitions {
               this.logger.info(`bot in space "${bot.room.title}" asked to stop watching ${listType} ` +
               `with ID ${listId}. This is the last bot watching this ${listType} so we will remove ` +
               `it from the list of ${listType}s we are caching info for.`);
-              this.boardsInfo = _.reject(this.boardsInfo, {'id': listId, 'type': listType});
+              this.boardsInfo = _.reject(this.boardsInfo, board => 
+                ((board.id === listId) && (board.type == listType)));
             }
           } else {
             this.logger.warn(`bot in space "${bot.room.title}" asked to stop watching ${listType}` +
@@ -340,9 +322,10 @@ class BoardTransitions {
    * @private
    * @param {object} msgElement - the data needed to create a notification for this jira event
    * @param {array} boards - list of watched boards that the transition occured on
+   * @param {function} sendMessageFn - parent class funtion to send the message
    * @param {function} cb - the (optional) callback function used by the test framework
    */
-  notifyTransitionSpaces(msgElements, boards, cb) {
+  notifyTransitionSpaces(msgElements, boards, sendMessageFn, cb) {
     let issue = msgElements.jiraEvent.issue;
     let msg = `${msgElements.author} transitioned a(n) ${msgElements.issueType} from ` +
       `${msgElements.updatedFrom} to ${msgElements.updatedTo}`;
@@ -352,7 +335,7 @@ class BoardTransitions {
     msg += `:\n* [${msgElements.issueKey}](${msgElements.issueUrl}): ${msgElements.issueSummary}\n`;
   
     if (issue?.fields?.components?.length) {
-      msg += '* Components: ';
+      msg += '   * Components: ';
       for (let i=0; i<issue.fields.components.length; i++) {
         msg += `${issue.fields.components[i].name}, `;
       }
@@ -361,19 +344,25 @@ class BoardTransitions {
     }
   
     if (issue?.fields?.customfield_11800?.value) {
-      msg += `\n* Team/PT: ${issue.fields.customfield_11800.value}`;
+      msg += `\n   * Team/PT: ${issue.fields.customfield_11800.value}`;
       if ((typeof issue.fields.customfield_11800.child === 'object') && (issue.fields.customfield_11800.child.value)) {
         msg += `: ${issue.fields.customfield_11800.child.value}`;
       }
     }
   
     boards.forEach((board) => {
-      // TODO - make this a link.  Need to find the web URL for the board
-      // during setup and add it to the board object
-      let boardMsg = msg += `\n\nOn the board: ${board.name}`;
+      let boardMsg = msg;
+      if (board.type === 'filter') {
+        boardMsg += `\n\nWhich matches the filter: [${board.name}](${board.viewUrl})`;
+      } else {
+        boardMsg += `\n\nOn the ${board.type} [${board.name}](${board.viewUrl})`;
+      }
       board.bots.forEach((bot) => {
-        bot.say({markdown: boardMsg});
-        if (cb) {cb(null, bot);}
+        this.logger.info('Sending a transition notification to ' + bot.room.title + ' about ' + msgElements.issueKey);
+        sendMessageFn(bot, msgElements, boardMsg, cb)
+          .catch((e) => {
+            this.logger.error(`Failed to send board transition message: ${e.message}`);
+          });
       });
     });
   }
@@ -399,74 +388,28 @@ class BoardTransitions {
    * @returns {Promise.Array} - if resolved all board objects have updated story lists
    */
   updateStoriesForBoards(boardsInfo) {
-    return Promise.all(boardsInfo.map(board => {
-      return this.jira.getStoriesForBoardUrl(board.self)
-        .then((stories) => {
-          if (board.stories.length !== stories.length) {
-            this.logger.info(`boardID ${board.id} stories have changed since last cache update.`);
+    return Promise.all(boardsInfo.map(list => {
+      let numStoriesInCache = list.stories.length
+      return this.jira.lookupListByIdAndType(list.id, list.type)
+      .then((newList) => {
+        if ((newList.type === 'filter') && (newList.searchUrl !== list.searchUrl)) {
+          this.logger.info(`${list.type} ${list.id} has changed since it was last cached`);
+          // Capture the aspects of the list changes that are relevant to our bot
+          list.searchUrl = newList.searchUrl;
+          list.jql = newList.jql;
+        }
+      return this.jira.lookupAndStoreListIssues(list)
+    })
+    .then((list) => {
+          if (numStoriesInCache !== list.stories.length) {
+            this.logger.info(`${list.type} ${list.id} stories have changed since last cache update.`);
           }
-          // Copy the new list of stories to the board object
-          board.stories = stories
         })
         .catch(e => {
-          this.logger.error(`updateStoriesForBoard: Failed getting stories for board ${board.id}: ${e.message}`);
+          this.logger.error(`updateStoriesForBoard: Failed getting stories for board ${list.id}: ${e.message}`);
           return Promise.reject(e);
         });
     }))
-  }
-
-  /**
-   * Recursively fetch all the stories for a given board
-   * 
-   * @private
-   * @function getStorysForBoard
-   * @param {string} url - url to get stories from
-   * @param {Object} options - request options
-   * @returns {Promise.Array} - returns array with user stories
-   */
-  getStoriesForABoard(url, options, stories) {
-    return request.get(this.convertForProxy(url), options)
-      .then(issuesListObj => {
-        if (!stories) {
-          stories = [];
-        }
-        if (issuesListObj.total) {
-          stories = stories.concat(issuesListObj.issues);
-        }
-        if (issuesListObj.issues.length === issuesListObj.maxResults) {
-          options.qs = {startAt: stories.length};
-          this.logger.debug(`Fetching eligible transtion stories from ${url}/?startAt=${stories.length}`);
-          return this.getStoriesForABoard(url, options, stories);
-        }
-        return stories;
-      });
-  }
-
-  /**
-   * Recursively fetch all the stories for a given board
-   * 
-   * @private
-   * @function getStorysForBoard
-   * @param {string} url - url to get stories from
-   * @param {Object} options - request options
-   * @returns {Promise.Array} - returns array with user stories
-   */
-  getStoriesForABoard(url, options, stories) {
-    return request.get(this.convertForProxy(url), options)
-      .then(issuesListObj => {
-        if (!stories) {
-          stories = [];
-        }
-        if (issuesListObj.total) {
-          stories = stories.concat(issuesListObj.issues);
-        }
-        if (issuesListObj.issues.length === issuesListObj.maxResults) {
-          options.qs = {startAt: stories.length};
-          this.logger.debug(`Fetching eligible transtion stories from ${url}/?startAt=${stories.length}`);
-          return this.getStoriesForABoard(url, options, stories);
-        }
-        return stories;
-      });
   }
 
   /**
@@ -580,7 +523,8 @@ module.exports = BoardTransitions;
  * @param {Object} transitionObj - instance of the boardTransitions object that called
  * @returns {Promise.Array} - returns a public board object when found
  */
-returnWhenNotPending = function (resolvedMethod, pendingList, listIdObj, bot, sleepSeconds, transitionObj) {
+returnWhenNotPending = function (resolvedMethod, pendingList, listIdObj, bot, sleepSeconds, transitionObj, numTries=0) {
+  numTries += 1;
   let botListPair = _.find(pendingList, pair => {
     return ((pair.listIdObj.id === listIdObj.id) && 
       (pair.listIdObj.type === listIdObj.type) &&
@@ -590,9 +534,20 @@ returnWhenNotPending = function (resolvedMethod, pendingList, listIdObj, bot, sl
   if (!botListPair) {
     let boardInfo = transitionObj.getPublicBoardInfo(listIdObj);
     resolvedMethod(boardInfo);
+  } else if (numTries >= 10) {
+    let msg = `Failed initializing ${listIdObj.type}:${listIdObj.id} ` +
+     `for bot in space ${bot.room.title}. ` +
+     `List of stories not available after ${numTries*sleepSeconds} seconds.`;
+    transitionObj.pendingBotAdds = _.reject(pendingList, b => 
+      ((b.listIdObj.id ===listIdObj.id) && (b.listIdObj.type === listIdObj.type) &&
+       (b.bot.id === bot.id)));
+    transitionObj.logger.error(msg);
+    let error = new Error(msg);
+    error.boardProblemType = 'lookup';
+    return resolvedMethod.reject(error);
   } else {
     setTimeout(returnWhenNotPending.bind(null,
-      resolvedMethod, transitionObj.pendingBotAdds, listIdObj, bot, sleepSeconds, transitionObj
+      resolvedMethod, transitionObj.pendingBotAdds, listIdObj, bot, sleepSeconds, transitionObj, numTries
     ), sleepSeconds * 1000); // try again after timout
   }
 }
