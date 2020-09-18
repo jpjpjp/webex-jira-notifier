@@ -462,12 +462,24 @@ class JiraConnector {
    */
   lookupBoardById(boardId) {
     let boardUrl = `${this.jiraLookupBoardApi}/${boardId}`;
+    let boardInfo;
     return request.get(this.convertForProxy(boardUrl), this.jiraReqOpts)
-      .then(boardInfo => {
-        logger.info(`Found info for boardId: ${boardInfo.id}, name: ${boardInfo.name}`);
-        // Jira's native board object does not return its viewUrl
+      .then(board => {
+        boardInfo = board;
+        logger.debug(`Found info for boardId: ${boardInfo.id}, name: ${boardInfo.name}, fetching filter info..`);
+        return this.lookupBoardConfiguration(boardInfo);
+      })
+      .then((boardConfig) => this.lookupFilterById(boardConfig.filter.id))
+      .then((filter) => {
+        logger.debug(`Found config and filter for boardId: ${boardInfo.id}, creating a consolidated object`);
+        // Jira's native board object does not return its viewUrl like it does for filter
         boardInfo.viewUrl = this.viewUrlFromBoardId(boardId);
         boardInfo.type = 'board';
+        boardInfo.filter = {
+          id: filter.id,
+          name: filter.name
+        };
+        boardInfo.searchUrl = filter.searchUrl;
         return boardInfo;
       })
       .catch(e => {
@@ -475,6 +487,19 @@ class JiraConnector {
         return Promise.reject(e);
       });
   }
+
+  /**
+   * Lookup a jira boards configuration
+   * 
+   * @function lookupBoardConfiguration
+   * @param {string} board - a Jira board object
+   * @return {<Promise>} - if resolved, the jira configuration object for the board
+   */
+  lookupBoardConfiguration(board) {
+    let configUrl = `${board.self}/configuration`;
+    return request.get(this.convertForProxy(configUrl), this.jiraReqOpts);
+  } 
+  
 
   /**
    * Lookup a jira filter by ID
