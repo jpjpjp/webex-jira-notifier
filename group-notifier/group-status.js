@@ -22,9 +22,10 @@ class GroupStatus {
     this.statusCardTemplate = require('../card-design/group-config.json');
     if (process.env.JIRA_URL) {
       // Tie the status message to our jira instance
-      this.statusCardTemplate.body[1].text += `the Jira instance running at the URL: ${process.env.JIRA_URL}`;
+      // TODO use a template for this
+      this.statusCardTemplate.body[2].text += `the Jira instance running at the URL: ${process.env.JIRA_URL}`;
     } else {
-      this.statusCardTemplate.body[1].text += 'your company\'s Jira instance.';
+      this.statusCardTemplate.body[2].text += 'your company\'s Jira instance.';
     }
 
     this.updatedCardTemplate = require('../card-design/updated-config.json');
@@ -105,11 +106,6 @@ class GroupStatus {
       };
       config.boards.forEach((board) =>{
         configList +=`* [${board.name}](${board.viewUrl})\n`;
-        // In the current template the Input.ChoiceSet is the 2nd element in the body array
-        // deleteBoardButton.card.body[2].choices.push({
-        //   title: `${board.id}: ${board.name}`,
-        //   value: board.id
-        // });
         deleteChoices.items.push({
           choice: `${board.type} ${board.id}: ${board.name}`,
           value: `${board.id}:${board.type}`

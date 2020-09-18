@@ -30,6 +30,9 @@ try {
   logger.error('Initialization Failure: ' + err.message);
   process.exit(-1);
 }
+// jira.lookupAvailableProjects().then((projects) => {
+//   console.log(`I can see these projects: ${Array.sort(Array.from(projects, p => p.key)).join(', ')}`);
+// }).catch((e) => console.log(e.message));
 
 // Set the config vars for the environment we are running in
 var config = {};
@@ -61,7 +64,7 @@ if (process.env.ENABLE_GROUP_NOTIFICATIONS) {
   try {
     // Create the object for interacting with Jira
     var GroupNotifications = require('./group-notifier/group-notifications.js');
-    groupNotifier = new GroupNotifications(jira, logger, config);
+    groupNotifier = new GroupNotifications(jira, logger, config, process.env.FEEDBACK_SPACE_ROOM_ID);
   } catch (err) {
     logger.error('Initialization Failure: ' + err.message);
     process.exit(-1);
@@ -183,7 +186,7 @@ framework.on('spawn', function (bot, id, addedById) {
   // Only stay in group spaces if the Group Notification module is enabled
   if (bot.isGroup) {
     if (groupNotifier !== null) {
-      groupNotifier.onSpawn(bot, addedById, adminsBot);
+      groupNotifier.onSpawn(bot, addedById);
     } else {
       logger.info(`Leaving Group Space: ${bot.room.title}`);
       bot.say("Hi! Sorry, I only work in one-on-one rooms at the moment.  Goodbye.")

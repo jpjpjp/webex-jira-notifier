@@ -11,12 +11,12 @@
       },
       {
         "type": "TextBlock",
-        "text": "I am a bot that receives notifications from ",
+        "text": "I can provide notifications to group spaces about stories assoicated with a board or filter.   I will send a notification here when new stories are created that match the filter criteria and when the status changes for any issues on the watched boards.",
         "wrap": true
       },
       {
         "type": "TextBlock",
-        "text": "I can provide notifications to group spaces when stories on Jira boards transition (ie: have their status changed). I can watch up to three boards per space.",
+        "text": "I am connected to ",
         "wrap": true
       },
       {

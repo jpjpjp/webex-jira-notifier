@@ -14,10 +14,19 @@ var _ = require('lodash');
  * This is one of the types of notifications supported in 
  * group spaces.
  *
+ * If a new issue is created that will show up on a board/filter
+ * a notification is sent.  Although we allow users to specify
+ * boards or filters we use the term "board" generically in this module
+ * to refer to a list of stories being watched.
+ *
  * If an issue is updated, this module can check to 
  * see if the update contitutes a "transition" (status change)
  * and if the issue is on a watched list/board it can notify 
  * the group space that requested updates on the board
+ * 
+ * Future versions of this might support updates for things other
+ * than new issue creation or status changes, or provide more 
+ * extensibility on how users configure it.
  *
  * @module BoardTransitions
  */
@@ -28,17 +37,19 @@ class BoardTransitions {
    * @param {object} jiraConnector -- an instantiated jiraConnector object
    * @param {object} groupStatus -- object for posting cards about config status
    * @param {object} logger - instance to a logging object
-   * @param {integer} cacheDuration -- optional time to refresh board lookup (default is six hours)
+   * @param {integer} cacheDuration -- optional time to refresh board lookup
    */
   constructor(jiraConnector, groupStatus, logger, cacheDuration=null) {
     // Authenticated Object to call jira APIs
     this.jira = jiraConnector;
     this.groupStatus = groupStatus;
     this.logger = logger;
+
     // Check if our bot was configured with a Transition Board Cache Duration
     this.boardCacheDuration = (cacheDuration) ? cacheDuration : 6 * 60 * 60 * 1000;  // six hours
-    // Boards to cache on startup
-    this.listIdObjs = [];
+
+    // Lists that help us keep track of the boards we are watching
+    this.boardIdObjs = [];
     this.boardsInfo = [];
     this.pendingBotAdds = [];
   }
@@ -46,73 +57,89 @@ class BoardTransitions {
   /** 
    * Register a bot/board combination to keep track of
    * 
-   * If the board has already been looked up and is in cache, the bot is added to
+   * If the board has already been looked up and is in cache, 
+   * the bot is added to the list of spaces that need to be notified
    * 
-   * @function watchIssuesListForBot
+   * @function watchBoardForBot
    * @param {object} bot - bot object for space requesting board notifications
-   * @param {string} listIdString - id of or web url to the list the bot wants to watch
-   * @param {string} listIdType - optional, type of list (ie: board, filter)
+   * @param {string} boardIdString - id of or web url to the list the bot wants to watch
+   * @param {string} boardIdType - optional, type of list (ie: board, filter)
    * @returns {Promise.<Object>} - a public list object with id, type, name, and num of stories
    */
-  watchIssuesListForBot(bot, listIdString, listIdType = null) {
-    return this.jira.getIssuesListIdFromViewUrl(listIdString, listIdType)
-    .then((listIdObj) => {
-      this.logger.info(`Space "${bot.room.title}" asked to watch a ${listIdObj.type}, ID:${listIdObj.id}`);
-      let listId = listIdObj.id;
-      let listType = listIdObj.type;
+  watchBoardForBot(bot, boardIdString, boardIdType = null) {
+    return this.jira.getBoardOrFilterObjFromIdOrUrl(boardIdString, boardIdType)
+    .then((boardIdObj) => {
+      // TODO -- could this logic be simplified?  Right now we wait until the 
+      // complete list of stories associated with a list is avaialble before
+      // adding it to our list of boards to watch.   Perhaps we can add the list info
+      // to our watch list even before the cache is fully populated and just update
+      // the cache when it is available?
+      this.logger.info(`Space "${bot.room.title}" asked to watch a ${boardIdObj.type}, ID:${boardIdObj.id}`);
+      let boardId = boardIdObj.id;
+      let boardType = boardIdObj.type;
 
-      if (-1 != this.listIdObjs.findIndex(idObj =>
-        ((idObj.id == listId) && (idObj.type == listType)))) {
+      if (-1 != this.boardIdObjs.findIndex(idObj =>
+        ((idObj.id == boardId) && (idObj.type == boardType)))) {
         // This board has already been requested.  Is it cached?
-        let list = _.find(this.boardsInfo, list => 
-          ((list.id === listId) && (list.type === listType))); 
-        if (list) {
-          this.logger.info(`${listType} ${listId}:"${list.name}" already in cache.  Adding this bot to the list of followers.`);
-          this.addBotToListInfo(bot, list);
+        let board = _.find(this.boardsInfo, board => 
+          ((board.id === boardId) && (board.type === boardType))); 
+        if (board) {
+          this.logger.info(`${boardType} ${boardId}:"${board.name}" already in cache.  Adding this bot to the list of followers.`);
+          this.addBotToBoardInfo(bot, board);
           // TODO update NotPending logic to check for type as well as id
-          return new Promise((r) => returnWhenNotPending(r, this.pendingBotAdds,listIdObj, bot, 10, this));
+          return new Promise((res, rej) => 
+            returnWhenNotPending(res, rej, this.pendingBotAdds,boardIdObj, bot, 10, this));
         } else {
-          // List requested but not cached yet, add this bot to the 
+          // board requested but not cached yet, add this bot to the 
           // list of bots to be added to cached info when ready
-          this.logger.info(`This ${listType} has been requestd but is not yet in cache.  Will add this bot when cache is ready.`);
-          // TODO update Pending logic to check for type as well as id
-          this.pendingBotAdds.push({listIdObj, bot});
+          this.logger.info(`This ${boardType} has been requestd but is not yet in cache.  Will add this bot when cache is ready.`);
+          this.pendingBotAdds.push({boardIdObj, bot});
           // return when the bot has been added to the boardsId list
-          // TODO update Pending logic to check for type as well as id
-          return new Promise((r) => returnWhenNotPending(r, this.pendingBotAdds,listIdObj, bot, 10, this));
+          return new Promise((res, rej) => 
+            returnWhenNotPending(res, rej, this.pendingBotAdds,boardIdObj, bot, 10, this));
         }
       } else {
-        this.logger.info(`This is a new ${listType}.  Will validate it and add stories to cache.`);
-        this.listIdObjs.push(listIdObj);
-          // TODO update Pending logic to check for type as well as id
-          this.pendingBotAdds.push({listIdObj, bot});
-//        return this.jira.lookupBoardById(boardId)
-        return this.jira.lookupListByIdAndType(listId, listType)
-        .then((list) => this.jira.lookupAndStoreListIssues(list))
-        .then((list) => {
-          this.logger.info(`${listId} is a valid ${listType}: "${list.name}" Added ${list.stories.length} stories to cache.`);
-          this.addBotToListInfo(bot, list);
-          this.addBoardToBoardsInfo(list);
+        this.logger.info(`This is a new ${boardType}.  Will validate it and add stories to cache.`);
+        this.boardIdObjs.push(boardIdObj);
+        this.pendingBotAdds.push({boardIdObj, bot});
+        return this.jira.lookupListByIdAndType(boardId, boardType)
+        // return this.jira.lookupListByIdAndType(boardId, boardType).catch((e) => {
+        //     e.boardProblemType = 'boardLookup';
+        //     e.boardType = boardType;
+        //     return when.reject(e);
+        //   })
+        .then((board) => this.jira.lookupAndStoreListIssues(board))
+        // .then((board) => {
+        //   return this.jira.lookupAndStoreListIssues(board).catch((e) => {
+        //     e.boardProblemType = 'storiesLookup';
+        //     e.boardType = boardType;
+        //     return when.reject(e);
+        // })
+        .then((board) => {
+          this.logger.info(`${boardId} is a valid ${boardType}: "${board.name}" Added ${board.stories.length} stories to cache.`);
+          this.addBotToBoardInfo(bot, board);
+          this.addBoardToWatchedSet(board);
           // TODO update Pending logic to check for type as well as id
           this.updateBoardInfoWithPendingBots();
-          return  new Promise((r) => returnWhenNotPending(r, this.pendingBotAdds,listIdObj, bot, 10, this));
+          return  new Promise((res, rej) => 
+            returnWhenNotPending(res, rej, this.pendingBotAdds,boardIdObj, bot, 10, this));
         })
         .catch(e => {
-          this.logger.warn(`watchIssuesListForBot: Failed getting info for ${listType}:${listId}, requested in space "${bot.room.title}": ${e.message}`);
+          this.logger.warn(`watchBoardForBot: Failed getting info for ${boardType}:${boardId}, requested in space "${bot.room.title}": ${e.message}`);
           this.pendingBotAdds = _.reject(this.pendingBotAdds, b => 
-            ((b.listIdObj.id ===listIdObj.id) && (b.listIdObj.type === listIdObj.type) &&
+            ((b.boardIdObj.id ===boardIdObj.id) && (b.boardIdObj.type === boardIdObj.type) &&
               (b.bot.id === bot.id)));
-          this.listIdObjs = this.listIdObjs.filter(idObj => 
-            (!((idObj.id == listId) && (idObj.type == listType)))); 
+          this.boardIdObjs = this.boardIdObjs.filter(idObj => 
+            (!((idObj.id == boardId) && (idObj.type == boardType)))); 
           return when.reject(e);
         });
       }
     })
     .catch((e) => {
-      let type = (listIdType) ? listIdType : 'board or filter';
-      if (typeof listIdObj === 'object') {type = listIdObj.type;}
-      let msg = `Could not find a ${type} matching ${listIdString}`;
-      this.logger.info(`BoardTransition:watchIssuesListForBot: ${msg}. ` +
+      let type = (boardIdType) ? boardIdType : 'board or filter';
+      if (typeof boardIdObj === 'object') {type = boardIdObj.type;}
+      let msg = `Could not find a ${type} matching ${boardIdString}`;
+      this.logger.info(`BoardTransition:watchBoardForBot: ${msg}. ` +
         `Requested by bot from spaceID:${bot.room.id}\nError:${e.message}`);
       return when.reject(new Error(`${msg}`));
     });
@@ -127,15 +154,15 @@ class BoardTransitions {
   updateBoardInfoWithPendingBots() {
     this.logger.debug(`Checking ${this.pendingBotAdds.length} pending bot/board requests against ${this.boardsInfo.length} cached boards`);
     for(let i = this.pendingBotAdds.length -1; i >= 0 ; i--) {
-      let botListInfo = this.pendingBotAdds[i];
-      let pendingId = botListInfo.listIdObj.id;
-      let pendingType = botListInfo.listIdObj.type;
-      let waitingBot = botListInfo.bot;
+      let botBoardInfo = this.pendingBotAdds[i];
+      let pendingId = botBoardInfo.boardIdObj.id;
+      let pendingType = botBoardInfo.boardIdObj.type;
+      let waitingBot = botBoardInfo.bot;
       let board = _.find(this.boardsInfo, board => 
         ((board.id === pendingId) && (board.type === pendingType))); 
       if (board) {
         this.logger.info(`${pendingType}:${pendingId} now in cache.  Bot for ${waitingBot.room.title} will now notify for its transitions`);
-        this.addBotToListInfo(waitingBot, board);
+        this.addBotToBoardInfo(waitingBot, board);
         this.pendingBotAdds.splice(i, 1);
       }
     }
@@ -146,16 +173,16 @@ class BoardTransitions {
    * Return the public info about board that a bot might need
    * 
    * @function getPublicBoardInfo
-   * @param {string} listIdObj - list id/type bot wants to watch
+   * @param {string} boardIdObj - board id/type bot wants to watch
    */
-  getPublicBoardInfo(listIdObj) {
+  getPublicBoardInfo(boardIdObj) {
     let board = _.find(this.boardsInfo, board => 
-      ((board.id === listIdObj.id) && (board.type === listIdObj.type)))
+      ((board.id === boardIdObj.id) && (board.type === boardIdObj.type)))
     if (board) {
-      return {id: board.id, type: listIdObj.type, name: board.name, viewUrl: board.viewUrl, numStories: board.stories.length};
+      return {id: board.id, type: boardIdObj.type, name: board.name, viewUrl: board.viewUrl, numStories: board.stories.length};
     } else {
-      this.logger.warn(`getPublicBoardInfo failed to find ${listIdObj.type} with id ${listIdObj.id}.  Returning empty object`)
-      return {id: listIdObj.Id, type: listIdObj.type, name: "Not Found", numStories: 0};
+      this.logger.warn(`getPublicBoardInfo failed to find ${boardIdObj.type} with id ${boardIdObj.id}.  Returning empty object`)
+      return {id: boardIdObj.Id, type: boardIdObj.type, name: "Not Found", numStories: 0};
     }
   } 
 
@@ -164,15 +191,23 @@ class BoardTransitions {
    * transitions occuring on watched boards
    * 
    * @param {object} msgElement - the data needed to create a notification for this jira event
+   * @param {function} createNewIssueMsgFn -- function to create a new issue notification message
    * @param {function} sendMessageFn - the group notifier objects function to send notifications
    * @param {function} cb - the (optional) callback function used by the test framework
    */
-  evaluateForTransitionNotification(msgElements, sendMessageFn, cb) {
+  evaluateForTransitionNotification(msgElements, createNewIssueMsgFn, sendMessageFn, cb) {
     try {
       // No point evaluating if no one is listening...
       if (!this?.boardsInfo?.length) { 
         return;
       }  
+
+      // Is this issue event a New Issue Notification candidate?
+      if (msgElements.jiraEvent.webhookEvent === 'jira:issue_created') {
+        return this.processNewIssueNotifications(msgElements, 
+          createNewIssueMsgFn, sendMessageFn, cb);
+      }
+      
       // Is this issue event a TR Notification candidate
       if ((msgElements.jiraEvent.webhookEvent !== 'jira:issue_updated') ||
       (msgElements.action !== 'status') || (typeof msgElements.jiraEvent.issue.fields !== 'object')) {
@@ -195,6 +230,104 @@ class BoardTransitions {
   }
 
   /**
+   * Check new issues against watched boards, updating story caches as needed
+   * 
+   * @param {object} msgElement - the data needed to create a notification for this jira event
+   * @param {function} createMessageFn -- function to create a jira event notification message
+   * @param {function} sendMessagFn -- the groupNotifier objects method to post about events
+   * @param {function} cb - the (optional) callback function used by the test framework
+   */
+  processNewIssueNotifications(msgElements, createMessageFn, sendMessageFn, cb) {
+    try {
+      // We have a new issue, lets see if any spaces want to be notified about it
+      this.logger.debug(`boardNotifications.processNewIssueNotifications: Got an issue created ` +
+        `event for ${msgElements.issueKey}.  Checking if it matches any watched filters...`);
+      let msg = '';
+  
+      this.boardsInfo.forEach(board => {
+        // Add this issues key to the JQL Query
+        let jqlUrl = this.updateJQLForThisIssue(board.searchUrl, msgElements.issueKey);
+        return this.jira.getStoriesFromUrl(jqlUrl)
+        .then((stories) => {
+          if (stories.length > 1) {
+            this.logger.error(`boardNotifications.processNewIssueNotifications: Filter: ${jqlUrl} lookup ` +
+            `returned ${stories.length} stories.  Expected or 1.  Ignoring`);
+          }
+          if (stories.length === 1) {
+            if (stories[0].key != msgElements.issueKey) {
+              this.logger.error(`boardNotifications.processNewIssueNotifications: Filter: ${jqlUrl} lookup ` +
+              `returned ${stories[0].key}.  Expected ${msgElements.key}.  Ignoring`);
+            } else {
+              // update the story cache for this board
+              board.stories.push(msgElements.issueKey);
+
+              // Notify spaces watching this board
+              if (!msg) {
+                msg = createMessageFn(msgElements, null/* bot.isDirectTo */, this.jira)
+              }
+              this.notifyAllBotsWatchingBoard(board, msgElements, msg, sendMessageFn, cb);
+            }
+          } else {
+            this.logger.debug(`No match for watched board ${board.id}`);
+          }
+        })
+        .catch((e) => {
+          // To do -- check for failed lookups..probably don't want an error here
+          this.logger.error(`boardNotifications.processNewIssueNotifications: Filter: ${jqlUrl} lookup failed: ` +
+          `${e.message}.  ${board.bots.length} bots may have missed notifications.`);
+        });
+      });
+    } catch (e) {
+      return Promise.reject(new Error(
+        `boardTransitions.processNewIssueNotifications() caught exception: ${e.message}`
+      ))
+    }
+  }
+
+  /**
+   * Modify a JQL URL so that it only returns results that
+   * match the key for the current issue
+   * 
+   * @param {string} searchUrl -- the jql associated with the board
+   * @param {string} key - this issue key being checked
+   */
+  updateJQLForThisIssue(searchUrl, key) {
+    let newUrl = searchUrl;
+    // Remove any "ORDER BY" rules at the end
+    let idx = newUrl.indexOf('+ORDER+BY');
+    if (idx != -1) {
+      newUrl = newUrl.slice(0, idx);
+    }
+    // Wrap the current JQL, which starts after the "=" in parens
+    idx = newUrl.indexOf('=') + 1;
+    newUrl = newUrl.slice(0, idx) + '(' + newUrl.slice(idx) + ')';
+    // Add URL encoded JQL that the key must match our key
+    newUrl += `+AND+(key+%3D+${key})`;
+
+    return newUrl;
+  }
+
+
+
+ /**
+  * Send a message to all bots associated with board
+  * @param {object} board - board that new issue matches
+  * @param {object} msgElements - relevent info from jira event
+  * @param {string} msg - msg to sent to interested spaces
+  * @param {function} sendMessageFn -- parent object method for sending message
+  * @param {function} cb -- callback for testing framework 
+  */ 
+  notifyAllBotsWatchingBoard(board, msgElements, msg, sendMessageFn, cb) {
+    board.bots.forEach(bot => {
+      this.logger.info('Sending a new issue notification to ' + bot.room.title + ' about ' + msgElements.issueKey);
+      sendMessageFn(bot, msgElements, msg, cb)
+      .catch((e) => {
+        this.logger.error(`Failed to send board transition message: ${e.message}`);
+      });
+    });
+  }
+
+  /**
    * Process an Add or Delete Boards button press
    * 
    * @param {object} bot - bot instance in the feedback space
@@ -205,27 +338,21 @@ class BoardTransitions {
       let attachmentAction = trigger.attachmentAction;
       let inputs = attachmentAction.inputs;
       let config = await bot.recall('groupSpaceConfig');
-      if ((inputs.listIdOrUrl) && (inputs.listType)) {
+      if ((inputs.boardIdOrUrl) && (inputs.boardType)) {
         // Check if the requested board is already being watched
         let board = _.find(config.boards, board => 
-          ((board.id === parseInt(inputs.listIdOrUrl)) &&
-           (board.type === inputs.listType))); 
+          ((board.id === parseInt(inputs.boardIdOrUrl)) &&
+           (board.type === inputs.boardType))); 
         if (!board) {
-          board = _.find(config.boards, board => board.viewUrl === inputs.listIdOrUrl);  
+          board = _.find(config.boards, board => board.viewUrl === inputs.boardIdOrUrl);  
         }
         if (board) {
           return bot.reply(attachmentAction,
             `I'm already watching [${board.name}](${board.viewUrl}) for this space`);
         }
         return bot.reply(trigger.attachmentAction, 
-          `Looking up info for ${inputs.listType}: ${inputs.listIdOrUrl}.  This can take several minutes....`)
-          .then(() => {
-            return this.watchIssuesListForBot(bot, inputs.listIdOrUrl, inputs.listType)
-            .catch((e) => {
-              e.boardProblemType = 'lookup';
-              return Promise.reject(e);
-            });
-          })
+          `Looking up info for ${inputs.boardType}: ${inputs.boardIdOrUrl}.  This can take several minutes....`)
+          .then(() => this.watchBoardForBot(bot, inputs.boardIdOrUrl, inputs.boardType))
           .then((board) => {
             config.boards.push(board);
             return bot.store('groupSpaceConfig', config);
@@ -235,7 +362,7 @@ class BoardTransitions {
             if (e.boardProblemType === 'lookup') {
               return bot.reply(trigger.attachmentAction,
                 `Unable to add board: ${e.message}.\n\n` +
-                `Make sure the permissions for the ${inputs.listType} allow fall jira users to view it.`);
+                `Make sure the permissions for the ${inputs.boardType} allow fall jira users to view it.`);
             }
             this.logger.error(`Failed setting up a new board in space "${bot.room.title}": ${e.message}`);
             this.logger.error(`trigger from card: ${JSON.stringify(trigger, null, 2)}`);
@@ -274,43 +401,43 @@ class BoardTransitions {
    * 
    * @function deleteBoardsForBot
    * @param {object} bot - bot object for space requesting board notifications
-   * @param {string} listIdObjs - a comma seperated list of listId:listType pairs to delete
+   * @param {string} boardIdObjs - a comma seperated list of boardId:boardType pairs to delete
    * @param {object} config - board's configuration object
    * @param {object} attachmentAction - attachmentAction that caused this
    * @returns {Promise.<Object>} - a public board object with id, name, and num of stories
    */
-  deleteBoardsForBot(bot, listIdObjs, config, attachmentAction) {
-    let listIds = listIdObjs.split(',');
-    listIds.forEach((listIdString) => {
-      let listInfo = listIdString.split(':')
-      let listId = parseInt(listInfo[0]);
-      let listType = listInfo[1];
+  deleteBoardsForBot(bot, boardIdObjs, config, attachmentAction) {
+    let boardIds = boardIdObjs.split(',');
+    boardIds.forEach((boardIdString) => {
+      let boardInfo = boardIdString.split(':')
+      let boardId = parseInt(boardInfo[0]);
+      let boardType = boardInfo[1];
       // Is this a board this bot is watching?
       let index = config.boards.findIndex(board => 
-        ((board.id === listId) && (board.type === listType)))
+        ((board.id === boardId) && (board.type === boardType)))
       if (index >= 0) {
-        let listInfo = _.find(this.boardsInfo, board => 
-          ((board.id === listId) && (board.type === listType)))
-          if (listInfo) {
-          let botIndex = listInfo.bots.findIndex(b => b.id === bot.id);
+        let boardInfo = _.find(this.boardsInfo, board => 
+          ((board.id === boardId) && (board.type === boardType)))
+          if (boardInfo) {
+          let botIndex = boardInfo.bots.findIndex(b => b.id === bot.id);
           if (botIndex >= 0) {
-            listInfo.bots.splice(botIndex, 1)
-            if (!listInfo.bots.length) {
-              this.logger.info(`bot in space "${bot.room.title}" asked to stop watching ${listType} ` +
-              `with ID ${listId}. This is the last bot watching this ${listType} so we will remove ` +
-              `it from the list of ${listType}s we are caching info for.`);
+            boardInfo.bots.splice(botIndex, 1)
+            if (!boardInfo.bots.length) {
+              this.logger.info(`bot in space "${bot.room.title}" asked to stop watching ${boardType} ` +
+              `with ID ${boardId}. This is the last bot watching this ${boardType} so we will remove ` +
+              `it from the list of ${boardType}s we are caching info for.`);
               this.boardsInfo = _.reject(this.boardsInfo, board => 
-                ((board.id === listId) && (board.type == listType)));
+                ((board.id === boardId) && (board.type == boardType)));
             }
           } else {
-            this.logger.warn(`bot in space "${bot.room.title}" asked to stop watching ${listType}` +
+            this.logger.warn(`bot in space "${bot.room.title}" asked to stop watching ${boardType}` +
             `with ID ${boardId}, but the bot is missing from the list of bots watching it.  Ignoring.`);
           }
         }
         config.boards.splice(index, 1)
       } else {
-        this.logger.warn(`bot in space "${bot.room.title}" asked to stop watching ${listType}` +
-          ` with ID ${listId}, but it is not in the config.  Ignoring.`);
+        this.logger.warn(`bot in space "${bot.room.title}" asked to stop watching ${boardType}` +
+          ` with ID ${boardId}, but it is not in the config.  Ignoring.`);
       }
     });
     return bot.store('groupSpaceConfig', config);
@@ -357,13 +484,7 @@ class BoardTransitions {
       } else {
         boardMsg += `\n\nOn the ${board.type} [${board.name}](${board.viewUrl})`;
       }
-      board.bots.forEach((bot) => {
-        this.logger.info('Sending a transition notification to ' + bot.room.title + ' about ' + msgElements.issueKey);
-        sendMessageFn(bot, msgElements, boardMsg, cb)
-          .catch((e) => {
-            this.logger.error(`Failed to send board transition message: ${e.message}`);
-          });
-      });
+      this.notifyAllBotsWatchingBoard(board, msgElements, boardMsg, sendMessageFn, cb);
     });
   }
   
@@ -381,54 +502,59 @@ class BoardTransitions {
   }
 
   /**
-   * Update the child stories to a list of boardsInfo
+   * Update the cached list of stories for a list of boardsInfo
+   * 
+   * While we attempt to keep our cache current by checking each new issue against
+   * the JQL query associated with each board we refresh periodically in cases
+   * any were missed.   This is also necessary in cases where the filter
+   * query associated with a board was changed
+   * 
    * @private
    * @function updateStoriesForBoards
    * @param {Array} boardsInfo - list of board info objects 
    * @returns {Promise.Array} - if resolved all board objects have updated story lists
    */
   updateStoriesForBoards(boardsInfo) {
-    return Promise.all(boardsInfo.map(list => {
-      let numStoriesInCache = list.stories.length
-      return this.jira.lookupListByIdAndType(list.id, list.type)
-      .then((newList) => {
-        if ((newList.type === 'filter') && (newList.searchUrl !== list.searchUrl)) {
-          this.logger.info(`${list.type} ${list.id} has changed since it was last cached`);
-          // Capture the aspects of the list changes that are relevant to our bot
-          list.searchUrl = newList.searchUrl;
-          list.jql = newList.jql;
+    return Promise.all(boardsInfo.map(board => {
+      let numStoriesInCache = board.stories.length
+      return this.jira.lookupListByIdAndType(board.id, board.type)
+      .then((newBoard) => {
+        if (newBoard.searchUrl !== board.searchUrl) {
+          this.logger.info(`${board.type} ${board.id} has changed since it was last cached`);
+          // Capture the aspects of the board changes that are relevant to our bot
+          board.searchUrl = newBoard.searchUrl;
+          board.jql = newBoard.jql;
         }
-      return this.jira.lookupAndStoreListIssues(list)
+      return this.jira.lookupAndStoreListIssues(board)
     })
-    .then((list) => {
-          if (numStoriesInCache !== list.stories.length) {
-            this.logger.info(`${list.type} ${list.id} stories have changed since last cache update.`);
+    .then((board) => {
+          if (numStoriesInCache !== board.stories.length) {
+            this.logger.info(`${board.type} ${board.id} stories have changed since last cache update.`);
           }
         })
         .catch(e => {
-          this.logger.error(`updateStoriesForBoard: Failed getting stories for board ${list.id}: ${e.message}`);
+          this.logger.error(`updateStoriesForBoard: Failed getting stories for board ${board.id}: ${e.message}`);
           return Promise.reject(e);
         });
     }))
   }
 
   /**
-   * Add the info for a new board to the list of boards we are tracking
-   * If this is the first board requested since our service started 
-   * configure the cache refresh timer
+   * Add the info for a new board to the set of boards we are tracking
+   * If this is the first board that has been requested since our 
+   * service started, configure the cache refresh timer
    * 
    * @private
-   * @function addBoardToBoardsInfo
+   * @function addBoardToWatchedSet
    * @param {Object} board - board info object to be added to the list
    */
-  addBoardToBoardsInfo(board) {
+  addBoardToWatchedSet(board) {
       if (!this.boardsInfo.length) {
         // If this is the first board, set up periodic cache refresh
         setInterval(() => {
           this.logger.info(`Updating cache of stories for boards that we are notifiying about...`)
           this.updateStoriesForBoards(this.boardsInfo)
-            .then(boardsWithStories => {
-              // ToDo Get the bots for each board
+            .then(() => {
               this.logger.info(`Transition Board stories cache update complete.`);
             }).catch(e => {
               this.logger.error(`failed getting issues for transition boards: ${e.message}`);
@@ -452,24 +578,24 @@ class BoardTransitions {
 
   /**
    * Add a bot to the list of spaces wanting notifications for 
-   * a list (ie: a board or a filter)
+   * a board (ie: a board or a filter)
    * Don't add if it already exists
    * 
    * @private
-   * @function addBotToListInfo
+   * @function addBotToBoardInfo
    * @param {Object} bot - bot for space to be notified of transitions
-   * @param {Object} list - board info object for desired board
+   * @param {Object} board - board info object for desired board
    */
-  addBotToListInfo(bot, list) {
-      if (!('bots' in list)) {
-        return list.bots = [bot];
+  addBotToBoardInfo(bot, board) {
+      if (!('bots' in board)) {
+        return board.bots = [bot];
       }
-      let dupBot = _.find(list.bots, b => b.id === bot.id);
+      let dupBot = _.find(board.bots, b => b.id === bot.id);
       if (!dupBot) {
-        list.bots.push(bot);
+        board.bots.push(bot);
       }
       // No warning if this IS a duplicate.  There are scenarios where
-      // multiple bots could ask for the same list before it is fully cached
+      // multiple bots could ask for the same board before it is fully cached
       // In these cases its possible that the logic that cleans up the 
       // pending bot queue could try to push a pending bot after it was
       // already added in the list callback
@@ -478,6 +604,9 @@ class BoardTransitions {
   
   /**
    * Returns an object with the current board stats
+   * 
+   * This can be used to support Admin commands to get details on this
+   * features usage
    * 
    * @function getCurrentBoardStats
    * @returns {Object} an object that describes the current board info
@@ -490,6 +619,7 @@ class BoardTransitions {
     this.boardsInfo.forEach(board => {
       let publicBoard = {
         id: board.id,
+        type: board.type,
         name: board.name,
         numStories: board.stories.length,
         bots: []
@@ -515,39 +645,44 @@ module.exports = BoardTransitions;
  * 
  * @private
  * @function returnWhenNotPending
- * @param {Promise} resolveMethod - promie to resolve
- * @param {Array} pendingList - list of bot/list pairs still pending
- * @param {Integer} listIdObj - listIdObj to match
+ * @param {function} resolveFn - method to resolve promise when bot is not pending
+ * @param {function} rejectFn - method to reject promise if timout occurs
+ * @param {Array} pendingList - list of bot/board pairs still pending
+ * @param {Integer} boardIdObj - boardIdObj to match
  * @param {Object} bot - bot to match
  * @param {Integer} sleepSeconds - seconds to sleep
  * @param {Object} transitionObj - instance of the boardTransitions object that called
  * @returns {Promise.Array} - returns a public board object when found
  */
-returnWhenNotPending = function (resolvedMethod, pendingList, listIdObj, bot, sleepSeconds, transitionObj, numTries=0) {
+returnWhenNotPending = function (resolvedFn, rejectFn, pendingList, boardIdObj, 
+  bot, sleepSeconds, transitionObj, numTries=0) 
+{
   numTries += 1;
   let botListPair = _.find(pendingList, pair => {
-    return ((pair.listIdObj.id === listIdObj.id) && 
-      (pair.listIdObj.type === listIdObj.type) &&
+    return ((pair.boardIdObj.id === boardIdObj.id) && 
+      (pair.boardIdObj.type === boardIdObj.type) &&
       (pair.bot.id === bot.id));
   });
 
   if (!botListPair) {
-    let boardInfo = transitionObj.getPublicBoardInfo(listIdObj);
-    resolvedMethod(boardInfo);
-  } else if (numTries >= 10) {
-    let msg = `Failed initializing ${listIdObj.type}:${listIdObj.id} ` +
+    let boardInfo = transitionObj.getPublicBoardInfo(boardIdObj);
+    return resolvedFn(boardInfo);
+  }
+  if (numTries >= 10) {
+    let msg = `Failed initializing ${boardIdObj.type}:${boardIdObj.id} ` +
      `for bot in space ${bot.room.title}. ` +
      `List of stories not available after ${numTries*sleepSeconds} seconds.`;
     transitionObj.pendingBotAdds = _.reject(pendingList, b => 
-      ((b.listIdObj.id ===listIdObj.id) && (b.listIdObj.type === listIdObj.type) &&
+      ((b.boardIdObj.id ===boardIdObj.id) && (b.boardIdObj.type === boardIdObj.type) &&
        (b.bot.id === bot.id)));
     transitionObj.logger.error(msg);
     let error = new Error(msg);
-    error.boardProblemType = 'lookup';
-    return resolvedMethod.reject(error);
+    error.boardProblemType = 'storiesLookupTimeout';
+    error.boardType = boardIdObj.type;
+    return rejectFn(error);
   } else {
-    setTimeout(returnWhenNotPending.bind(null,
-      resolvedMethod, transitionObj.pendingBotAdds, listIdObj, bot, sleepSeconds, transitionObj, numTries
+    setTimeout(returnWhenNotPending.bind(null, resolvedFn, rejectFn, 
+      transitionObj.pendingBotAdds, boardIdObj, bot, sleepSeconds, transitionObj, numTries
     ), sleepSeconds * 1000); // try again after timout
   }
 }

@@ -4,8 +4,14 @@
 /**
  * An optional module for the jira notifier bot.
  * By default this bot only sends notifications in 1-1 spaces
- * This module enables different types of configurable
- * notifications in group spaces as well.
+ * 
+ * This module provides a container for a webex-node-bot-framework
+ * based bot for enabling notfications in group spaces.  It is designed
+ * to load different types of modules to handle different types 
+ * of notifications.  
+ * 
+ * Currently there is only one module that tracks changes to stories
+ * associated with a board or filter.
  *
  * Note that enabling group space notifications enables the
  * possiblility of exposing jira activity to users who should
@@ -13,7 +19,7 @@
  * will not load if the framework configuration does not include
  * the restrictToEmailDomains option.  This prevents the bot 
  * sending notifications in spaces where users without an allowed
- * email domain are present, but this not not present users
+ * email domain are present, but this does NOT prevent users
  * in the same company from getting Jira notifications that they
  * are not entitled to.   Use with caution.
  *
@@ -26,17 +32,9 @@ class GroupNotifications {
    * @param {object} jiraConnector -- an instantiated jiraConnector object
    * @param {object} logger - instance to a logging object
    * @param {object} frameworkConfig - config object used by framework
+   * @param {string} feedbackSpaceId - optional space ID for bot to post feedback to
    */
-  constructor(jiraConnector, logger, frameworkConfig) {
-    // Ensure at least one type of group notification is enabled
-    if (!((process.env.ENABLE_BOARD_TRANSITION_NOTIFICATIONS) ||
-        (process.env.ENABLE_NEW_ISSUE_NOTIFICATIONS))) {    
-      throw new Error('Cannot ENABLE_GROUP_NOTIFICATION unless at least one ' +
-        'type of group notification is enabled.  Supported types are:\n' +
-        ' - ENABLE_BOARD_TRANSITION_NOTIFICATIONS\n' +
-        ' - ENABLE_NEW_ISSUE_NOTIFICATIONS\n' +
-      'To enable, set the appropriate environment variable.');
-    }
+  constructor(jiraConnector, logger, frameworkConfig, feedbackSpaceId) {
     // Only enable if bot use is restricted to certain email domains
     if (!frameworkConfig.restrictedToEmailDomains) {
       throw new Error(`Cannot ENABLE_GROUP_NOTIFICATION if DEFAULT_DOMAIN is not set.` +
@@ -45,46 +43,35 @@ class GroupNotifications {
 
     this.jira = jiraConnector;
     this.logger = logger;
+    this.feedbackSpaceId = feedbackSpaceId;
 
     // Default data object for group spaces
     this.defaultGroupSpaceConfig = {
-      boards: [],
-      newIssueNotificationConfig: []
+      boards: []  // processed by the BoardTransitions module
     };
 
     // Module to builds a status card for group spaces
-    var GroupStatus = require('./group-status.js');
-    this.groupStatus = new GroupStatus();
+    try {
+      let moduleName = "GroupStatus";
+      // TODO a future enhancement that would make this more modular
+      // is to pass this object into the constructors for the different
+      // notifier modules and have them specify the card design(s) to
+      // enable status/add/delete/modify functionality
+      var GroupStatus = require('./group-status.js');
+      this.groupStatus = new GroupStatus();
 
-    if (process.env.ENABLE_BOARD_TRANSITION_NOTIFICATIONS) {    
-      try {
-        // Create the object for managing board transition notifications
-        var BoardTransitions = require('./board-transitions.js');
-        this.boardTransitions = new BoardTransitions(
-          this.jira, this.groupStatus, this.logger, 
-          parseInt(process.env.BOARD_STORY_CACHE_TIMEOUT), // default is 6 hours
-          process.env.JIRA_TRANSITION_BOARDS // any board IDs to load by default
-        );
-      } catch (err) {
-        logger.error('Failure during BoardTransition module initialization: ' + err.message);
-        process.exit(-1);
-      }
-    } else {
-      this.boardTransitions = null;
-    }
+      // Module manages the boards and filters being tracked
+      moduleName = "BoardTransitions";
+      var BoardTransitions = require('./board-transitions.js');
+      this.boardTransitions = new BoardTransitions(
+        this.jira, this.groupStatus, this.logger, 
+        parseInt(process.env.BOARD_STORY_CACHE_TIMEOUT), // default is 6 hours
+        process.env.JIRA_TRANSITION_BOARDS // any board IDs to load by default
+      );
 
-    if (process.env.ENABLE_NEW_ISSUE_NOTIFICATIONS) {    
-      try {
-        // Create the object for managing new issue notifications
-        var NewIssueNotifications = require('./new-issue-notifications.js');
-        this.newIssueNotifications = new NewIssueNotifications(
-          this.jira, this.groupStatus, this.logger);
-      } catch (err) {
-        logger.error('Failure during NewIssueNotifications module initialization: ' + err.message);
-        process.exit(-1);
-      }
-    } else {
-      this.newIssueNotifications = null;
+    } catch (err) {
+      logger.error(`Failure during ${moduleName} module initialization: ${err.message}`);
+      process.exit(-1);
     }
 
   }
@@ -95,28 +82,11 @@ class GroupNotifications {
    * 
    * @param {object} bot -- the newly spawned bot
    * @param {object} addedBy - id of user who added bot to space
-   * @param {object} adminsBot - bot object for the Admin monitoring this bot
    */
-  onSpawn(bot, addedBy, adminsBot) {
-    if (!((process.env.ENABLE_BOARD_TRANSITION_NOTIFICATIONS) ||
-        (process.env.ENABLE_NEW_ISSUE_NOTIFICATIONS))) {    
-      // If this group-notification module was instantiated this
-      // should never happen, but just in case...
-      logger.info(`Leaving Group Space: ${bot.room.title}`);
-      bot.say("Hi! Sorry, I only work in one-on-one rooms at the moment.  Goodbye.")
-        .finally(() => {
-          bot.exit();
-          if (adminsBot) {
-            adminsBot.say(`${botName} left the group space "${bot.room.title}"`)
-              .catch((e) => logger.error(`Failed to update to Admin about a new space our bot left. Error:${e.message}`));
-          }
-        });
-      return;
-    }
-
+  onSpawn(bot, addedBy) {
     // Check if our bot is in the "Ask Notifier" space.  If so enable feedback
-    if ((process.env.ASK_SPACE_ROOM_ID) && (!this.groupStatus.getFeedbackSpaceBot())) {
-      if (bot.room.id === process.env.ASK_SPACE_ROOM_ID) {
+    if (!this.groupStatus.getFeedbackSpaceBot()) {
+      if (bot.room.id === this.feedbackSpaceId) {
         this.groupStatus.setFeedbackSpaceBot(bot);
       }
     }
@@ -131,9 +101,6 @@ class GroupNotifications {
           .catch(e => {
             this.logger.error(`Failed to post initial group space status message in space "${bot.room.title}": ${e.message}`);
           })
-
-        // Develoment debugging only
-        // this.boardTransitions.watchIssuesListForBot(bot, '4263');
       })
       .catch(e => {
         this.logger.error(`Failed to store group space config in new space with ${bot.room.id}: ${e.messages}`);
@@ -143,7 +110,7 @@ class GroupNotifications {
       .then((config) => {
         if (config?.boards?.length) {
           config.boards.forEach(board => {
-            this.boardTransitions.watchIssuesListForBot(bot, board.id, board.type);
+            this.boardTransitions.watchBoardForBot(bot, board.id, board.type);
           })
         }
         // ToDo handle new issue notification configurations
@@ -177,6 +144,7 @@ class GroupNotifications {
    * @param {object} group_config - if available use for status update
    */
   async postGroupSpaceInstructions(bot, show_status = false, show_instructions = true, group_config = null) {
+    // TODO - reveiw this and see if we can deletat to the group-status module
     if (bot.isDirect) {
       this.logger.error(`postGroupSpaceInstructions called with direct bot object!`);
       return;
@@ -221,6 +189,38 @@ class GroupNotifications {
   }
 
   /**
+   * Send a notification to a group space
+   * 
+   * We implement this here so that different module can share the same
+   * notification logic.  This function is designed to be passed into
+   * each modules evaluateForNotification function
+   * 
+   * @param {object} bot - bot instance that will post the message
+   * @param {object} msgElements - elements that make up the message
+   * @param {string} message - the notification to send
+   * @param {function} callback - callback (used by testing framework)
+   */
+  sendNotification(bot, msgElements, message, callback) {
+    // Store the key of the last notification in case the user wants to reply
+    let lastNotifiedIssue = {
+      storyUrl: msgElements.issueSelf,
+      storyKey: msgElements.issueKey
+    };
+    bot.store('lastNotifiedIssue', lastNotifiedIssue)
+      .catch((e) => {
+        this.logger.error(`groupNotifier:sendNotification(): ` +
+          `Unable to store the messageId of the last notifiation sent to space` +
+          `${bot.room.title}: ${e.message}`);
+      });
+    let sayPromise = bot.say({markdown: message});
+    if (callback) {callback(null, bot);}
+    return sayPromise;
+  }
+
+
+
+
+  /**
    * Evaluate and potentially notify group spaces about this event
    * 
    * @param {object} msgElement - the data needed to create a notification for this jira event
@@ -230,11 +230,6 @@ class GroupNotifications {
   evaluateForGroupSpaceNotification(msgElements, createMessageFn, cb) {
     if (this.boardTransitions) {
       this.boardTransitions.evaluateForTransitionNotification(msgElements,
-        this.sendNotification, cb);
-      // TODO -- Add new issues to watched filter caches
-    }
-    if (this.newIssueNotifications) {
-      this.newIssueNotifications.evaluateForNewIssueNotifications(msgElements, 
         createMessageFn, this.sendNotification, cb);
     }
   }
@@ -275,34 +270,6 @@ class GroupNotifications {
         `Had a problem processing that request.  Error has been logged.`);
     }
   }
-
-  /**
-   * Send a notification to a group space
-   * 
-   * @param {object} bot - bot instance that will post the message
-   * @param {object} msgElements - elements that make up the message
-   * @param {string} message - the notification to send
-   * @param {function} callback - callback (used by testing framework)
-   */
-  sendNotification(bot, msgElements, message, callback) {
-    // Store the key of the last notification in case the user wants to reply
-    let lastNotifiedIssue = {
-      storyUrl: msgElements.issueSelf,
-      storyKey: msgElements.issueKey
-    };
-    bot.store('lastNotifiedIssue', lastNotifiedIssue)
-      .catch((e) => {
-        this.logger.error(`groupNotifier:sendNotification(): ` +
-          `Unable to store the messageId of the last notifiation sent to space` +
-          `${bot.room.title}: ${e.message}`);
-      });
-    let sayPromise = bot.say({markdown: message});
-    if (callback) {callback(null, bot);}
-    return sayPromise;
-  }
-
-
-
   
 }
 

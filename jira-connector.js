@@ -62,6 +62,15 @@ class JiraConnector {
         } else {
           this.jiraLookupUserApi = `${this.jira_url}/rest/api/2/user`;
         }
+
+        // Check if our environment overrode the default endpoint to get 
+        // the list of projects our user can access
+        if (process.env.JIRA_AVAILABLE_PROJECTS_URL) {
+          this.jiraLookupMyProjectsApi = process.env.JIRA_AVAILABLE_PROJECTS_URL;
+        } else {
+          this.jiraLookupMyProjectsApi = `${this.jira_url}/rest/api/2/issue/createmeta`;
+        }
+
         // Check if our environment overrode the lookup by username path
         if (process.env.JIRA_LOOKUP_ISSUE_API) {
           this.jiraLookupIssueApi = process.env.JIRA_LOOKUP_ISSUE_API;
@@ -74,7 +83,7 @@ class JiraConnector {
           this.jiraLookupFilterApi = process.env.JIRA_LOOKUP_FILTER_API;
         } else {
           this.jiraLookupFilterApi = `${this.jira_url}/rest/api/2/filter`;
-        }
+        }        
 
         // Set a regular expression to validate our expectation of a board URL
         // There seem to be several different ways to get to this so we'll try
@@ -230,6 +239,33 @@ class JiraConnector {
         }
       });
     // pass exceptions on to caller
+  }
+
+  /** 
+   * Lookup the projects our jira user has access to
+   * 
+   * @function lookupAvailableProjects
+   * @return {Promise.array} -- if succesfull a list of project objects
+   */
+  async lookupAvailableProjects() {
+    let url = this.jiraLookupMyProjectsApi;
+    return request(this.convertForProxy(url), this.jiraReqOpts)
+    .then((resp) => {
+      console.log(resp)
+      if (typeof resp?.projects !== 'object') {
+        return Promise.reject(new Error(`jiraConnector.lookupWatcherInfoFromIssue did not get expected response object`));
+      }
+      let projects = [];
+      resp.projects.forEach(project => {
+        projects.push({
+          id: project.id,
+          self: project.self,
+          key: project.key,
+          name: project.name
+        });
+      });
+      return when(projects);
+    });
   }
 
   /**
@@ -484,12 +520,12 @@ class JiraConnector {
    * This function will also resolve if it is passed just an ID 
    * (digit string) and the type
    *
-   * @function getIssuesListIdFromViewUrl
+   * @function getBoardOrFilterObjFromIdOrUrl
    * @param {string} issuesListUrl - web url of Jira Board to lookup
    * @param {string} issuesLisType - optional, type of list (ie: board, filter)
    * @return {<Promise>{Integer}} - if resolved, an object with the list id and type
    */
-  getIssuesListIdFromViewUrl(issuesListUrl, issuesListType=null) {
+  getBoardOrFilterObjFromIdOrUrl(issuesListUrl, issuesListType=null) {
     let listId;
     let listIdObj = {};
     // Check if this is already a listId
@@ -499,12 +535,12 @@ class JiraConnector {
         listIdObj.type = issuesListType;
         return when(listIdObj);
       } else {
-        return when.reject(new Error(`getIssuesListIdFromViewUrl: ID was supplied without specifying a known listId type`));
+        return when.reject(new Error(`getBoardOrFilterObjFromIdOrUrl: ID was supplied without specifying a known listId type`));
       }
     }
     // Make sure this URL matches our configured JIRA
     if (!issuesListUrl.startsWith(this.jira_url)) {
-      return when.reject(new Error(`getIssuesListIdFromViewUrl: List URL does not match jira this bot is configured to talk to`));
+      return when.reject(new Error(`getBoardOrFilterObjFromIdOrUrl: List URL does not match jira this bot is configured to talk to`));
     }
     // Check if this URL matches one of our known types
     if (this.boardUrlRegExp.test(issuesListUrl)) {
@@ -513,7 +549,7 @@ class JiraConnector {
       listIdObj.type = 'filter';
     } else {
       // Cannot find known list type from URL
-      return when.reject(new Error(`getIssuesListIdFromViewUrl: List URL does include a know list lookup pattern`));
+      return when.reject(new Error(`getBoardOrFilterObjFromIdOrUrl: List URL does include a know list lookup pattern`));
     }
     // Extract the list ID from the URL
     let listIdString = issuesListUrl.slice(issuesListUrl.lastIndexOf('=')+1);
@@ -521,9 +557,8 @@ class JiraConnector {
       listIdObj.id = listId;
       return when(listIdObj);
     }
-    return when.reject(new Error(`getIssuesListIdFromViewUrl: listId in URL does no appear to be a number as expected`));
+    return when.reject(new Error(`getBoardOrFilterObjFromIdOrUrl: listId in URL does no appear to be a number as expected`));
   }
-
   /**
    * Lookup a jira board by web URL
    * 
@@ -542,40 +577,6 @@ class JiraConnector {
     let boardId = boardUrl.slice(boardUrl.lastIndexOf('=')+1);
     return this.lookupBoardById(boardId);
   }
-
-  // // TODO figure out why this method is called by the cache refresh logic
-  // // but a different method is used when a list is first added
-  // /**
-  //  * 
-  //  * Recursively fetch all the stories for a given URL that returns
-  //  * an issues list.  This could be a board URL, a filter URL or
-  //  * potentially other types of URLs
-  //  * 
-  //  * @function getStoriesForABoard
-  //  * @param {string} boardUrl - url to get stories from
-  //  * @returns {Promise.Array} - returns array with user stories
-  //  */
-  // getStoriesForABoardUrl(boardUrl) {
-  //   let url = `${boardUrl}/issue`;
-  //   let options = JSON.parse(JSON.stringify(this.jiraReqOpts));
-  //   let stories = null;
-  //   return request.get(this.convertForProxy(url), options)
-  //     .then(issuesListObj => {
-  //       if (!stories) {
-  //         stories = [];
-  //       }
-  //       if (issuesListObj.total) {
-  //         stories = stories.concat(issuesListObj.issues);
-  //       }
-  //       if (issuesListObj.issues.length === issuesListObj.maxResults) {
-  //         options.qs = {startAt: stories.length};
-  //         logger.debug(`Fetching eligible transtion stories from ${url}/?startAt=${stories.length}`);
-  //         return this.getStoriesFromUrl(url, options, stories);
-  //       }
-  //       return stories;
-  //     });
-  // }
-
 
   /**
    * Add a list of issue keys to a list object
@@ -603,37 +604,6 @@ class JiraConnector {
         return(list);
       });
   }
-
-  // /**
-  //  * Initialize jira calls to create a cache of issue keys that are on boards 
-  //  * that users want to be notified about
-  //  * 
-  //  * @function initTRBoardCache
-  //  * @return {<Promise>} - if resolved, config is initiatialized
-  //  */
-  // initTRBoardCache() {
-  //   // First validate that all configured boards are available
-  //   return this.getInfoForBoards(this.jiraTransitionBoards)
-  //     .then(boards => {
-  //       this.transitionBoards = boards;
-  //       return this.getStoriesForBoards(boards);
-  //     }).then(boardsWithStories => {
-  //       this.transitionStories = boardsWithStories;
-  //       // Then read in all the issues on each of those boards
-  //       // We set an interval timer here so that this cache is 
-  //       // periodically refereshed
-  //       setInterval(() => {
-  //         this.getStoriesForBoards(this.transitionBoards)
-  //           .then(boardsWithStories => {
-  //             this.transitionStories = boardsWithStories;
-  //           }).catch(e => {
-  //             logger.error(`jira-connector failed getting issues for transition boards: ${e.message}`);
-  //             logger.error(`Will use existing cache of eligible transition ` +
-  //                       `stories and attempt to refresh again in ${this.transitionCacheDuration/1000} seconds`);
-  //           });
-  //       }, this.transitionCacheDuration);
-  //     });
-  // }
 
   /**
    * Is issue in our TR Notification Filter Cache

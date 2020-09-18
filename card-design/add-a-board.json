@@ -1,7 +1,7 @@
 {
   "type": "Action.ShowCard",
   "title": "Add a Board to Watch",
-  "card": {
+  "card":   {
     "type": "AdaptiveCard",
     "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
     "body": [
@@ -10,19 +10,36 @@
         "items": [
           {
             "type": "TextBlock",
-            "text": "Which board would you like to receive transition notifications for?"
+            "wrap": true,
+            "text": "I can track issues for a Jira \"Board\" (the type available via the jira's Boards menu).   If you want to be notified about status changes to stories on other types of boards (ie: Dashboard, Portfolio Plans), configure me with the filter that drives that board."
+          },
+          {
+            "type": "Input.ChoiceSet",
+            "id": "boardType",
+            "value": "board",
+            "placholder": "List Type",
+            "choices": [
+              {
+                  "title": "Board",
+                  "value": "board"
+              },
+              {
+                "title": "Filter",
+                "value": "filter"
+              }
+            ]
           },
           {
             "type": "Input.Text",
             "id": "boardIdOrUrl",
-            "placeholder": "Numeric Board ID or Board's URL"
+            "placeholder": "Numeric Board/Filter ID or Board/Filter's URL"
           },
           {
             "type": "ActionSet",
             "actions": [
               {
                 "type": "Action.Submit",
-                "title": "Validate Board!",
+                "title": "Start Watching For Transitions!",
                 "id": "validateBoard",
                 "data": {
                   "requestedTask": "updateBoardConfig"
