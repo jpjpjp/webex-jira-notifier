@@ -220,17 +220,24 @@ if (process.env.ENABLE_BOARD_TRANSITION_NOTIFICATIONS) {
   initTestCases.push(new InitTestCase('bot2 adds boardId 2885', bot2, '2885', 'board', 'resolve', 'Webex SMB Transition Review'));
   initTestCases.push(new InitTestCase('bot2 adds filterId 34567 by url', bot2, 'https://jira-eng-gpk2.cisco.com/jira/browse/SPARK-138557?filter=34567', 'filter', 'resolve', 'JP Filter for Status Change Tests'));
   initTestCases.push(new InitTestCase('bot3 adds boardId 4289', bot3, '4289', 'board', 'resolve', '(AX) App Experience, Shared and Foundation'));
-  initTestCases.push(new InitTestCase('bot3 adds boardId 428999', bot3, '428999', 'board', 'reject', 'Could not find a board matching 428999'));
+  initTestCases.push(new InitTestCase('bot3 adds boardId 428999', bot3, '428999', 'board', 'reject', 'Unable to find board 428999\n' +
+  'Make sure to specify the correct board/filter type and ensure permissions allow view access to all jira users.'));
   initTestCases.push(new InitTestCase('bot3 adds board via bad jira url', bot3, 'https://jira-foo.foobar.com/jira/secure/RapidBoard.jspa?rapidView=4263', null, 'reject', 'Could not find a board or filter matching https://jira-foo.foobar.com/jira/secure/RapidBoard.jspa?rapidView=4263'));
   initTestCases.push(new InitTestCase('bot3 adds board via bad board url', bot3, 'https://jira-eng-gpk2.cisco.com/jira/secure/SlowBoard.jspa?rapidView=4263', null, 'reject', 'Could not find a board or filter matching https://jira-eng-gpk2.cisco.com/jira/secure/SlowBoard.jspa?rapidView=4263'));
   initTestCases.push(new InitTestCase('bot3 adds board via bad board id query param', bot3, 'https://jira-eng-gpk2.cisco.com/jira/secure/RapidBoard.jspa?rapidView=NameInsteadOfNumber', null, 'reject', 'Could not find a board or filter matching https://jira-eng-gpk2.cisco.com/jira/secure/RapidBoard.jspa?rapidView=NameInsteadOfNumber'));
-  initTestCases.push(new InitTestCase('bot3 adds filterId 34567 but says its a board', bot3, '34567', 'board', 'reject', 'Could not find a board matching 34567'));
+  initTestCases.push(new InitTestCase('bot3 adds filterId 34567 but says its a board', bot3, '34567', 'board', 'reject', `Unable to find board 34567\n` +
+  `Make sure to specify the correct board/filter type and ensure permissions allow view access to all jira users.`));
+  initTestCases.push(new InitTestCase('bot3 adds filter that bot jira act cant see', bot3, '35071', 'filter', 'reject', 'Unable to find filter 35071\n' +
+  'Make sure to specify the correct board/filter type and ensure permissions allow view access to all jira users.'));
+  initTestCases.push(new InitTestCase('bot3 adds filter that includes a project the jira act cant access', bot3, '35089', 'filter', 'reject', 'Unable to see issues associated with filter 35089\n' +
+  'Post a message in the [Ask JiraNotification Bot space](https://eurl.io/#Hy4f7zOjG) to get info about the accounts your Jira administrator will need to provide view access to.')); 
 }
 if (process.env.ENABLE_NEW_ISSUE_NOTIFICATIONS) {
   initTestCases.push(new InitTestCase('bot1 adds filterId 34962 for new Issues', bot1, '34962', 'filter', 'resolve', 'JP\'s SDK Triage Filter for Jira Notifier Tests'));
   initTestCases.push(new InitTestCase('bot1 adds filterId 29848 for new Issues', bot1, '29848', 'filter', 'resolve', 'Filter for [Buttons and Cards] Bugs and feedback '));
   initTestCases.push(new InitTestCase('bot2 adds filterId 34962 by url for new Issues', bot2, 'https://jira-eng-gpk2.cisco.com/jira/browse/SPARK-175917?filter=34962', 'filter', 'resolve', 'JP\'s SDK Triage Filter for Jira Notifier Tests'));
-  initTestCases.push(new InitTestCase('bot3 adds a bad filter for new issues', bot3, '1234', 'filter', 'reject', 'Could not find a filter matching 1234'));
+  initTestCases.push(new InitTestCase('bot3 adds a bad filter for new issues', bot3, '1234', 'filter', 'reject', 'Unable to find filter 1234\n' +
+  'Make sure to specify the correct board/filter type and ensure permissions allow view access to all jira users.'));
 }
 
 // Mock trigger with attachmentAction to emulate a button press to delete a board
