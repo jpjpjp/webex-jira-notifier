@@ -1,6 +1,6 @@
 {
   "name": "jira-notification-bot",
-  "version": "2.0.0",
+  "version": "2.1.2",
   "description": "Bot for notifying a user when they are mentioned in or assigned to a jira ticket",
   "main": "server.js",
   "engines": {
@@ -26,6 +26,7 @@
     "mustache": "^4.0.1"
   },
   "dependencies": {
+    "adaptivecards-templating": "^1.1.0",
     "body-parser": "^1.15.2",
     "dev-dependencies": "^1.0.0",
     "dotenv": "^5.0.1",
@@ -33,7 +34,7 @@
     "mongodb": "^3.5.7",
     "request": "^2.88.2",
     "request-promise": "^4.2.2",
-    "webex-node-bot-framework": "^1.2.1",
+    "webex-node-bot-framework": "^2.1.1",
     "winston": "^2.4.1",
     "winston-papertrail": "^1.0.5"
   }
