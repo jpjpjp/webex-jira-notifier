@@ -102,19 +102,21 @@ class BoardTransitions {
         this.logger.info(`This is a new ${boardType}.  Will validate it and add stories to cache.`);
         this.boardIdObjs.push(boardIdObj);
         this.pendingBotAdds.push({boardIdObj, bot});
-        return this.jira.lookupListByIdAndType(boardId, boardType)
-        // return this.jira.lookupListByIdAndType(boardId, boardType).catch((e) => {
-        //     e.boardProblemType = 'boardLookup';
-        //     e.boardType = boardType;
-        //     return when.reject(e);
-        //   })
-        .then((board) => this.jira.lookupAndStoreListIssues(board))
-        // .then((board) => {
-        //   return this.jira.lookupAndStoreListIssues(board).catch((e) => {
-        //     e.boardProblemType = 'storiesLookup';
-        //     e.boardType = boardType;
-        //     return when.reject(e);
-        // })
+        return this.jira.lookupListByIdAndType(boardId, boardType).catch((e) => {
+            e.boardProblemType = 'boardLookup';
+            e.message = `Unable to find ${boardType} ${boardId}\n` +
+              `Make sure to specify the correct board/filter type and ensure permissions allow view access to all jira users.`;
+            return when.reject(e);
+          })
+        .then((board) => {
+          return this.jira.lookupAndStoreListIssues(board).catch((e) => {
+            e.boardProblemType = 'storiesLookup';
+            e.message = `Unable to see issues associated with ${boardType} ${boardId}\n` +
+              `Post a message in the [Ask JiraNotification Bot space](https://eurl.io/#Hy4f7zOjG) `+
+              `to get info about the accounts your Jira administrator will need to provide view access to.`;
+            return when.reject(e);
+          })
+        })
         .then((board) => {
           this.logger.info(`${boardId} is a valid ${boardType}: "${board.name}" Added ${board.stories.length} stories to cache.`);
           this.addBotToBoardInfo(bot, board);
@@ -125,7 +127,8 @@ class BoardTransitions {
             returnWhenNotPending(res, rej, this.pendingBotAdds,boardIdObj, bot, 10, this));
         })
         .catch(e => {
-          this.logger.warn(`watchBoardForBot: Failed getting info for ${boardType}:${boardId}, requested in space "${bot.room.title}": ${e.message}`);
+          // Cleanup any pending board/bot pairs waiting for this failed lookup
+          this.logger.info(`watchBoardForBot: Failed getting info for ${boardType}:${boardId}, requested in space "${bot.room.title}": ${e.message}`);
           this.pendingBotAdds = _.reject(this.pendingBotAdds, b => 
             ((b.boardIdObj.id ===boardIdObj.id) && (b.boardIdObj.type === boardIdObj.type) &&
               (b.bot.id === bot.id)));
@@ -136,8 +139,12 @@ class BoardTransitions {
       }
     })
     .catch((e) => {
+      if (e.boardProblemType) {
+        // Board info appeared valid, could be a permissions issue
+        // Pass through an error object with details that bot can send user
+        return when.reject(e);
+      }
       let type = (boardIdType) ? boardIdType : 'board or filter';
-      if (typeof boardIdObj === 'object') {type = boardIdObj.type;}
       let msg = `Could not find a ${type} matching ${boardIdString}`;
       this.logger.info(`BoardTransition:watchBoardForBot: ${msg}. ` +
         `Requested by bot from spaceID:${bot.room.id}\nError:${e.message}`);
@@ -359,13 +366,12 @@ class BoardTransitions {
           })
           .then(() => this.groupStatus.postSuccessCard(bot))
           .catch((e) => {
-            if (e.boardProblemType === 'lookup') {
-              return bot.reply(trigger.attachmentAction,
-                `Unable to add board: ${e.message}.\n\n` +
-                `Make sure the permissions for the ${inputs.boardType} allow fall jira users to view it.`);
-            }
             this.logger.error(`Failed setting up a new board in space "${bot.room.title}": ${e.message}`);
             this.logger.error(`trigger from card: ${JSON.stringify(trigger, null, 2)}`);
+            if (e.boardProblemType) {
+              // Reply appropriate error message for common permission problems
+              return bot.reply(trigger.attachmentAction, e.message);
+            }
             return bot.reply(trigger.attachmentAction,
               `Something unexpected went wrong with adding board. Error logged.`);
           });
@@ -669,16 +675,15 @@ returnWhenNotPending = function (resolvedFn, rejectFn, pendingList, boardIdObj,
     return resolvedFn(boardInfo);
   }
   if (numTries >= 10) {
-    let msg = `Failed initializing ${boardIdObj.type}:${boardIdObj.id} ` +
-     `for bot in space ${bot.room.title}. ` +
+    let msg = `Failed initializing ${boardIdObj.type}:${boardIdObj.id}. ` +
      `List of stories not available after ${numTries*sleepSeconds} seconds.`;
+    transitionObj.logger.warn(`In space ${bot.room.title}: ${msg}`);
     transitionObj.pendingBotAdds = _.reject(pendingList, b => 
       ((b.boardIdObj.id ===boardIdObj.id) && (b.boardIdObj.type === boardIdObj.type) &&
        (b.bot.id === bot.id)));
     transitionObj.logger.error(msg);
     let error = new Error(msg);
     error.boardProblemType = 'storiesLookupTimeout';
-    error.boardType = boardIdObj.type;
     return rejectFn(error);
   } else {
     setTimeout(returnWhenNotPending.bind(null, resolvedFn, rejectFn, 
