@@ -52,6 +52,11 @@ class BoardTransitions {
     this.boardIdObjs = [];
     this.boardsInfo = [];
     this.pendingBotAdds = [];
+
+    // RegExps used to identify some common issues with the way
+    // users ask for boards and filters
+    this.quickFilterRegexp = new RegExp(/^.*\&quickFilter=\d+$/);
+
   }
 
   /** 
@@ -146,6 +151,12 @@ class BoardTransitions {
       }
       let type = (boardIdType) ? boardIdType : 'board or filter';
       let msg = `Could not find a ${type} matching ${boardIdString}`;
+      if (this.quickFilterRegexp.test(boardIdString)) {
+        msg = `Jira APIs do no provide access to quickFilter info.  To monitor ` +
+          'changes on a board with quick filters, create a filter that combines ' +
+          'the board filter and the quick fileters you are interested in, and ' +
+          'then ask me to watch that filter.';
+      }
       this.logger.info(`BoardTransition:watchBoardForBot: ${msg}. ` +
         `Requested by bot from spaceID:${bot.room.id}\nError:${e.message}`);
       return when.reject(new Error(`${msg}`));
@@ -368,12 +379,7 @@ class BoardTransitions {
           .catch((e) => {
             this.logger.error(`Failed setting up a new board in space "${bot.room.title}": ${e.message}`);
             this.logger.error(`trigger from card: ${JSON.stringify(trigger, null, 2)}`);
-            if (e.boardProblemType) {
-              // Reply appropriate error message for common permission problems
-              return bot.reply(trigger.attachmentAction, e.message);
-            }
-            return bot.reply(trigger.attachmentAction,
-              `Something unexpected went wrong with adding board. Error logged.`);
+            return bot.reply(trigger.attachmentAction, e.message);
           });
       } else if (inputs.boardsToDelete) {
         // process request to stop waching boards
