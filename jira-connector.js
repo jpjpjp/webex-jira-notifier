@@ -175,6 +175,16 @@ class JiraConnector {
   }
 
   /**
+   * Accessor for list of project names associated
+   * with failed watcher lookup requests
+   *
+   * @function getDisallowedProjects
+   */
+  getDisallowedProjects() {
+    return this.jiraDisallowedProjects;
+  } 
+
+  /**
    * Convert url to use proxy if configured
    *
    * @function convertForProxy
@@ -251,7 +261,6 @@ class JiraConnector {
     let url = this.jiraLookupMyProjectsApi;
     return request(this.convertForProxy(url), this.jiraReqOpts)
     .then((resp) => {
-      console.log(resp)
       if (typeof resp?.projects !== 'object') {
         return Promise.reject(new Error(`jiraConnector.lookupWatcherInfoFromIssue did not get expected response object`));
       }

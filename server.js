@@ -30,9 +30,6 @@ try {
   logger.error('Initialization Failure: ' + err.message);
   process.exit(-1);
 }
-// jira.lookupAvailableProjects().then((projects) => {
-//   console.log(`I can see these projects: ${Array.sort(Array.from(projects, p => p.key)).join(', ')}`);
-// }).catch((e) => console.log(e.message));
 
 // Set the config vars for the environment we are running in
 var config = {};
@@ -334,10 +331,30 @@ framework.hears(project_words, function (bot/*, trigger*/) {
 });
 
 framework.hears('/showadmintheusers', function (bot/*, trigger*/) {
-  logger.verbose('Processing /showadmintheusers Request for ' + bot.isDirectTo);
+  logger.verbose('Processing /showadmintheusers Request for ' + bot.room.title);
   updateAdmin('The following people are using me:', true);
   responded = true;
 });
+
+framework.hears('/showadmintheprojects', function (bot/*, trigger*/) {
+  logger.verbose('Processing /showadminthprojects Request for ' + bot.room.title);
+  jira.lookupAvailableProjects().then((projects) => {
+    updateAdmin(`I can see these projects: ${Array.sort(Array.from(projects, p => p.key)).join(', ')}`);
+  }).catch((e) => logger.error(`Failed showing available projects: ${e.message}`));
+  responded = true;
+});
+
+framework.hears('/showadminnowatchers', function (bot/*, trigger*/) {
+  logger.verbose('Processing /showadminbadwatchers Request for ' + bot.room.title);
+  let projects = jira.getDisallowedProjects().join(', ');
+  if (projects) {
+    adminsBot.say(`I have stopped looking for watchers on the following projects: ${projects}`);
+  } else {
+    adminsBot.say(`I have been able to lookup watchers for all the events I have received since my last restart.`);
+  }
+  responded = true;
+});
+
 
 var reply_words = /^\/?reply/i;
 framework.hears(reply_words, function (bot, trigger) {
@@ -601,13 +618,19 @@ function processGroupSpaceCommand(bot, trigger) {
 function updateAdmin(message, listAll = false) {
   try {
     if (listAll) {
-      let count = 0;
+      let directCount = 0;
+      let groupCount = 0;
       message += '\n';
       framework.bots.forEach(function (bot) {
-        message += '* ' + bot.isDirectTo + '\n';
-        count += 1;
+        if (bot.isDirect) {
+          message += '* Direct: ' + bot.isDirectTo + '\n';
+          directCount += 1;
+        } else {
+          message += '* Group Space: ' + bot.room.title + '\n';
+          groupCount += 1;
+        }
       });
-      message += `\n\nFor a total of ${count} users.`;
+      message += `\n\nFor a total of ${directCount} users, and ${groupCount} spaces.`;
     }
     adminsBot.say({'markdown': message});
   } catch (e) {

@@ -65,8 +65,7 @@ class GroupNotifications {
       var BoardTransitions = require('./board-transitions.js');
       this.boardTransitions = new BoardTransitions(
         this.jira, this.groupStatus, this.logger, 
-        parseInt(process.env.BOARD_STORY_CACHE_TIMEOUT), // default is 6 hours
-        process.env.JIRA_TRANSITION_BOARDS // any board IDs to load by default
+        parseInt(process.env.BOARD_STORY_CACHE_TIMEOUT) // default is 6 hours
       );
 
     } catch (err) {
