@@ -201,21 +201,36 @@ class JiraConnector {
    * Lookup user to see if they have a jira account
    *
    * @function lookupUser
+   * @param {object} userOrEmail - email or username to lookup
+   * @returns {Promise.<user>} - a single jira user object
+   */
+  lookupUser(userOrEmail) {
+    let user = userOrEmail.substring(0, userOrEmail.indexOf('@')) ? userOrEmail.substring(0, userOrEmail.indexOf('@')) : userOrEmail
+    let url = `${this.jiraLookupUserApi}?username=${user}`;
+    // Use a proxy server if configured
+    logger.verbose(`lookupUser: Fetching info on jira user: ${user}`);
+    return request(this.convertForProxy(url), this.jiraReqOpts)
+  }
+
+  /**
+   * From a username try to get the user object which will
+   * contain an email, which a notifier bot needs to send
+   * a notification.
+   * This method includes an optimization to cache previously
+   * lookup up users.
+   *
+   * @function getUserObjectFromUsername
    * @param {object} user - email or username to lookup
    * @returns {Promise.<user>} - a single jira user object
    */
-  lookupUser(user) {
+  getUserObjectFromUsername(user) {
     // Check our local cache first
     let userObj = this.jiraUserCache.find((u) => (user === u.name));
     if (userObj) {
       logger.verbose(`lookupUser: Found cached info on jira user: ${user}`);
       return when(userObj);
     }
-
-    let url = `${this.jiraLookupUserApi}?username=${user}`;
-    // Use a proxy server if configured
-    logger.verbose(`lookupUser: Fetching info on jira user: ${user}`);
-    return request(this.convertForProxy(url), this.jiraReqOpts)
+    return this.lookupUser(user)
       .then((userObj) => {
         if ((userObj.length)) {
           return when.reject(new Error(`User search for ${user} at ${url} ` +
@@ -230,23 +245,6 @@ class JiraConnector {
           }
         }
         return when(userObj);
-      }).catch((e) => {
-      // We are getting a lot of 404s, need to debug why
-      // In the meantime, try to guess at users where we get 404s
-        if ((e.statusCode === 404) && (process.env.DEFAULT_DOMAIN)) {
-          logger.warn(`lookupUser() failed: "${e.message}".  ` +
-            `Guessing user's email address by adding ${process.env.DEFAULT_DOMAIN}.`);
-          let user = e.options.uri.split('=')[1];
-          let userObj = {
-            emailAddress: `${user}@${process.env.DEFAULT_DOMAIN}`,
-            displayName: user,
-            name: user,
-            key: user
-          };
-          return when(userObj);
-        } else {
-          return when.reject(e);
-        }
       });
     // pass exceptions on to caller
   }
