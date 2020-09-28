@@ -309,7 +309,7 @@ async function notifyMentioned(framework, msgElements, notifyList, jira, cb) {
   let mentionedEmails = [];
   notifyList.forEach((user) => {
     // Convert the usernames to emails in order to associate with a bot user
-    mentionedUserPromises.push(jira.lookupUser(user).then((userObj) => {
+    mentionedUserPromises.push(jira.getUserObjectFromUsername(user).then((userObj) => {
       mentionedEmails.push(userObj.emailAddress);
       if ((msgElements.assignee) && (msgElements.assignee === userObj.name)) {
         // If this was an assignment and this is the assignee add som extra info
