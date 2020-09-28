@@ -31,18 +31,10 @@ class GroupStatus {
     this.updatedCardTemplate = require('../card-design/updated-config.json');
     this.addBoardButton = require('../card-design/add-a-board.json');
     this.deleteBoardButtonTemplate = require('../card-design/delete-boards.json');
-    if ((process.env.ASK_SPACE_NAME) && (process.env.ASK_SPACE_URL)) {
-      let feedbackButton = require('../card-design/submit-feedback.json');
-      let template = new ACData.Template(feedbackButton);
-      this.feedbackButton = template.expand({
-        $root: {
-          askSpace: process.env.ASK_SPACE_NAME,
-          askUrl: process.env.ASK_SPACE_URL
-        }
-      });
-    } else {
-      this.feedbackButton = null;
-    }
+
+    // Display a feedback button after we know our bot is
+    // in a space to send feedback to.  Configured via ADMIN_EMAIL or ADMIN_SPACE_ID
+    this.feedbackButton = require('../card-design/submit-feedback.json');
     this.feedbackSpaceBot = null;
   }
 
@@ -60,8 +52,8 @@ class GroupStatus {
    * 
    * @param {object} bot - bot instance in the feedback space
    */
-  getFeedbackSpaceBot(bot) {
-    return this.feedbackSpaceBot = bot;
+  setFeedbackSpaceBot(bot) {
+    this.feedbackSpaceBot = bot;
   }
 
   /**

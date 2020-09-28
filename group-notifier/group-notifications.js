@@ -32,9 +32,8 @@ class GroupNotifications {
    * @param {object} jiraConnector -- an instantiated jiraConnector object
    * @param {object} logger - instance to a logging object
    * @param {object} frameworkConfig - config object used by framework
-   * @param {string} feedbackSpaceId - optional space ID for bot to post feedback to
    */
-  constructor(jiraConnector, logger, frameworkConfig, feedbackSpaceId) {
+  constructor(jiraConnector, logger, frameworkConfig) {
     // Only enable if bot use is restricted to certain email domains
     if (!frameworkConfig.restrictedToEmailDomains) {
       throw new Error(`Cannot ENABLE_GROUP_NOTIFICATION if DEFAULT_DOMAIN is not set.` +
@@ -43,7 +42,9 @@ class GroupNotifications {
 
     this.jira = jiraConnector;
     this.logger = logger;
-    this.feedbackSpaceId = feedbackSpaceId;
+
+    // If set we will provide ability to provide feedback
+    this.feedbackSpaceId = null;
 
     // Default data object for group spaces
     this.defaultGroupSpaceConfig = {
@@ -83,13 +84,6 @@ class GroupNotifications {
    * @param {object} addedBy - id of user who added bot to space
    */
   onSpawn(bot, addedBy) {
-    // Check if our bot is in the "Ask Notifier" space.  If so enable feedback
-    if (!this.groupStatus.getFeedbackSpaceBot()) {
-      if (bot.room.id === this.feedbackSpaceId) {
-        this.groupStatus.setFeedbackSpaceBot(bot);
-      }
-    }
-
     if (addedBy) {
       // This is a new group space bot.  Store the default config in
       // and post instructions to the users of the space
@@ -129,9 +123,21 @@ class GroupNotifications {
    */
   onDespawn(bot) {
     // Check if our bot has left the "Ask Notifier" space.  If so disable feedback
-    if (bot.room.id === process.env.ASK_SPACE_ROOM_ID) {
+    if (bot.room.id === this.feedbackSpaceId) {
       this.groupStatus.setFeedbackSpaceBot(null);
     }
+  }
+
+
+  /**
+   * If our bot is in the ADMIN_SPACE allow any cards
+   * to provide a feedback button
+   * 
+   * @param {object} bot -- the bot associated with ADMIN_SPACE
+   */
+  setFeedbackSpace(bot) {
+    this.feedbackSpaceId = bot.roomid;
+    this.groupStatus.setFeedbackSpaceBot(bot);
   }
 
   /**
@@ -254,9 +260,10 @@ class GroupNotifications {
       let inputs = attachmentAction.inputs;
       if (inputs.requestedTask === "updateBoardConfig") {
         return this.boardTransitions.updateBoardConfig(bot, trigger);
-      } else if (inputs.feedback) {
-          // process a feedback request
-          return bot.reply(attachmentAction, 'Haven\'t implemented feedback yet!  Whoops!');
+      } else {
+        this.logger.error(`groupNotification.processAttachmentAction got unexpected input: ${attachmentAction}`);
+        bot.reply(attachmentAction, "Sorry I'm not able to process that request. " +
+          ' Please use the "Questions and Feature Requests" button to report this to a bot admin');
       } 
     } catch (e) {
       logger.error(`Error processing AttachmentAction in space "${bot.room.title}": ${e.message}`);
@@ -269,7 +276,19 @@ class GroupNotifications {
         `Had a problem processing that request.  Error has been logged.`);
     }
   }
-  
+
+  /**
+   * Process a request to show board stats to the admin space
+   * 
+   */
+  showAdminStats() {
+    let adminsBot = this.groupStatus.getFeedbackSpaceBot(); 
+    if (!adminsBot) {
+      return this.logger.warn(`Got a request to show admin board stats, but there is no admin space.`);
+    }
+    this.boardTransitions.showAdminBoardInfo(adminsBot);
+  }
+
 }
 
 module.exports = GroupNotifications;
