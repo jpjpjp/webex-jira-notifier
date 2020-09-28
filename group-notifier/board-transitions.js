@@ -368,18 +368,26 @@ class BoardTransitions {
           return bot.reply(attachmentAction,
             `I'm already watching [${board.name}](${board.viewUrl}) for this space`);
         }
-        return bot.reply(trigger.attachmentAction, 
-          `Looking up info for ${inputs.boardType}: ${inputs.boardIdOrUrl}.  This can take several minutes....`)
-          .then(() => this.watchBoardForBot(bot, inputs.boardIdOrUrl, inputs.boardType))
-          .then((board) => {
-            config.boards.push(board);
-            return bot.store('groupSpaceConfig', config);
+        // For extra security, only let jira users add new boards to the space
+        return this.jira.lookupUser(trigger.person.emails[0])
+        .then(() => {
+          return bot.reply(attachmentAction, 
+            `Looking up info for ${inputs.boardType}: ${inputs.boardIdOrUrl}.  This can take several minutes....`)
+            .then(() => this.watchBoardForBot(bot, inputs.boardIdOrUrl, inputs.boardType))
+            .then((board) => {
+              config.boards.push(board);
+              return bot.store('groupSpaceConfig', config);
+            })
+            .then(() => this.groupStatus.postSuccessCard(bot))
+            .catch((e) => {
+              this.logger.error(`Failed setting up a new board in space "${bot.room.title}": ${e.message}`);
+              this.logger.error(`trigger from card: ${JSON.stringify(trigger, null, 2)}`);
+              return bot.reply(trigger.attachmentAction, e.message);
+            });
           })
-          .then(() => this.groupStatus.postSuccessCard(bot))
-          .catch((e) => {
-            this.logger.error(`Failed setting up a new board in space "${bot.room.title}": ${e.message}`);
-            this.logger.error(`trigger from card: ${JSON.stringify(trigger, null, 2)}`);
-            return bot.reply(trigger.attachmentAction, e.message);
+          .catch(e => {
+            this.logger.info(`Refusing request to add a board from non jira user ${trigger.person.emails[0]}. jira.lookupUser returned: ${e.message}`);
+            return bot.reply(attachmentAction, `Sorry, only users with a Jira account can modify my settings`);
           });
       } else if (inputs.boardsToDelete) {
         // process request to stop waching boards
@@ -568,6 +576,7 @@ class BoardTransitions {
           this.updateStoriesForBoards(this.boardsInfo)
             .then(() => {
               this.logger.info(`Transition Board stories cache update complete.`);
+              this.lastCacheUpdate = new Date().toUTCString();
             }).catch(e => {
               this.logger.error(`failed getting issues for transition boards: ${e.message}`);
               this.logger.error(`Will use existing cache of eligible transition ` +
@@ -646,6 +655,38 @@ class BoardTransitions {
     });
     return boardStats;
   }
+
+  /**
+   * Process a request to show board stats to the admin space
+   *
+   * @param {object} adminsBot - bot object to post stats to 
+   */
+  showAdminBoardInfo(adminsBot) {
+    let msg = 'Watching the following boards and filters:\n';
+    this.boardsInfo.forEach((board) => {
+      msg += `* ${board.type}: [${board.name}](${board.viewUrl}) with ${board.stories.length} stories:\n`;
+      board.bots.forEach((bot) => {
+        msg += `  * watched in space: "${bot.room.title}\n`;
+      });
+      if (msg.length >= 5000) {
+        adminsBot.say(msg);
+        msg = 'Also watching these boards and filters:\n';
+      }
+    });
+    let summary = `For a total of ${this.boardsInfo.length} boards and filters.`;
+    if (-1 != msg.indexOf('*')) {
+      msg += `\n\n${summary}`
+    } else {
+      msg = summary;
+    }
+    if (this.lastCacheUpdate) {
+      msg += `\n\n The cache was last updated ${this.lastCacheUpdate}`;
+    } else {
+      msg += `\n\n The cache has not updated since the bot restarted.`;
+    }
+    adminsBot.say(msg);
+  }
+  
 
 }
 
