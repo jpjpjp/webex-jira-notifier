@@ -16,7 +16,7 @@ The deploy script expects an existing OpenShift project and pipeline and simply 
 4. package.json version has been updated since the last deploy
 5. .env file exists in the deploy directory with the appropriate data set.
 
-The deploy results in a generated YAML configuration specifying the configuration of the service and the pod being pushed to the OpenShift project resulting in a re-deploy using the latest image.   
+The deploy results in a generated YAML configuration specifying the configuration of the service and the pod being pushed to the OpenShift project resulting in a re-deploy using the latest image.
   
 ## Required Environment Variables
 
@@ -53,11 +53,8 @@ Running `npm run deploy`, will kick off a deployment,which consists of the follo
 
 In the input directory are two "seed" configurations. These are JSON representations of an OpenShift configuration that instructs the platform to run a service and deploy a docker image.   They were generated from the original configuration YAML that was created when the project was first setup.  After they were originally generated, all the project specific information and secrets in them were replaced by template values.
 
-Unless your OpenShift setup aligns exactly with the prerequisites described here, its quite likely that you may need to create your own seeds.   To do this you may use the [build-json-from-yaml.js](./build-json-from-yaml.js) file in this directory.  It is currently hardcoded to read from a file called `cisco-jira-notifier.yaml`.  It generates an output seed file for each YAML document in the configuration.   
+Unless your OpenShift setup aligns exactly with the prerequisites described here, its quite likely that you may need to create your own seeds.   To do this you may use the [build-json-from-yaml.js](./build-json-from-yaml.js) file in this directory.  It is currently hardcoded to read from a file called `cisco-jira-notifier.yaml`.  It generates an output seed file for each YAML document in the configuration.
 
 Go through the generated seed file(s) and replace the specific locations and secrets with [mustache style](https://www.npmjs.com/package/mustache) template values.  (Note that the template values are generally camel case versions of the environment variables described above).
 
 You may need to add your own template values.  If so, edit [buildbuild-yaml-from-json.js](./build-yaml-from-json.js) accordingly, and update the creation of the `view` that is used for template expansion on line 34.
-
-
-
