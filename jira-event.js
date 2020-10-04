@@ -510,7 +510,7 @@ function buildWatcherOrAssigneeMessage(msgElements, botEmail, jira) {
       } else if (botEmail) {
         msg += ` that you are watching.\n\n`;
       } else {
-        msg += `.\n\n`
+        msg += `.\n\n`;
       }
     } 
 
