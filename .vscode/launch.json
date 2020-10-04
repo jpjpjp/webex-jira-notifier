@@ -13,6 +13,10 @@
             "env": {
               "DEBUG":"framework",
             },
+            "resolveSourceMapLocations": [
+              "${workspaceFolder}/**",
+              "!**/node_modules/**"
+            ],
             "protocol": "inspector",
             "program": "${workspaceFolder}/server.js"
         },
@@ -33,30 +37,31 @@
                     "VERBOSE":"true",
                     "TEST_TIMER_MULTIPLIER": "500500",
                     "USE_ISSUE_UPDATED_FOR_COMMENTS": "true",
-                    "TEST_CASES": "SUBSET",
-                    "TEST_CASE_DIR": "sandbox-jira-event-test-cases",
+                    "TEST_CASES": "ALL",
+                    "TEST_CASE_DIR": "tests/prod-jira-event-test-cases",
                     "LOG_LEVEL": "0"},
             "protocol": "inspector",
             "outputCapture": "std",
-            "program": "${workspaceFolder}/sandbox-jira-event-test-cases/test-jira-event-handler.js"
+            "program": "${workspaceFolder}/tests/test-jira-event-handler.js"
         },
         {
-          "name": "Launch Old Test",
+          "name": "Test Transition Notifications",
           "type": "node",
-          "runtimeVersion": "14.2.0",
           "request": "launch",
           "env": {"DEBUG":"framework",
-                  "VERBOSE":"true",
-                  "TEST_TIMER_MULTIPLIER": "500500",
-                  "TEST_CASES": "SUBSET-all",
-                  "TEST_CASE_DIR": "prod-jira-event-test-cases",
-                  "TRANSITION_PROJECTS": "SPARK,WEBEX",
-                  "TRANSITION_STATUS_TYPES": "DEFINITION,DELIVERY,IN PROGRESS,WORK STARTED,EVALUATE,INTERNAL_EARLY_ACCESS,DONE",
-                  "TRANSITION_ISSUE_TYPES": "EPIC,PORTFOLIO FEATURE",
-                  "LOG_LEVEL": "0"},
+                  "DONT_BE_VERBOSE":"true",
+                  "LOG_LEVEL": "warn",
+                  "ENABLE_BOARD_TRANSITION_NOTIFICATIONS": "true",
+                  "ENABLE_NEW_ISSUE_NOTIFICATIONS": "true",
+                  "DONT_TEST_CACHE_UPDATE_LOGIC": "true",
+                  "DONT_DUMP_INITIAL_BOARDS_CONFIG": "./tests/prod-jira-event-test-cases/preloaded-boards-config.json",
+                  "USE_PREVIOUSLY_DUMPED_BOARDS_CONFIG": "./tests/prod-jira-event-test-cases/preloaded-boards-config.json",
+                  "TRANSITION_TEST_INIT_TIMEOUT": 180000,
+                  "TEST_CASE_DIR": "./tests/prod-jira-event-test-cases"
+                  },
           "protocol": "inspector",
           "outputCapture": "std",
-          "program": "${workspaceFolder}/test-jira-event-handler.js"
+          "program": "${workspaceFolder}/tests/test-transition-notifications.js"
       },
       {
             "name": "Heroku",

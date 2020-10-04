@@ -123,17 +123,15 @@ The following commands are supported:
 
 Users can also reply to notifications. When this happens the bot will post a comment with the body of the reply.  The reply is posted by the user associated with JIRA_URL/JIRA_PW and includes information that was posted on behalf of the jira user who is mentioned in the comment.   It is not possible to mention other users in comments created by replying to the bot, nor is it possible for the users who sent them to edit them.  (A possible improvement for systems that allow this, is to have users provide an OAuth token which would allow the bot to directly post as thoses users.)
 
-## Testing and Iterative development.
+## Testing and Iterative development
 
 Not all jira systems and versions post exactly the same notification payloads, so you may need to tweek the logic in this bot to work with your system.
 
-To faciliate developing and testing the logic of converting events to notification methods, the project includes a test framework, however since the notification logic requires calling back into jira depending on the contents of the events, users must populate the test framework with their own test cases.  
+To faciliate developing and testing the logic of converting events to notification methods, the project includes a test framework, however since the notification logic requires calling back into jira depending on the contents of the events, users must populate the test framework with their own test cases.
 
-When the app encounters something unepexpected in the jira webhook payload which causes an exception, the offending payload is saved in the jira-event-test-cases directory.  Developers can use the files here as potential test cases.  
+The test cases are admiteddly under-documented, and providing that documentation never quite makes it to the top of my to-do list.  If you are interested in using this project and want to leverage the tests please open an issue which will help with my motiviation.
 
-Examine the code in [init-test-cases.js](./sample-jira-event-test-cases/init-test-cases.js) to learn how to set you your own test cases. 
-
-When modifying the jira-notifer module developers can check to ensuer that nothing broke by running the following command:      ```TEST_CASE_DIR=path_to_your_init-test-cases npm test```
+For the more impatient, xxamine the code in [init-test-cases.js](./sample-jira-event-test-cases/init-test-cases.js) may help you learn how to set you your own test cases.
 
 ## Deploy
 
@@ -141,6 +139,5 @@ The project now comes with a deploy script for deploying in an OpenShift Kuberne
 
 ## TO-DO
 
-* The current implementation requires that all jira users belong to the same email domain.  A future enhancement might support multiple domains and add code to translate jira mentions to the right email org.
-* The current implementation will let ANYONE create a space with our bot, but only users who's webex teams email address belongs to the specified email org will ever be notified.   A nice improvement might be for the bot to tell users this.
-* This bot could be enhanced to provide more "write functionality" like creating new jira tickets directly from Webex Teams.
+- The current implementation will let ANYONE create a space with our bot, but only users who's webex teams email address belongs to the specified email org will ever be notified.   A nice improvement might be for the bot to tell users this.
+- This bot could be enhanced to provide more "write functionality" like creating new jira tickets directly from Webex Teams.
