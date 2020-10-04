@@ -7,14 +7,29 @@
 // See readme to determine how to configure test via environment
 require('dotenv').config();
 fs = require('fs');
+path = require('path');
 var _ = require('lodash');
 
 
 // SET LOG_LEVEL to enable/quiet underlying app logging
 var logger = require('../logger');
 
-// Where are the jira instance specific test cases?
-const test_dir = process.env.TEST_CASE_DIR;
+// Ensure that the directory where the canned Jira Events are exists
+let test_dir;
+try {
+  test_dir = path.resolve(process.env.TEST_CASE_DIR);
+} catch {
+  console.error(`Unable to resolve TEST_CASE_DIR: ${process.env.TEST_CASE_DIR}`);
+  process.exit();
+}
+
+// Initialize the "framework" that is passed to the notification handler
+let Framework = require('./test-framework');
+// Pass minimal security check when giving out jira info in group spaces
+let frameworkConfig = {
+  restrictedToEmailDomains: 'This must be set or the group notfications will fail'
+};
+let framework = new Framework(frameworkConfig);
 
 // Helper classes for dealing with Jira Webhook payload
 const JiraConnector = require('../jira-connector');
@@ -28,26 +43,6 @@ process.env.BOARD_STORY_CACHE_TIMEOUT = 5*60000;
 // Depending on how many stories a board has, board loading can take several minutes
 let promiseTimeout = (process.env.TRANSITION_TEST_INIT_TIMEOUT) ? 
   process.env.TRANSITION_TEST_INIT_TIMEOUT : 60*1000;
-
-// Check if any of the group notifications tests are disabled
-if (process.env.ENABLE_BOARD_TRANSITION_NOTIFICATIONS === 'false') {
-  delete process.env.ENABLE_BOARD_TRANSITION_NOTIFICATIONS;
-} else {
-  // Turn on Board Transition Notifications
-  process.env.ENABLE_BOARD_TRANSITION_NOTIFICATIONS = true;
-}
-if (process.env.ENABLE_NEW_ISSUE_NOTIFICATIONS === 'false') {
-  delete process.env.ENABLE_NEW_ISSUE_NOTIFICATIONS;
-} else {
-  // Turn on New Issue Notifications by default
-  process.env.ENABLE_NEW_ISSUE_NOTIFICATIONS = true;
-}
-
-// Pass minimal security check when giving out jira info in group spaces
-let frameworkConfig = {
-  restrictedToEmailDomains: 'This must be set or the group notfications will fail'
-};
-
 
 // Create the groupNotfier class which will create a boardNotifications object
 let groupNotifier = initGroupNotifier();
@@ -66,192 +61,21 @@ myConsole.log = function(msg) {
   if (verbose) {console.log(msg);}
 }; 
 
-// May or may not need these
-// const JiraEventHandler = require("./jira-event.js");
-// const jiraEventHandler = new JiraEventHandler(jiraConnector);
-// fs = require('fs');
-
-// Initially just testing the startup
-// Not sending any events yet...
-// if (!process.env.TEST_CASE_DIR) {
-//   console.error('The environment variable TEST_CASE_DIR must be specified.');
-//   process.exit(-1);
-// }
-// const test_dir = process.env.TEST_CASE_DIR;
-
-// const JiraTestCases = require(`./${test_dir}/init-test-cases.js`);
-// const jiraTestCases = new JiraTestCases;
-
-// Create our own verion of the Framework object that supports our test cases.
-function Framework() {
-  this.bots = [];
-}
-// jiraEventHandler calls framework.debug.   We don't care about this for our tests
-Framework.prototype.debug = function (message) {
-  if ((process.env.DEBUG) && (process.env.DEBUG.toLowerCase().substring('framework'))) {
-    myConsole.log(message);
-  }
-};
-
-// Create our own verion of the bot objects that supports our test cases.
-let botIdCounter = 1;
-let roomIdCounter = 1;
-function Bot(title) {
-  this.isDirect = false;
-  this.id = `BOT_ID_${botIdCounter++}`;
-  this.room = {
-    id: `ROOM_ID_${roomIdCounter++}`,
-    title
-  };
-  this.jiraEventMessage = '';
-  this.config = {
-    boards: [],
-    newIssueNotificationConfig: []
-  };
-}
-
-let TEST_MESSAGE_ID_FOR_MESSAGE = 'Fake Message Id for a message';
-// Handle any requests for bots to message rooms by logging to console
-// // jiraEventHandler will call bot.say to send a result to a Spark user
-Bot.prototype.say = function () {
-  // say can take one or two args.   We only care about the second for our cannonical result
-  var args = Array.prototype.slice.call(arguments);
-  // determine if a format is defined in arguments
-  // first and second arguments should be string type
-  // first argument should be one of the valid formats
-  var formatDefined = (args.length > 1 && typeof args[0] === 'string' && typeof args[1] === 'string' && _.includes(['text', 'markdown', 'html'], _.toLower(args[0])));
-  // if format defined in function arguments, overide default
-  if (formatDefined) {
-    format = _.toLower(args.shift());
-  }
-  // if message is object (raw)
-  if (typeof args[0] === 'object') {
-    this.jiraEventMessage += JSON.stringify(args[0]) + '\n';
-  } else if (typeof args[0] === 'string') {
-    this.jiraEventMessage += args[0] + '\n';
-  } else {
-    return Promise.reject(new Error('Invalid function arguments'));
-  }
-  return Promise.resolve({
-    id: TEST_MESSAGE_ID_FOR_MESSAGE,
-    roomId: this.room.id,
-    markdown: this.jiraEventMessage, 
-  });
-};
-
-
-// For test cases just treat replies as a regular message from the
-Bot.prototype.reply = function (parentId, msg) {
-  return this.say(msg);
-};
-
-// For test cases just log card data in verbose mode
-Bot.prototype.sendCard = function (card) {
-  if (verbose) {
-    console.log(`Bot in space ${this.room.title} sent card:`);
-    console.log(JSON.stringify(card, null, 2));
-  }
-  return Promise.resolve({
-    messageId: TEST_MESSAGE_ID_FOR_CARD,
-    roomId: this.room.id,
-    attachments: [{
-      contentType: "application/vnd.microsoft.card.adaptive",
-      content: card
-    }] 
-  });
-};
-
-// For test cases emulate storage of bot's config 
-Bot.prototype.store = function (storageId, config) {
-  if (storageId === "groupSpaceConfig") {
-    this.config = config;
-  } else if (storageId === 'activeCardMessageId') {
-    this.activeCardMessageId = config;
-  } else if (storageId === 'lastNotifiedIssue') {
-    this.lastNotifiedIssue = config;
-  } else {
-    return Promise.reject(new Error(`bot.recall: Unexpected storageId: ${storageId}`));
-  }
-  return Promise.resolve(config);
-};
-
-let TEST_MESSAGE_ID_FOR_CARD = 'Fake Message Id for a card';
-// For test cases lets always find an actviteCardMessageId
-Bot.prototype.recall = function (storageId) {
-  if (storageId === "activeCardMessageId") {
-    if (this.activeCardMessageId) {
-      return Promise.resolve(this.activeCardMessageId);
-    } else {
-      return Promise.resolve(TEST_MESSAGE_ID_FOR_CARD);
-    }
-  } else if (storageId === "groupSpaceConfig") {
-    return Promise.resolve(this.config);
-  } else {
-    return Promise.reject(new Error(`bot.recall: Unexpected storageId: ${storageId}`));
-  }  
-};
-
-// Create our own verion of the Framework object that supports our test cases.
-function Framework() {
-  this.bots = [];
-}
-// jiraEventHandler calls framework.debug.   We don't care about this for our tests
-Framework.prototype.debug = function (message) {
-  if ((process.env.DEBUG) && (process.env.DEBUG.toLowerCase().substring('framework'))) {
-    console.log(message);
-  }
-};
+// Read in the configuration for our tests
+let conf = require(`./transition-test-config`);
 
 // Create some bots for our tests
-let bot1 = new Bot('One board by id');
-let bot2 = new Bot('Same board as first by url plus one more');
-let bot3 = new Bot('A third board plus invalid ids');
-
-// Initialize the "framework" that is passed to the notification handler
-let framework = new Framework();
-framework.bots = [bot1, bot2, bot3];
-
-// Configure the various types of notifications for the bots
-var initTestCases =[];
-if (process.env.ENABLE_BOARD_TRANSITION_NOTIFICATIONS) {
-  initTestCases.push(new InitTestCase('bot1 adds boardId 4263', bot1, '4263', 'board', 'resolve', '[Buttons and Cards] Bugs and feedback '));
-  initTestCases.push(new InitTestCase('bot1 adds filterId 34567', bot1, '34567', 'filter', 'resolve', 'JP Filter for Status Change Tests'));
-  initTestCases.push(new InitTestCase('bot2 adds boardId 4263 by web url', bot2, 'https://jira-eng-gpk2.cisco.com/jira/secure/RapidBoard.jspa?rapidView=4263', null, 'resolve', '[Buttons and Cards] Bugs and feedback '));
-  initTestCases.push(new InitTestCase('bot2 adds boardId 2885', bot2, '2885', 'board', 'resolve', 'Webex SMB Transition Review'));
-  initTestCases.push(new InitTestCase('bot2 adds filterId 34567 by url', bot2, 'https://jira-eng-gpk2.cisco.com/jira/browse/SPARK-138557?filter=34567', 'filter', 'resolve', 'JP Filter for Status Change Tests'));
-  initTestCases.push(new InitTestCase('bot3 adds boardId 4289', bot3, '4289', 'board', 'resolve', '(AX) App Experience, Shared and Foundation'));
-  initTestCases.push(new InitTestCase('bot3 adds boardId 428999', bot3, '428999', 'board', 'reject', 'Unable to find board 428999\n' +
-  'Make sure to specify the correct board/filter type and ensure permissions allow view access to all jira users.'));
-  initTestCases.push(new InitTestCase('bot3 adds board via bad jira url', bot3, 'https://jira-foo.foobar.com/jira/secure/RapidBoard.jspa?rapidView=4263', null, 'reject', 'Could not find a board or filter matching https://jira-foo.foobar.com/jira/secure/RapidBoard.jspa?rapidView=4263'));
-  initTestCases.push(new InitTestCase('bot3 adds board via bad board url', bot3, 'https://jira-eng-gpk2.cisco.com/jira/secure/SlowBoard.jspa?rapidView=4263', null, 'reject', 'Could not find a board or filter matching https://jira-eng-gpk2.cisco.com/jira/secure/SlowBoard.jspa?rapidView=4263'));
-  initTestCases.push(new InitTestCase('bot3 adds board via bad board id query param', bot3, 'https://jira-eng-gpk2.cisco.com/jira/secure/RapidBoard.jspa?rapidView=NameInsteadOfNumber', null, 'reject', 'Could not find a board or filter matching https://jira-eng-gpk2.cisco.com/jira/secure/RapidBoard.jspa?rapidView=NameInsteadOfNumber'));
-  initTestCases.push(new InitTestCase('bot3 adds filterId 34567 but says its a board', bot3, '34567', 'board', 'reject', `Unable to find board 34567\n` +
-  `Make sure to specify the correct board/filter type and ensure permissions allow view access to all jira users.`));
-  initTestCases.push(new InitTestCase('bot3 adds filter that bot jira act cant see', bot3, '35071', 'filter', 'reject', 'Unable to find filter 35071\n' +
-  'Make sure to specify the correct board/filter type and ensure permissions allow view access to all jira users.'));
-  initTestCases.push(new InitTestCase('bot3 adds filter that includes a project the jira act cant access', bot3, '35089', 'filter', 'reject', 'Unable to see issues associated with filter 35089\n' +
-  'Post a message in the [Ask JiraNotification Bot space](https://eurl.io/#Hy4f7zOjG) to get info about the accounts your Jira administrator will need to provide view access to.')); 
-}
-if (process.env.ENABLE_NEW_ISSUE_NOTIFICATIONS) {
-  initTestCases.push(new InitTestCase('bot1 adds filterId 34962 for new Issues', bot1, '34962', 'filter', 'resolve', 'JP\'s SDK Triage Filter for Jira Notifier Tests'));
-  initTestCases.push(new InitTestCase('bot1 adds filterId 29848 for new Issues', bot1, '29848', 'filter', 'resolve', 'Filter for [Buttons and Cards] Bugs and feedback '));
-  initTestCases.push(new InitTestCase('bot2 adds filterId 34962 by url for new Issues', bot2, 'https://jira-eng-gpk2.cisco.com/jira/browse/SPARK-175917?filter=34962', 'filter', 'resolve', 'JP\'s SDK Triage Filter for Jira Notifier Tests'));
-  initTestCases.push(new InitTestCase('bot3 adds a bad filter for new issues', bot3, '1234', 'filter', 'reject', 'Unable to find filter 1234\n' +
-  'Make sure to specify the correct board/filter type and ensure permissions allow view access to all jira users.'));
+let Bot = require('./test-bot');
+if (conf?.testConfig?.botsToTest?.length) {
+  conf.testConfig.botsToTest.forEach((test) => {
+    framework.bots.push(new Bot(test, verbose));
+  });  
+} else {
+  console.error('At least one botToTest must be specified in transition-test-config');
+  process.exit();
 }
 
-// Mock trigger with attachmentAction to emulate a button press to delete a board
-let deleteBoardButtonPressTrigger = {
-  attachmentAction: {
-    messageId: TEST_MESSAGE_ID_FOR_CARD,
-    inputs: {
-      requestedTask: "updateBoardConfig",
-      boardsToDelete: "4263:board,2885:board,34567:filter"
-    }
-  }
-};
-
-// Build the list of init test objects.
+// Define the class used for our initial load board config tests
 function InitTestCase(description, bot, listIdOrUrl, listType, expectedPromise, expectedTitleOrError) {
   this.description = description;
   this.bot = bot;
@@ -261,7 +85,18 @@ function InitTestCase(description, bot, listIdOrUrl, listType, expectedPromise, 
   this.expectedTitleOrError = expectedTitleOrError;
 }
 
-// Build the list of cannonical jira event test objects.
+// Configure the "initiatialization test cases" which will emulate
+// users interacting with the bot and asking it to watch filters in
+// one of our test spaces
+var initTestCases;
+if (conf?.testConfig?.addBoardsToSpacesTests?.length) {
+  initTestCases = readInitCasesFromConfig(conf.testConfig.addBoardsToSpacesTests);
+} else {
+  console.error('At least one addBoardsToSpacesTests must be specified in transition-test-config');
+  process.exit();
+}
+
+// Define the object we use to run our jira event test cases
 function TestCase(file, action, author, subject, result) {
   this.file = file;
   this.action = action;
@@ -274,13 +109,24 @@ function TestCase(file, action, author, subject, result) {
   this.numSeenErrors = 0;
 }
 
+// Configure the "notification test cases" which will emulate
+// jira-events occuring which may trigger notifications in one of
+// our "Webex spaces" that are configured to watch boards with it
+var notifyTestCases;
+if (conf?.testConfig?.firstPassTestCases?.length) {
+  notifyTestCases = readNotifyTestCasesFromConfig(conf.testConfig.firstPassTestCases);
+} else {
+  console.error('At least one firstPassTestCases must be specified in transition-test-config');
+  process.exit();
+}
 
-
-var notifyTestCases =[];
-initNotifyTestCases(notifyTestCases);
-
+// Run the tests!
+// First the init cases validate that the "test bots" properly
+// handle the button presses to add boards to watch
 runInitTestCases(initTestCases, groupNotifier)
   .then(() => {
+    // The init tests passed!
+    // If configured force a re-read of the cache to validate that works
     if (process.env.TEST_CACHE_UPDATE_LOGIC) {
       return groupNotifier.boardTransitions.updateStoriesForBoards(
         groupNotifier.boardTransitions.boardsInfo
@@ -290,19 +136,38 @@ runInitTestCases(initTestCases, groupNotifier)
     }
   })
   .then(() => {
+    // Run the first pass of tests to check if the defined jira events
+    // generate the expected notifications
     console.log('Ready to start notifying!');
     return runTests(notifyTestCases, test_dir, jira, groupNotifier);
   })
-  // Emulate a button press to delete all boards from bot2
   .then(() => {
-    console.log('Removing watched boards for one test bot.');
-    return groupNotifier.processAttachmentAction(bot2, deleteBoardButtonPressTrigger);
+    // If configured, emulate button presses to delete some of the boards
+    // from some of the bots
+    let deleteBoardButtonPressTriggers = deleteBoardButtonPresses(conf);
+    if (deleteBoardButtonPressTriggers.length) {
+      let actionPromises = [];
+      deleteBoardButtonPressTriggers.forEach((buttonPress) => {
+        console.log(`Removing watched boards from test bots: ${buttonPress.bot.room.title}.`);
+        actionPromises.push(groupNotifier.processAttachmentAction(buttonPress.bot, buttonPress.trigger));
+      });
+      return Promise.all(actionPromises);
+    } else {
+      console.log(`No delete board button presses configured.   Tests complete`);
+      process.exit();
+    }
   })
   .then(() => {
-    notifyTestCases = [];
-    initPostDeleteNotifyTestCases(notifyTestCases);
-    console.log('Running notification tests again.');
-    return runTests(notifyTestCases, test_dir, jira, groupNotifier); 
+    // Read in the second pass of test cases.  These are usually
+    // the same events as the first pass, but with fewer expected notifications
+    if (conf?.testConfig?.secondPassTestCases?.length) {
+      notifyTestCases = readNotifyTestCasesFromConfig(conf.testConfig.secondPassTestCases);
+      console.log('Running notification tests again.');
+      return runTests(notifyTestCases, test_dir, jira, groupNotifier); 
+    } else {
+      console.error('No secondPassTestCases configured. Tests complete');
+      process.exit();
+    }
   })
   // TODO add another option rerun of the tests after the cache has been updated.
   .catch(e => {
@@ -310,111 +175,72 @@ runInitTestCases(initTestCases, groupNotifier)
     process.exit(-1);
   });
 
-function initNotifyTestCases(testCases) {
-  if (process.env.ENABLE_BOARD_TRANSITION_NOTIFICATIONS) {
-  //Transition on Buttons and Cards Board 4263
-    testCases.push(new TestCase(`${test_dir}/jira_issue_updated-transition_buttons_and_cards_bug_board-manual-edit.json`,
-      'changed', 'Edel Joyce', 'status',
-      [
-        '', '', '', '', '', '',// nobody with a bot is assigned or mentioned in the description of this ticket
-        `{"markdown":"Edel Joyce transitioned a(n) Epic from Definition to Delivery:\\n* [SPARK-150410](https://jira-eng-gpk2.cisco.com/jira/browse/SPARK-150410): Adding Webex Community to help menu\\n* Components: Client: Android, Client: Desktop (Windows and MacOS), Client: iOS, Client: Web\\n* Team/PT: Webex Growth\\n\\nWhich matches the filter: [JP Filter for Status Change Tests](https://jira-eng-gpk2.cisco.com/jira/issues/?filter=34567)"}`,
-        `{"markdown":"Edel Joyce transitioned a(n) Epic from Definition to Delivery:\\n* [SPARK-150410](https://jira-eng-gpk2.cisco.com/jira/browse/SPARK-150410): Adding Webex Community to help menu\\n* Components: Client: Android, Client: Desktop (Windows and MacOS), Client: iOS, Client: Web\\n* Team/PT: Webex Growth\\n\\nWhich matches the filter: [JP Filter for Status Change Tests](https://jira-eng-gpk2.cisco.com/jira/issues/?filter=34567)"}`,
-        `{"markdown":"Edel Joyce transitioned a(n) Epic from Definition to Delivery:\\n* [SPARK-150410](https://jira-eng-gpk2.cisco.com/jira/browse/SPARK-150410): Adding Webex Community to help menu\\n   * Components: Client: Android, Client: Desktop (Windows and MacOS), Client: iOS, Client: Web\\n   * Team/PT: Webex Growth\\n\\nWhich matches the filter: [Filter for [Buttons and Cards] Bugs and feedback ](https://jira-eng-gpk2.cisco.com/jira/issues/?filter=29848)"}`,
-        `{"markdown":"Edel Joyce transitioned a(n) Epic from Definition to Delivery:\\n* [SPARK-150410](https://jira-eng-gpk2.cisco.com/jira/browse/SPARK-150410): Adding Webex Community to help menu\\n* Components: Client: Android, Client: Desktop (Windows and MacOS), Client: iOS, Client: Web\\n* Team/PT: Webex Growth\\n\\nOn the board[[Buttons and Cards] Bugs and feedback ](https://jira-eng-gpk2.cisco.com/jira/secure/RapidBoard.jspa?rapidView=4263)"}`,
-        `{"markdown":"Edel Joyce transitioned a(n) Epic from Definition to Delivery:\\n* [SPARK-150410](https://jira-eng-gpk2.cisco.com/jira/browse/SPARK-150410): Adding Webex Community to help menu\\n* Components: Client: Android, Client: Desktop (Windows and MacOS), Client: iOS, Client: Web\\n* Team/PT: Webex Growth\\n\\nOn the board[[Buttons and Cards] Bugs and feedback ](https://jira-eng-gpk2.cisco.com/jira/secure/RapidBoard.jspa?rapidView=4263)"}`
-      ]));         
+// If we didn't hit our catch block all tests passed
 
-    // Transition on JP Custom filter 34567
-    testCases.push(new TestCase(`${test_dir}/issue_updated-action_status_change-type_feature_portfolio.json`,
-      'changed', 'JP Shipherd', 'status',
-      [
-        '', // nobody with a bot is assigned or mentioned in the description of this ticket
-        `{"markdown":"JP Shipherd transitioned a(n) Portfolio Feature from WORK STARTED to INTERNAL EARLY ACCESS:\\n* [SPARK-138557](https://jira-eng-gpk2.cisco.com/jira/browse/SPARK-138557): Contact Center API\\n\\n* Team/PT: Developer Experience: API Innovations\\n\\nWhich matches the filter: [JP Filter for Status Change Tests](https://jira-eng-gpk2.cisco.com/jira/issues/?filter=34567)"}`,
-        `{"markdown":"JP Shipherd transitioned a(n) Portfolio Feature from WORK STARTED to INTERNAL EARLY ACCESS:\\n* [SPARK-138557](https://jira-eng-gpk2.cisco.com/jira/browse/SPARK-138557): Contact Center API\\n\\n* Team/PT: Developer Experience: API Innovations\\n\\nWhich matches the filter: [JP Filter for Status Change Tests](https://jira-eng-gpk2.cisco.com/jira/issues/?filter=34567)"}`
-      ]));         
-    
-    // Transition on JP Custom filter 34567
-    testCases.push(new TestCase(`${test_dir}/jira_issue_updated-action_resolved.json`,
-      'changed', 'Prema Rao', 'status',
-      [
-        '', // nobody with a bot is assigned or mentioned in the description of this ticket
-        `{"markdown":"Prema Rao transitioned a(n) Epic from Delivery to Done, Resolution:Resolved:\\n* [SPARK-137296](https://jira-eng-gpk2.cisco.com/jira/browse/SPARK-137296): Traffic Shaping for Client Upgrade\\n* Components: Service: Client Upgrade\\n\\nWhich matches the filter: [JP Filter for Status Change Tests](https://jira-eng-gpk2.cisco.com/jira/issues/?filter=34567)"}`,
-        `{"markdown":"Prema Rao transitioned a(n) Epic from Delivery to Done, Resolution:Resolved:\\n* [SPARK-137296](https://jira-eng-gpk2.cisco.com/jira/browse/SPARK-137296): Traffic Shaping for Client Upgrade\\n* Components: Service: Client Upgrade\\n\\nWhich matches the filter: [JP Filter for Status Change Tests](https://jira-eng-gpk2.cisco.com/jira/issues/?filter=34567)"}`
-      ]));         
-  }
-
-  if (process.env.ENABLE_NEW_ISSUE_NOTIFICATIONS) {
-    //New issue on the JSSDK Triage Board
-    testCases.push(new TestCase(`${test_dir}/issue_created-bug_jssdk.json`,
-      'created', 'JP', 'status',
-      [
-        `{"markdown":"JP Shipherd created a Jira Bug: **Test Bug -- feel free to ignore or close**.\\n\\nThis is a bug created to test if the JiraNotifier will post a message about this bug being created in spaces that are configured for it.\\n\\nhttps://jira-eng-gpk2.cisco.com/jira/browse/SPARK-144293"}`,
-        `{"markdown":"JP Shipherd created a Jira Bug: **Test Bug -- feel free to ignore or close**.\\n\\nThis is a bug created to test if the JiraNotifier will post a message about this bug being created in spaces that are configured for it.\\n\\nhttps://jira-eng-gpk2.cisco.com/jira/browse/SPARK-144293"}`
-      ]));         
-
-    // New issue on the B&C Triage Board
-    testCases.push(new TestCase(`${test_dir}/issue_created-bug_buttons_and_cards.json`,
-      'created', 'JP', 'status',
-      [
-        `{"markdown":"JP Shipherd created a Jira Bug: **Test of notifier.  Please ignore **.\\n\\nThis is a test bug to see if jira notifier can update triage space with  new bugs.  \\n\\nhttps://jira-eng-gpk2.cisco.com/jira/browse/SPARK-174582"}`,
-        `{"markdown":"JP Shipherd created a Jira Bug: **Test of notifier.  Please ignore **.\\n\\nThis is a test bug to see if jira notifier can update triage space with  new bugs.  \\n\\nhttps://jira-eng-gpk2.cisco.com/jira/browse/SPARK-174582"}`,
-        `{"markdown":"JP Shipherd created a Jira Bug: **Test of notifier.  Please ignore **.\\n\\nThis is a test bug to see if jira notifier can update triage space with  new bugs.  \\n\\nhttps://jira-eng-gpk2.cisco.com/jira/browse/SPARK-174582"}`
-      ]));         
-      
-  }
+/**
+ * Helper functions to read in test configurations and 
+ * configure the groupNotifier object
+ * 
+ */
+ 
+function readInitCasesFromConfig(addBoardsTestCases) {
+  let initTestCases = [];
+  addBoardsTestCases.forEach((test) => {
+    if (((test.testType === 'transitionTest') && 
+      (!process.env.SKIP_BOARD_TRANSITION_NOTIFICATIONS)) ||
+      ((test.testType === 'newIssueTest') &&
+      (!process.env.SKIP_NEW_ISSUE_NOTIFICATIONS)))
+    {
+      initTestCases.push(new InitTestCase(
+        test.testName, 
+        framework.bots[test.botIndex], 
+        test.boardOrFilterId, test.boardType,
+        test.expectedResult, 
+        test.expectedMessage));
+    }
+  }); 
+  return initTestCases;
 }
 
-function initPostDeleteNotifyTestCases(testCases) {
-  if (process.env.ENABLE_BOARD_TRANSITION_NOTIFICATIONS) {
-    // One fewer bot is now looking at boards
-    testCases.push(new TestCase(`${test_dir}/jira_issue_updated-transition_buttons_and_cards_bug_board-manual-edit.json`,
-      'changed', 'Edel Joyce', 'status',
-      [
-        '', '', '', '', '', '',// nobody with a bot is assigned or mentioned in the description of this ticket
-        `{"markdown":"Edel Joyce transitioned a(n) Epic from Definition to Delivery:\\n* [SPARK-150410](https://jira-eng-gpk2.cisco.com/jira/browse/SPARK-150410): Adding Webex Community to help menu\\n   * Components: Client: Android, Client: Desktop (Windows and MacOS), Client: iOS, Client: Web\\n   * Team/PT: Webex Growth\\n\\nWhich matches the filter: [Filter for [Buttons and Cards] Bugs and feedback ](https://jira-eng-gpk2.cisco.com/jira/issues/?filter=29848)"}`,
-        `{"markdown":"Edel Joyce transitioned a(n) Epic from Definition to Delivery:\\n* [SPARK-150410](https://jira-eng-gpk2.cisco.com/jira/browse/SPARK-150410): Adding Webex Community to help menu\\n* Components: Client: Android, Client: Desktop (Windows and MacOS), Client: iOS, Client: Web\\n* Team/PT: Webex Growth\\n\\nWhich matches the filter: [JP Filter for Status Change Tests](https://jira-eng-gpk2.cisco.com/jira/issues/?filter=34567)"}`,
-        `{"markdown":"Edel Joyce transitioned a(n) Epic from Definition to Delivery:\\n* [SPARK-150410](https://jira-eng-gpk2.cisco.com/jira/browse/SPARK-150410): Adding Webex Community to help menu\\n* Components: Client: Android, Client: Desktop (Windows and MacOS), Client: iOS, Client: Web\\n* Team/PT: Webex Growth\\n\\nOn the board[[Buttons and Cards] Bugs and feedback ](https://jira-eng-gpk2.cisco.com/jira/secure/RapidBoard.jspa?rapidView=4263)"}`
-      ]));         
-    
-    // Transition on JP Custom filter 34567
-    testCases.push(new TestCase(`${test_dir}/issue_updated-action_status_change-type_feature_portfolio.json`,
-      'changed', 'JP Shipherd', 'status',
-      [
-        '', // nobody with a bot is assigned or mentioned in the description of this ticket
-        `{"markdown":"JP Shipherd transitioned a(n) Portfolio Feature from WORK STARTED to INTERNAL EARLY ACCESS:\\n* [SPARK-138557](https://jira-eng-gpk2.cisco.com/jira/browse/SPARK-138557): Contact Center API\\n\\n* Team/PT: Developer Experience: API Innovations\\n\\nWhich matches the filter: [JP Filter for Status Change Tests](https://jira-eng-gpk2.cisco.com/jira/issues/?filter=34567)"}`
-      ]));         
-    
-    // Transition on JP Custom filter 34567
-    testCases.push(new TestCase(`${test_dir}/jira_issue_updated-action_resolved.json`,
-      'changed', 'Prema Rao', 'status',
-      [
-        '', // nobody with a bot is assigned or mentioned in the description of this ticket
-        `{"markdown":"Prema Rao transitioned a(n) Epic from Delivery to Done, Resolution:Resolved:\\n* [SPARK-137296](https://jira-eng-gpk2.cisco.com/jira/browse/SPARK-137296): Traffic Shaping for Client Upgrade\\n* Components: Service: Client Upgrade\\n\\nWhich matches the filter: [JP Filter for Status Change Tests](https://jira-eng-gpk2.cisco.com/jira/issues/?filter=34567)"}`
-      ]));         
-  }    
-  if (process.env.ENABLE_NEW_ISSUE_NOTIFICATIONS) {
-    // New issue on the JSSDK Triage Board
-    // testCases.push(new TestCase(`${test_dir}/issue_created-bug_jssdk.json`,
-    //   'created', 'JP', 'status',
-    //   [
-    //     '', // nobody with a bot is assigned or mentioned in the description of this ticket
-    //     `{"markdown":"Prema Rao transitioned a(n) Epic from Delivery to Done, Resolution:Resolved:\\n* [SPARK-137296](https://jira-eng-gpk2.cisco.com/jira/browse/SPARK-137296): Traffic Shaping for Client Upgrade\\n* Components: Service: Client Upgrade\\n\\nWhich matches the filter: [JP Filter for Status Change Tests](https://jira-eng-gpk2.cisco.com/jira/issues/?filter=34567)"}`
-    //   ]));         
-
-    // New issue on the B&C Triage Board
-    testCases.push(new TestCase(`${test_dir}/issue_created-bug_buttons_and_cards.json`,
-      'created', 'JP', 'status',
-      [
-        `{"markdown":"JP Shipherd created a Jira Bug: **Test of notifier.  Please ignore **.\\n\\nThis is a test bug to see if jira notifier can update triage space with  new bugs.  \\n\\nhttps://jira-eng-gpk2.cisco.com/jira/browse/SPARK-174582"}`,
-        `{"markdown":"JP Shipherd created a Jira Bug: **Test of notifier.  Please ignore **.\\n\\nThis is a test bug to see if jira notifier can update triage space with  new bugs.  \\n\\nhttps://jira-eng-gpk2.cisco.com/jira/browse/SPARK-174582"}`
-      ]));         
-      
-  }
+function readNotifyTestCasesFromConfig(testCasesConfig) {
+  let testCases = [];
+  testCasesConfig.forEach((test) => {
+    if (((test.testType === 'transitionTest') && 
+      (!process.env.SKIP_BOARD_TRANSITION_NOTIFICATIONS)) ||
+      ((test.testType === 'newIssueTest') &&
+      (!process.env.SKIP_NEW_ISSUE_NOTIFICATIONS)))
+    {
+      testCases.push(new TestCase(
+        `${test_dir}/${test.eventData}`,
+        test.userAction, test.user, test.userTarget,
+        test.expectedNotifications)); 
+    }
+  });
+  return testCases;
 }
 
+function initGroupNotifier() {
+  // Create the groupNotfier class which will create a boardNotifications object
+  let groupNotifier = null;
+  try {
+    // Create the object for interacting with Jira
+    var GroupNotifications = require('../group-notifier/group-notifications.js');
+    groupNotifier = new GroupNotifications(jira, logger, framework.config);
+  } catch (err) {
+    logger.error('Initialization Failure: ' + err.message);
+    process.exit(-1);
+  }
+  return groupNotifier;
+}
+
+  
+/**
+ * Functions to run the Add/Delete Board Test cases
+ * 
+ */
 async function runInitTestCases(testCases, groupNotifier) {
   if (process.env.USE_PREVIOUSLY_DUMPED_BOARDS_CONFIG) {
-    return loadPreviouslyDumpedBoardConfigs(testCases, groupNotifier);
+    return loadPreviouslyDumpedBoardConfigs(groupNotifier);
   }
 
   return Promise.all(testCases.map(test => {
@@ -481,16 +307,86 @@ async function runInitTestCases(testCases, groupNotifier) {
     });
 }
 
+function loadPreviouslyDumpedBoardConfigs(groupNotifier) {
+  // Load board Configs from previous run to speed up init
+  let groupNotifierConfigs = require(`${path.resolve(process.env.USE_PREVIOUSLY_DUMPED_BOARDS_CONFIG)}`);
+  console.log(`Using preloaded boards config from ${process.env.USE_PREVIOUSLY_DUMPED_BOARDS_CONFIG}`);
+  // Update each bot's config store for the transition notifications
+  groupNotifierConfigs.forEach((board) => {
+    let botIds = board.bots.map(bot => bot.id);
+    let configBoard = JSON.parse(JSON.stringify(board));
+    delete configBoard.stories;
+    delete configBoard.bots;
+    board.bots = [];
+    botIds.forEach((id) => {
+      let bot = _.find(framework.bots, bot => bot.id === id);
+      // replace the bot from disk with our object that includes methods:
+      board.bots.push(bot);
+      updateBotConfig(bot, configBoard)
+        .catch((e) => {
+          console.error(`Failed updating bot's config during init from previous dump: ${e.message}`);
+        });
+    });
+  });
+  groupNotifier.boardTransitions.boardsInfo = groupNotifierConfigs;
 
+  return Promise.resolve();
+}
 
-// Run the tests
+function deleteBoardButtonPresses(conf) {
+  buttonPresses = [];
+  if (conf?.testConfig?.boardDeleteTests?.length) {
+    conf.testConfig.boardDeleteTests.forEach((test) => {
+      buttonPresses.push({
+        bot: framework.bots[test.botIndex],
+        trigger: {
+          attachmentAction: {
+            messageId: framework.bots[test.botIndex].getFakeCardId(),
+            inputs: {
+              requestedTask: "updateBoardConfig",
+              boardsToDelete: test.boardsToDelete
+            }
+          }      
+        }
+      })
+    });
+  }
+  return buttonPresses;
+};
+
+function processInitResolve(resObj, test, status) {
+  resObj.testDescription = test.description;
+  resObj.testStatus = status;
+  resObj.expectedBoardTitle = test.expectedTitleOrError;
+  return Promise.resolve(resObj);
+}
+function processInitReject(resObj, test, status) {
+  resObj.testDescription = test.description;
+  resObj.testStatus = status;
+  resObj.expectedErrorMessage = test.expectedTitleOrError;
+  return Promise.resolve(resObj);
+}
+
+function updateBotConfig(bot, board) {
+  return bot.recall('groupSpaceConfig')
+    .then((config) => {
+      config.boards.push(board);
+      return bot.store('groupSpaceConfig', config);
+    });
+}
+
+/**
+ * Functions to send in the canned jira events and
+ * process the results
+ * 
+ */
 async function runTests(testCases) {
   // Loop through the test cases to and send each one to the event processor
   let expectedCallbacks = 0;
   for (var i = 0, len = testCases.length; i < len; i++) {
     test = testCases[i];
     expectedCallbacks += test.numExpectedResults;
-    var jiraEvent = JSON.parse(fs.readFileSync(test.file, "utf8"));
+    var jiraEvent = JSON.parse(fs.readFileSync(path.resolve(process.cwd(), test.file), "utf8"));
     jiraEventHandler.processJiraEvent(jiraEvent, framework, checkTestResult(framework, test, i + 1));
   }
 
@@ -648,116 +544,6 @@ function Promisedelay(t, val) {
     setTimeout(resolve.bind(null, val), t);
   });
 };
-
-// Load board Configs from previous run to speed up init
-function loadPreviouslyDumpedBoardConfigs(testCases, groupNotifier) {
-  let groupNotifierConfigs = require(process.env.USE_PREVIOUSLY_DUMPED_BOARDS_CONFIG);
-  console.log(`Using preloaded boards config from ${process.env.USE_PREVIOUSLY_DUMPED_BOARDS_CONFIG}`);
-  // Update each bot's config store for the transition notifications
-  groupNotifierConfigs.forEach((board) => {
-    let botIds = board.bots.map(bot => bot.id);
-    let configBoard = JSON.parse(JSON.stringify(board));
-    delete configBoard.stories;
-    delete configBoard.bots;
-    board.bots = [];
-    botIds.forEach((id) => {
-      let bot = _.find(framework.bots, bot => bot.id === id);
-      // replace the bot from disk with our object that includes methods:
-      board.bots.push(bot);
-      updateBotConfig(bot, configBoard)
-        .catch((e) => {
-          console.error(`Failed updating bot's config during init from previous dump: ${e.message}`);
-        });
-    });
-  });
-  groupNotifier.boardTransitions.boardsInfo = groupNotifierConfigs;
-
-  return Promise.resolve();
-}
-
-
-// Create the groupNotfier class which will create a boardNotifications object
-function initGroupNotifier() {
-  let groupNotifier = null;
-  try {
-    // Create the object for interacting with Jira
-    var GroupNotifications = require('../group-notifier/group-notifications.js');
-    groupNotifier = new GroupNotifications(jira, logger, frameworkConfig);
-  } catch (err) {
-    logger.error('Initialization Failure: ' + err.message);
-    process.exit(-1);
-  }
-  return groupNotifier;
-}
-
-function processInitResolve(resObj, test, status) {
-  resObj.testDescription = test.description;
-  resObj.testStatus = status;
-  resObj.expectedBoardTitle = test.expectedTitleOrError;
-  return Promise.resolve(resObj);
-}
-function processInitReject(resObj, test, status) {
-  resObj.testDescription = test.description;
-  resObj.testStatus = status;
-  resObj.expectedErrorMessage = test.expectedTitleOrError;
-  return Promise.resolve(resObj);
-}
-
-function updateBotConfig(bot, board) {
-  return bot.recall('groupSpaceConfig')
-    .then((config) => {
-      config.boards.push(board);
-      return bot.store('groupSpaceConfig', config);
-    });
-}
-
-// async function runTests(testCases, test_dir, jira, transitionConfig) {
-//   // Wait for any test initialization to complete...
-//   await initTests(testCases, test_dir, jira, transitionConfig);
-
-//   // Loop through the test cases to and send each one to the event processor
-//   let expectedCallbacks = 0;
-//   for (var i = 0, len = testCases.length; i < len; i++) {
-//     test = testCases[i];
-//     expectedCallbacks += test.numExpectedResults;
-//     var jiraEvent = JSON.parse(fs.readFileSync(test.file, "utf8"));
-//     jiraEventHandler.processJiraEvent(jiraEvent, framework, checkTestResult(framework, test, i + 1));
-//   }
-
-//   // Set a timer to determine when to check if we missed any of the expected callbacks
-//   let timerDuration = expectedCallbacks * 1000;  // Allow 1 seconds per callback (or use environment)
-//   if (process.env.TEST_TIMER_MULTIPLIER) {
-//     timerDuration = expectedCallbacks * parseInt(process.env.TEST_TIMER_MULTIPLIER);
-//   }
-//   console.log(`Running ${testCases.length} tests expected to generate ${expectedCallbacks} responses.`);
-//   console.log(`Set environment VERBOSE=true for more details.`);
-//   console.log(`Will analyze results in ${timerDuration / 1000} seconds...`); 
-//   setTimeout(() => {
-//     let totalErrors = 0;
-//     let totalPassed = 0;
-//     for (var i = 0, len = testCases.length; i < len; i++) {
-//       test = testCases[i];
-//       totalErrors += test.numSeenErrors;
-//       totalPassed += test.numPassed;
-//       if ((test.result.length) && (test.result.length != test.numSeenErrors)) {
-//         for (result of test.result) {
-//           console.log(`Test ${i+1}: ${test.author} ${test.action} `+ 
-//             `${test.subject}, based on file: ${test.file}, never got expected result:`);
-//           console.log(result);
-//           totalErrors += 1;
-//         } 
-//       }
-//     }
-
-//     console.log(`\nAll tests complete. ${totalPassed} tests passed.`);
-//     if (totalErrors) {
-//       console.error(`Number of errors seen: ${totalErrors}`);
-//     }
-//     process.exit();
-//   }, timerDuration);
-// }
-
-
 
 // Jira event processor will call us back with the message that a bot sent
 // Check to see if matches our expected result
