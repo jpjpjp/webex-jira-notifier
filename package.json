@@ -10,7 +10,8 @@
   "engineStrict": true,
   "scripts": {
     "start": "node server.js",
-    "test": "node test-jira-event-handler.js",
+    "test": "node ./tests/test-jira-event-handler.js",
+    "test-group": "node ./tests/test-transition-notifications.js",
     "deploy": "cd deploy; node deploy.js"
   },
   "keywords": [
