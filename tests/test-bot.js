@@ -9,18 +9,25 @@ let TEST_MESSAGE_ID_FOR_CARD = 'Fake Message Id for a card';
 // Create our own verion of the Framework's Bot object that supports our test cases.
 class Bot {
 
-  constructor(title, verbose){
-    this.isDirect = false;
+  // Group space constructor
+  constructor(titleOrUser, verbose, isDirect=false, config=null){
+    if (isDirect) {
+      this.isDirect = true;
+      this.isDirectTo = titleOrUser;
+      this.config = config;
+    } else {
+      this.isDirect = false;
+      this.config =  {
+        boards: [],
+        newIssueNotificationConfig: []
+      };
+    }
     this.id = `BOT_ID_${botIdCounter++}`;
     this.room = {
       id: `ROOM_ID_${roomIdCounter++}`,
-      title
+      title: titleOrUser
     };
     this.jiraEventMessage = '';
-    this.config = {
-      boards: [],
-      newIssueNotificationConfig: []
-    };
     this.verbose = verbose;
   }
 
@@ -98,17 +105,19 @@ class Bot {
   }
 
   // For test cases lets always find an actviteCardMessageId
-  recall(storageId) {
-    if (storageId === "activeCardMessageId") {
+  recall(key) {
+    if (key === "activeCardMessageId") {
       if (this.activeCardMessageId) {
         return Promise.resolve(this.activeCardMessageId);
       } else {
         return Promise.resolve(TEST_MESSAGE_ID_FOR_CARD);
       }
-    } else if (storageId === "groupSpaceConfig") {
+    } else if (key === "groupSpaceConfig") {
+      return Promise.resolve(this.config);
+    } else if (key === 'userConfig') {
       return Promise.resolve(this.config);
     } else {
-      return Promise.reject(new Error(`bot.recall: Unexpected storageId: ${storageId}`));
+      return Promise.reject(new Error(`bot.recall: Unexpected key: ${key}`));
     }  
   }
 

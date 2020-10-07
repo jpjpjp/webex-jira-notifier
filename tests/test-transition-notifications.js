@@ -23,8 +23,8 @@ try {
   process.exit();
 }
 
-// Initialize the "framework" that is passed to the notification handler
-let Framework = require('./test-framework');
+// Read in the small "framework" class and the TestCase constructor
+let {Framework, TestCase} = require('./test-framework');
 // Pass minimal security check when giving out jira info in group spaces
 let frameworkConfig = {
   restrictedToEmailDomains: 'This must be set or the group notfications will fail'
@@ -34,22 +34,20 @@ let framework = new Framework(frameworkConfig);
 // Helper classes for dealing with Jira Webhook payload
 const JiraConnector = require('../jira-connector');
 const jira = new JiraConnector();
+// Create the groupNotfier class which will create a boardNotifications object
+let groupNotifier = initGroupNotifier();
+// JiraEventHandler processes all events, for 1-1 and group spaces
+const JiraEventHandler = require("../jira-event.js");
+const jiraEventHandler = new JiraEventHandler(jira, groupNotifier);
 
 // boardNotifier periodically looks up and caches the keys for all stories associated
 // with a board.  This environment variable specifies the cache duration
 process.env.BOARD_STORY_CACHE_TIMEOUT = 5*60000;
-// This environment is specific to the test framework. 
+// This environment is specific to the notification test framework. 
 // Its a timeout for giving up on the initial bots loading their boards
 // Depending on how many stories a board has, board loading can take several minutes
 let promiseTimeout = (process.env.TRANSITION_TEST_INIT_TIMEOUT) ? 
   process.env.TRANSITION_TEST_INIT_TIMEOUT : 60*1000;
-
-// Create the groupNotfier class which will create a boardNotifications object
-let groupNotifier = initGroupNotifier();
-
-// JiraEventHandler processes all events, for 1-1 and group spaces
-const JiraEventHandler = require("../jira-event.js");
-const jiraEventHandler = new JiraEventHandler(jira, groupNotifier);
 
 // Set VERBOSE=true to get test logging
 var verbose = false;
@@ -57,12 +55,12 @@ if (process.env.VERBOSE) {
   verbose = true;
 }
 // Read in the configuration for our tests
-let conf = require(`./transition-test-config`);
+let {testConfig} = require(`./transition-test-config`);
 
 // Create some bots for our tests
 let Bot = require('./test-bot');
-if (conf?.testConfig?.botsToTest?.length) {
-  conf.testConfig.botsToTest.forEach((test) => {
+if (testConfig?.botsToTest?.length) {
+  testConfig.botsToTest.forEach((test) => {
     framework.bots.push(new Bot(test, verbose));
   });  
 } else {
@@ -84,32 +82,20 @@ function InitTestCase(description, bot, listIdOrUrl, listType, expectedPromise, 
 // users interacting with the bot and asking it to watch filters in
 // one of our test spaces
 var initTestCases;
-if (conf?.testConfig?.addBoardsToSpacesTests?.length) {
-  initTestCases = readInitCasesFromConfig(conf.testConfig.addBoardsToSpacesTests);
+if (testConfig?.addBoardsToSpacesTests?.length) {
+  initTestCases = readInitCasesFromConfig(testConfig.addBoardsToSpacesTests);
 } else {
   console.error('At least one addBoardsToSpacesTests must be specified in transition-test-config');
   process.exit();
 }
 
-// Define the object we use to run our jira event test cases
-function TestCase(file, action, author, subject, result) {
-  this.file = file;
-  this.action = action;
-  this.author = author;
-  this.subject = subject;
-  this.result = result;
-  this.resultsSeen = 0;
-  this.numExpectedResults = result.length;
-  this.numPassed = 0;
-  this.numSeenErrors = 0;
-}
 
 // Configure the "notification test cases" which will emulate
 // jira-events occuring which may trigger notifications in one of
 // our "Webex spaces" that are configured to watch boards with it
 var notifyTestCases;
-if (conf?.testConfig?.firstPassTestCases?.length) {
-  notifyTestCases = readNotifyTestCasesFromConfig(conf.testConfig.firstPassTestCases);
+if (testConfig?.firstPassTestCases?.length) {
+  notifyTestCases = readNotifyTestCasesFromConfig(testConfig.firstPassTestCases);
 } else {
   console.error('At least one firstPassTestCases must be specified in transition-test-config');
   process.exit();
@@ -143,7 +129,7 @@ runInitTestCases(initTestCases, groupNotifier)
   .then(() => {
     // If configured, emulate button presses to delete some of the boards
     // from some of the bots
-    let deleteBoardButtonPressTriggers = deleteBoardButtonPresses(conf);
+    let deleteBoardButtonPressTriggers = deleteBoardButtonPresses(testConfig);
     if (deleteBoardButtonPressTriggers.length) {
       let actionPromises = [];
       deleteBoardButtonPressTriggers.forEach((buttonPress) => {
@@ -159,8 +145,8 @@ runInitTestCases(initTestCases, groupNotifier)
   .then(() => {
     // Read in the second pass of test cases.  These are usually
     // the same events as the first pass, but with fewer expected notifications
-    if (conf?.testConfig?.secondPassTestCases?.length) {
-      notifyTestCases = readNotifyTestCasesFromConfig(conf.testConfig.secondPassTestCases);
+    if (testConfig?.secondPassTestCases?.length) {
+      notifyTestCases = readNotifyTestCasesFromConfig(testConfig.secondPassTestCases);
       console.log('Running notification tests again.');
       return processJiraTests.runTests(notifyTestCases, jiraEventHandler, framework); 
     } else {
@@ -332,10 +318,10 @@ function loadPreviouslyDumpedBoardConfigs(groupNotifier) {
   return Promise.resolve();
 }
 
-function deleteBoardButtonPresses(conf) {
+function deleteBoardButtonPresses(testConfig) {
   buttonPresses = [];
-  if (conf?.testConfig?.boardDeleteTests?.length) {
-    conf.testConfig.boardDeleteTests.forEach((test) => {
+  if (testConfig?.boardDeleteTests?.length) {
+    testConfig.boardDeleteTests.forEach((test) => {
       buttonPresses.push({
         bot: framework.bots[test.botIndex],
         trigger: {

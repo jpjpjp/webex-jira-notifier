@@ -3,31 +3,20 @@
 // that we get our expected results
 /*jshint esversion: 6 */  // Help out our linter
 
-// Helper classes for dealing with Jira Webhook payload
 require('dotenv').config();
+if (!process.env.TEST_CASE_DIR) {
+  console.error('The environment variable TEST_CASE_DIR must be specified.');
+  process.exit(-1);
+}
+
+// Load in the jira modules that we are testing
+const test_dir = process.env.TEST_CASE_DIR;
 const JiraConnector = require('../jira-connector');
 const jiraConnector = new JiraConnector();
 const JiraEventHandler = require("../jira-event.js");
 const jiraEventHandler = new JiraEventHandler(jiraConnector);
 fs = require('fs');
 
-if (!process.env.TEST_CASE_DIR) {
-  console.error('The environment variable TEST_CASE_DIR must be specified.');
-  process.exit(-1);
-}
-const test_dir = process.env.TEST_CASE_DIR;
-
-const JiraTestCases = require(`../${test_dir}/init-test-cases.js`);
-const jiraTestCases = new JiraTestCases;
-
-// Build the list of "bots" that we want our test suite to run against
-// The current set assumes all users work for ciso
-let Framework = require('./test-framework');
-framework = new Framework();
-jiraTestCases.initBotUsers(framework, test_dir);
-
-var testCases = [];
-jiraTestCases.initTestCases(testCases, test_dir, jiraConnector.getJiraUrl());
 
 // Set VERBOSE=true to get test logging
 var verbose = false;
@@ -35,20 +24,52 @@ if (process.env.VERBOSE) {
   verbose = true;
 }
 
+// Read in our pretend "Framework", and our TestCase object
+let {Framework, TestCase} = require('./test-framework');
+framework = new Framework();
+
+// Read in the configuration for our tests
+let {testConfig} = require(`./user-notification-test-config`);
+
+// Create some "bots: for our tests
+let Bot = require('./test-bot');
+if (testConfig?.botsUnderTest?.length) {
+  testConfig.botsUnderTest.forEach((test) => {
+    framework.bots.push(new Bot(test.email, verbose, true /*isDirect*/, test.config));
+  });  
+} else {
+  console.error('At least one botToTest must be specified in transition-test-config');
+  process.exit();
+}
+
+// Configure the "notification test cases" which will emulate
+// jira-events occuring which may trigger notifications in one of
+// our "Webex spaces" that are configured to watch boards with it
+var testCases;
+if (testConfig?.testCases?.length) {
+  testCases = readNotifyTestCasesFromConfig(testConfig.testCases);
+} else {
+  console.error('At least one firstPassTestCases must be specified in transition-test-config');
+  process.exit();
+}
+
+
 // Finally, load and initialize the class that will run each jira event based test
 let ProcessJiraTestCases = require('./process-jira-test-cases');
 let processJiraTests = new ProcessJiraTestCases(verbose);
 processJiraTests.runTests(testCases, jiraEventHandler, framework); 
 
 
-// // This no longer works because it depends on each test completing before the next one starts
-// // The new processJiraEvent does not complete the call to bot.say before the next test starts
-// let expectedCallbacks = 0;
-// for (var i = 0, len = testCases.length; i < len; i++) {
-//   test = testCases[i];
-//   expectedCallbacks += test.numExpectedResults;
-//   //var jiraEvent = require(test.file);
-//   var jiraEvent = JSON.parse(fs.readFileSync(`${test.file}`, "utf8"));
-//   jiraEventHandler.processJiraEvent(jiraEvent, framework, checkTestResult(framework, test, i + 1));
-// }
+// helper to build test cases from config
+function readNotifyTestCasesFromConfig(testCasesConfig) {
+  let testCases = [];
+  testCasesConfig.forEach((test) => {
+      testCases.push(new TestCase(
+        `${test_dir}/${test.eventData}`,
+        test.userAction, test.user, test.userTarget,
+        test.expectedNotifications)); 
+  });
+  return testCases;
+}
+
 
