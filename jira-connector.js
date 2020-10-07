@@ -245,8 +245,22 @@ class JiraConnector {
           }
         }
         return when(userObj);
+      })
+      .catch((e) => {
+        if (process.env.NO_JIRA_CONNECTION_TEST_DOMAIN) {
+          // When testing without a jira connection build a fake
+          // user object with the specified email domain if lookup failed
+          return when({
+            emailAddress: `${user}@${process.env.NO_JIRA_CONNECTION_TEST_DOMAIN}`,
+            displayName: user,
+            name: user,
+            key: user
+          });
+        }
+        // else pass exceptions on to caller
+        return when.reject(e);
       });
-    // pass exceptions on to caller
+    
   }
 
   /** 
@@ -310,6 +324,16 @@ class JiraConnector {
           }
           return when(watcherInfo);
         }).catch(e => {
+          if (process.env.NO_JIRA_CONNECTION_TEST_DOMAIN) {
+            // When testing without a jira connection build a fake
+            // watcher object with no watchers
+            return when({
+                self: watcherUrl,
+                isWatching: false,
+                watchCount: 0,
+                watchers: []
+              });
+          }
           if (e.statusCode === 403) {
             if (-1 === this.jiraDisallowedProjects.indexOf(project)) {
             // Temporary so I see this in the logs
