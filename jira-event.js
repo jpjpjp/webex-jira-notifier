@@ -128,7 +128,6 @@ function processIssueEvent(jiraEvent, framework, jira, groupSpaceConfig, cb) {
   } catch (e) {
     logger.error(`processIssueEvent() caught error: ${e.message}`);
     createTestCase(e, jiraEvent, framework, 'process-issue-error');
-    if (cb) {return (cb(e));}
   }
 };
 
@@ -151,7 +150,7 @@ function generateMsgElements(jiraEvent, jira, toNotifyList = null) {
     (issueEventWithComment.test(jiraEvent.issue_event_type_name))) {
       // Configure notifylist and msgElements with the comment body
       if (toNotifyList) {
-        toNotifyList = getAllMentions(jiraEvent.comment.body);
+        addMentionsToNotifyList(jiraEvent.comment.body, toNotifyList);
       }
       msgElements.subject = "comment";
       msgElements.action = (jiraEvent.issue_event_type_name === 'issue_commented') ?
@@ -160,7 +159,7 @@ function generateMsgElements(jiraEvent, jira, toNotifyList = null) {
     } else {
       // Configure notifylist and msgElements with the issue summary
       if (toNotifyList) {
-        toNotifyList = getAllMentions(issue.fields.description);
+        addMentionsToNotifyList(issue.fields.description, toNotifyList);
       }
       msgElements.subject = "issue";
       if (jiraEvent.webhookEvent === 'jira:issue_deleted') {
@@ -235,7 +234,8 @@ function processCommentEvent(jiraEvent, framework, jira, cb) {
     let issuePromise = jira.lookupIssueFromCommentEvent(jiraEvent);
 
     // While waiting for that, scan comment for mentions...
-    let toNotifyList = getAllMentions(jiraEvent.comment.body);
+    let toNotifyList = [];
+    addMentionsToNotifyList(jiraEvent.comment.body, toNotifyList);
     // And start building the Bot notification message elements
     msgElements = {
       author: jiraEvent.comment.author.displayName,
@@ -279,7 +279,6 @@ function processCommentEvent(jiraEvent, framework, jira, cb) {
   } catch (e) {
     logger.error(`processCommentEvent(): caught error: ${e.message}`);
     createTestCase(e, jiraEvent, framework, 'process-comment-error');
-    if (cb) {return (cb(e));}
   }
 };
 
@@ -367,7 +366,6 @@ function notifyBotUsers(framework, recipientType, msgElements, emails, jira, cb)
     } else {
       logger.verbose('No bot found for potential recipient:' + email);
       // Test framework wants to know if a user who was mentioned or assigned does NOT get a message
-      if (cb) {return (cb(null, null));}
     }
   });
 }
@@ -533,17 +531,16 @@ function convertNewlines(text) {
 }
 
 // helper function to build a list of all the mentioned users in a description or comment
-function getAllMentions(str) {
+function addMentionsToNotifyList(str, toNotify) {
   if (!str) {
     return [];
   }
   let mentionsRegEx = /\[~(\w+)\]/g;
-  let mentions = [];
+  //let mentions = [];
   // TODO -- update this to populate with full emails
   str.replace(mentionsRegEx, function (match, username) {
-    mentions.push(username);
+    toNotify.push(username);
   });
-  return mentions;
 }
 
 
