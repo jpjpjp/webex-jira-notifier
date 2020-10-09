@@ -222,7 +222,7 @@ framework.on('spawn', function (bot, id, addedById) {
     }
     // Check if this existing user needs to see a new functionality message
     // Usually this is commented out but I revisit it from time to time
-    // bot.recall('newFunctionalityMsg2').then((val) => {
+    // bot.recall('newFunctionalityMsg3').then((val) => {
     //   logger.info(`For ${bot.isDirectTo} got newFunctionalityMsg2 == ${val}`);
     // }).catch(() => {
     //   // This user hasn't gotten the new functionality message yet
@@ -744,21 +744,16 @@ function tryToInitAdminBot(bot, framework) {
 // about new functionality changes.  It is generally commented out
 // until we decide its needed.
 // function sayNewFunctionalityMessage(bot) {
-//   bot.say('Not sure if you noticed, but I haven\'t been doing a good job lately of notifying you ' +
-//     'about all the jira issues you aren\'t explicitly mentioned in. ' +
-//     'I\'ve recently been redeployed in a network configuration that should ' +
-//     'give me better access to info about watchers and assignees too. ' +
-//     'Remember you can always type **help** to learn how to change the '+
-//     'things I notify you about.\n\n' +
-//     'I\'ve also learned a new trick.  If you reply to one of my notifications, I will post ' +
-//     'the content of that message as a new comment on that jira issue on your behalf.  Get more done in Teams!\n\n' +
-//     '\n\nI don\'t have access to every project in jira, so if you find this isn\'t working for you, please ' +   
-//     'post a message in the [Ask JiraNotification Bot space](https://eurl.io/#Hy4f7zOjG). That way we can ' +
-//     'work with the project admin to add me to the project.\n\n' +
-//     'Finally, if you find me useful, consider telling your teammates about me and help them ' +
-//     'get more done in Teams too.\n\n'
-//   );
-//   bot.store('newFunctionalityMsg2', true);
+//   bot.say('If you find your personal jira notifications in this 1-1 space ' +
+//     'with me helpful, your entire team might find my new Transition and ' +
+//     'New Issues for Group Spaces functionality useful too.\n\n' +
+//     'Just add me to a group space, where ' +
+//     'you can configure me to watch jira boards and filters so that I can ' +
+//     'provide notifications when new issues are created, or when the status ' +
+//     'changes on existing issues that match the configured filter criteria.\n\n' +
+//     'Stay on top of your team\'s work by adding me to spaces where bug triage, ' +
+//     'scrum work, or feature transition progress is being tracked!');
+//   bot.store('newFunctionalityMsg3', true);
 // }
 
 
