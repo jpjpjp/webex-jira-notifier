@@ -1,0 +1,45 @@
+{
+  "type": "Action.ShowCard",
+  "title": "Remove Board(s) from Watch List",
+  "card": {
+    "type": "AdaptiveCard",
+    "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+    "body": [
+      {
+        "type": "Container",
+        "items": [
+          {
+            "type": "TextBlock",
+            "text": "Which board(s) would you like to stop watching here?"
+          },
+          {
+            "type": "Input.ChoiceSet",
+            "id": "boardsToDelete",
+            "isMultiSelect": true,
+            "choices": [
+              {
+                  "$data": "${items}",
+                  "title": "${choice}",
+                  "value": "${value}"
+              }
+          ]
+          },
+          {
+            "type": "ActionSet",
+            "actions": [
+              {
+                "type": "Action.Submit",
+                "title": "Stop notifying for these boards!",
+                "id": "deleteBoards",
+                "style": "destructive",
+                "data": {
+                  "requestedTask": "updateBoardConfig"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}    

@@ -1,0 +1,31 @@
+{
+    "type": "AdaptiveCard",
+    "version": "1.2",
+    "body": [
+      {
+        "type": "TextBlock",
+        "text": "Jira Notifier For Group Spaces",
+        "size": "medium",
+        "horizontalAlignment": "center",
+        "weight": "bolder"
+      },
+      {
+        "type": "TextBlock",
+        "text": "I can provide notifications to group spaces about stories assoicated with a board or filter.   I will send a notification here when new stories are created that match the filter criteria and when the status changes for any issues on the watched boards.",
+        "wrap": true
+      },
+      {
+        "type": "TextBlock",
+        "text": "I am connected to ",
+        "wrap": true
+      },
+      {
+        "type": "TextBlock",
+        "text": "Placeholder",
+        "wrap": true
+      }
+    ],
+    "actions": [
+    ],
+    "$schema": "http://adaptivecards.io/schemas/adaptive-card.json"
+}

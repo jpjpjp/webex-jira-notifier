@@ -5,7 +5,7 @@
 /*jshint esversion: 6 */  // Help out our linter
 
 // When running locally read environment variables from a .env file
-require('dotenv').config();
+//require('dotenv').config();
 const when = require('when');
 const request = require('request-promise');
 const logger = require('./logger');
@@ -19,7 +19,6 @@ class JiraConnector {
       // Configure Access to Jira to find watcher and other info
       this.request = null;
       this.jira_url = '';
-      this.jira_lookup_user_api = '';
       this.proxy_url = '';
       this.jira_url_regexp = null;
       this.jiraReqOpts = {
@@ -54,20 +53,67 @@ class JiraConnector {
         this.jiraAllowedProjects = [];
         this.jiraDisallowedProjects = [];
         if (process.env.JIRA_PROJECTS) {
-          this.jiraAllowedProjects = process.env.JIRA_PROJECTS.split(',');
+          this.jiraAllowedProjects = process.env.JIRA_PROJECTS.split(/,\s*/);
         }
 
         // Check if our environment overrode the lookup by username path
         if (process.env.JIRA_LOOKUP_USER_API) {
-          this.jira_lookup_user_api = JIRA_LOOKUP_USER_API;
+          this.jiraLookupUserApi = process.env.JIRA_LOOKUP_USER_API;
         } else {
-          this.jira_lookup_user_api = `${this.jira_url}/rest/api/2/user`;
+          this.jiraLookupUserApi = `${this.jira_url}/rest/api/2/user`;
         }
+
+        // Check if our environment overrode the default endpoint to get 
+        // the list of projects our user can access
+        if (process.env.JIRA_AVAILABLE_PROJECTS_URL) {
+          this.jiraLookupMyProjectsApi = process.env.JIRA_AVAILABLE_PROJECTS_URL;
+        } else {
+          this.jiraLookupMyProjectsApi = `${this.jira_url}/rest/api/2/issue/createmeta`;
+        }
+
         // Check if our environment overrode the lookup by username path
         if (process.env.JIRA_LOOKUP_ISSUE_API) {
-          this.jira_lookup_issue_api = JIRA_LOOKUP_ISSUE_API;
+          this.jiraLookupIssueApi = process.env.JIRA_LOOKUP_ISSUE_API;
         } else {
-          this.jira_lookup_issue_api = `${this.jira_url}/rest/api/2/search`;
+          this.jiraLookupIssueApi = `${this.jira_url}/rest/api/2/search`;
+        }
+
+        // Check if our environment overrode the lookup board info URL
+        if (process.env.JIRA_LOOKUP_FILTER_API) {
+          this.jiraLookupFilterApi = process.env.JIRA_LOOKUP_FILTER_API;
+        } else {
+          this.jiraLookupFilterApi = `${this.jira_url}/rest/api/2/filter`;
+        }        
+
+        // Set a regular expression to validate our expectation of a board URL
+        // There seem to be several different ways to get to this so we'll try
+        // anything that ends with a query param called "filter"
+        // TODO override with environment variable
+        this.filterUrlRegExp = new RegExp(/^.*\?filter=\d+$/);
+        
+        // Check if our environment overrode the lookup filter info URL
+        if (process.env.JIRA_LOOKUP_BOARD_API) {
+          this.jiraLookupBoardApi = process.env.JIRA_LOOKUP_BOARD_API;
+        } else {
+          this.jiraLookupBoardApi = `${this.jira_url}/rest/agile/1.0/board`;
+        }
+
+        // Set (or use an environment supplied) pattern for board's web URLs
+        if (process.env.JIRA_BOARD_WEB_URL_PATTERN) {
+          this.boardViewUrlPattern= JIRA_BOARD_WEB_URL_PATTERN;
+        } else {
+          this.boardViewUrlPattern = `${this.jira_url}/secure/RapidBoard.jspa?rapidView=`;
+        }
+        // Set a regular expression to validate our expectation of a board URL
+        // TODO override with environment variable
+        this.boardUrlRegExp = new RegExp(/^.*RapidBoard\.jspa\?rapidView=\d+$/);
+
+        // Check if our bot is configured to send transition notifications only for
+        // issues that belong to certain boards
+        this.transitionBoards = [];
+        this.transitionStories = [];
+        if (process.env.JIRA_TRANSITION_BOARDS) {
+          this.jiraTransitionBoards = process.env.JIRA_TRANSITION_BOARDS.split(/,\s*/);
         }
 
         // Build an in-memory cache of jira users as we look them up
@@ -81,7 +127,7 @@ class JiraConnector {
       throw (err);
     }
   }
-
+  
   /**
    * Accessor for main jira url
    *
@@ -129,6 +175,16 @@ class JiraConnector {
   }
 
   /**
+   * Accessor for list of project names associated
+   * with failed watcher lookup requests
+   *
+   * @function getDisallowedProjects
+   */
+  getDisallowedProjects() {
+    return this.jiraDisallowedProjects;
+  } 
+
+  /**
    * Convert url to use proxy if configured
    *
    * @function convertForProxy
@@ -145,21 +201,36 @@ class JiraConnector {
    * Lookup user to see if they have a jira account
    *
    * @function lookupUser
+   * @param {object} userOrEmail - email or username to lookup
+   * @returns {Promise.<user>} - a single jira user object
+   */
+  lookupUser(userOrEmail) {
+    let user = userOrEmail.substring(0, userOrEmail.indexOf('@')) ? userOrEmail.substring(0, userOrEmail.indexOf('@')) : userOrEmail
+    let url = `${this.jiraLookupUserApi}?username=${user}`;
+    // Use a proxy server if configured
+    logger.verbose(`lookupUser: Fetching info on jira user: ${user}`);
+    return request(this.convertForProxy(url), this.jiraReqOpts)
+  }
+
+  /**
+   * From a username try to get the user object which will
+   * contain an email, which a notifier bot needs to send
+   * a notification.
+   * This method includes an optimization to cache previously
+   * lookup up users.
+   *
+   * @function getUserObjectFromUsername
    * @param {object} user - email or username to lookup
    * @returns {Promise.<user>} - a single jira user object
    */
-  lookupUser(user) {
+  getUserObjectFromUsername(user) {
     // Check our local cache first
     let userObj = this.jiraUserCache.find((u) => (user === u.name));
     if (userObj) {
       logger.verbose(`lookupUser: Found cached info on jira user: ${user}`);
       return when(userObj);
     }
-
-    let url = `${this.jira_lookup_user_api}?username=${user}`;
-    // Use a proxy server if configured
-    logger.verbose(`lookupUser: Fetching info on jira user: ${user}`);
-    return request(this.convertForProxy(url), this.jiraReqOpts)
+    return this.lookupUser(user)
       .then((userObj) => {
         if ((userObj.length)) {
           return when.reject(new Error(`User search for ${user} at ${url} ` +
@@ -174,25 +245,48 @@ class JiraConnector {
           }
         }
         return when(userObj);
-      }).catch((e) => {
-      // We are getting a lot of 404s, need to debug why
-      // In the meantime, try to guess at users where we get 404s
-        if ((e.statusCode === 404) && (process.env.DEFAULT_DOMAIN)) {
-          logger.warn(`lookupUser() failed: "${e.message}".  ` +
-            `Guessing user's email address by adding ${process.env.DEFAULT_DOMAIN}.`);
-          let user = e.options.uri.split('=')[1];
-          let userObj = {
-            emailAddress: `${user}@${process.env.DEFAULT_DOMAIN}`,
+      })
+      .catch((e) => {
+        if (process.env.NO_JIRA_CONNECTION_TEST_DOMAIN) {
+          // When testing without a jira connection build a fake
+          // user object with the specified email domain if lookup failed
+          return when({
+            emailAddress: `${user}@${process.env.NO_JIRA_CONNECTION_TEST_DOMAIN}`,
             displayName: user,
             name: user,
             key: user
-          };
-          return when(userObj);
-        } else {
-          return when.reject(e);
+          });
         }
+        // else pass exceptions on to caller
+        return when.reject(e);
       });
-    // pass exceptions on to caller
+    
+  }
+
+  /** 
+   * Lookup the projects our jira user has access to
+   * 
+   * @function lookupAvailableProjects
+   * @return {Promise.array} -- if succesfull a list of project objects
+   */
+  async lookupAvailableProjects() {
+    let url = this.jiraLookupMyProjectsApi;
+    return request(this.convertForProxy(url), this.jiraReqOpts)
+    .then((resp) => {
+      if (typeof resp?.projects !== 'object') {
+        return Promise.reject(new Error(`jiraConnector.lookupWatcherInfoFromIssue did not get expected response object`));
+      }
+      let projects = [];
+      resp.projects.forEach(project => {
+        projects.push({
+          id: project.id,
+          self: project.self,
+          key: project.key,
+          name: project.name
+        });
+      });
+      return when(projects);
+    });
   }
 
   /**
@@ -230,10 +324,20 @@ class JiraConnector {
           }
           return when(watcherInfo);
         }).catch(e => {
+          if (process.env.NO_JIRA_CONNECTION_TEST_DOMAIN) {
+            // When testing without a jira connection build a fake
+            // watcher object with no watchers
+            return when({
+                self: watcherUrl,
+                isWatching: false,
+                watchCount: 0,
+                watchers: []
+              });
+          }
           if (e.statusCode === 403) {
             if (-1 === this.jiraDisallowedProjects.indexOf(project)) {
             // Temporary so I see this in the logs
-              logger.error(`Failed watcher info for project "${issue.fields.project.key}` +
+              logger.warn(`Failed getting watcher info for project "${issue.fields.project.key}` +
               ` adding it to the disallowed list.`);
               this.jiraDisallowedProjects.push(project);
             }
@@ -275,7 +379,7 @@ class JiraConnector {
     let options = JSON.parse(JSON.stringify(this.getDefaultPostOptions()));
     options.body = {"jql": ""};
     options.body.jql = 'key in (' + keys.map(x => '\"' + x + '\"').join(',') + ')';
-    return request.post(this.convertForProxy(this.jira_lookup_issue_api), options)
+    return request.post(this.convertForProxy(this.jiraLookupIssueApi), options)
       .then(resp => {
         if (!resp.hasOwnProperty('issues')) {
           reject(new Error('Did not get expected response from Jira watcher lookup. ' +
@@ -356,6 +460,238 @@ class JiraConnector {
       return bot.reply(trigger.message, errMsg);
     });
   }
+
+  /**
+   * Lookup a jira list by specified type
+   * Currently "board" and "filter" are supported
+   * 
+   * @function lookupListByIdAndType
+   * @param {string} listID - id of a Jira list
+   * @param {string} listType - a supported jira list type, ie: "board", "filter"
+   * @return {<Promise>} - if resolved, the jira object for the list
+   */
+  lookupListByIdAndType(listId, listType) {
+    let listPromise;
+    if (listType === 'board') {
+      listPromise = this.lookupBoardById(listId);
+    } else if (listType === 'filter') {
+      listPromise = this.lookupFilterById(listId);
+    } else {
+      let msg = `lookupListByIdAndType failed with an unknown list type "${listType}"`;
+      logger.info(msg);
+      return Promise.reject(new Error(msg));
+    }
+    return listPromise;
+  }
+
+  /**
+   * Lookup a jira board by ID
+   * 
+   * @function lookupBoardById
+   * @param {string} boardID - id of a Jira board
+   * @return {<Promise>} - if resolved, the jira object for the board
+   */
+  lookupBoardById(boardId) {
+    let boardUrl = `${this.jiraLookupBoardApi}/${boardId}`;
+    let boardInfo;
+    return request.get(this.convertForProxy(boardUrl), this.jiraReqOpts)
+      .then(board => {
+        boardInfo = board;
+        logger.debug(`Found info for boardId: ${boardInfo.id}, name: ${boardInfo.name}, fetching filter info..`);
+        return this.lookupBoardConfiguration(boardInfo);
+      })
+      .then((boardConfig) => this.lookupFilterById(boardConfig.filter.id))
+      .then((filter) => {
+        logger.debug(`Found config and filter for boardId: ${boardInfo.id}, creating a consolidated object`);
+        // Jira's native board object does not return its viewUrl like it does for filter
+        boardInfo.viewUrl = this.viewUrlFromBoardId(boardId);
+        boardInfo.type = 'board';
+        boardInfo.filter = {
+          id: filter.id,
+          name: filter.name
+        };
+        boardInfo.searchUrl = filter.searchUrl;
+        return boardInfo;
+      })
+      .catch(e => {
+        logger.info(`lookupBoardById failed lookup for boardID:${boardId}: ${e.message}`);
+        return Promise.reject(e);
+      });
+  }
+
+  /**
+   * Lookup a jira boards configuration
+   * 
+   * @function lookupBoardConfiguration
+   * @param {string} board - a Jira board object
+   * @return {<Promise>} - if resolved, the jira configuration object for the board
+   */
+  lookupBoardConfiguration(board) {
+    let configUrl = `${board.self}/configuration`;
+    return request.get(this.convertForProxy(configUrl), this.jiraReqOpts);
+  } 
+  
+
+  /**
+   * Lookup a jira filter by ID
+   * 
+   * @function lookupFilterById
+   * @param {string} filterID - id of a Jira filter
+   * @return {<Promise>} - if resolved, the jira object for the filter
+   */
+  lookupFilterById(filterId) {
+    let filterUrl = `${this.jiraLookupFilterApi}/${filterId}`;
+    return request.get(this.convertForProxy(filterUrl), this.jiraReqOpts)
+      .then(filterInfo => {
+        logger.info(`Found info for filterId: ${filterInfo.id}, name: ${filterInfo.name}`);
+        filterInfo.type = 'filter';
+        // For some reason board.id is a number and filter.id is a string
+        // Lets convert here to be consistent
+        // TODO -- how hard would it be to go the other way?
+        filterInfo.id = parseInt(filterInfo.id);
+        return filterInfo;
+      })
+      .catch(e => {
+        logger.info(`lookupFilterById failed lookup for filter ID:${filterId}: ${e.message}`);
+        return Promise.reject(e);
+      });
+  }
+
+  /**
+   * Build a viewUrl from a board ID based on expected patterns
+   *
+   * @function viewUrlFromBoardId
+   * @param {integer} boardId - id of board
+   * @return {string} - web url of Jira Board that user can click on
+   */
+  viewUrlFromBoardId(boardId) {
+    return `${this.boardViewUrlPattern}${boardId}`;
+  }
+
+  /**
+   * Extract the issues List ID from a jira web URL
+   * An issues List ID could be a jira board, a filter or some other
+   * type in the future
+   * 
+   * This function will also resolve if it is passed just an ID 
+   * (digit string) and the type
+   *
+   * @function getBoardOrFilterObjFromIdOrUrl
+   * @param {string} issuesListUrl - web url of Jira Board to lookup
+   * @param {string} issuesLisType - optional, type of list (ie: board, filter)
+   * @return {<Promise>{Integer}} - if resolved, an object with the list id and type
+   */
+  getBoardOrFilterObjFromIdOrUrl(issuesListUrl, issuesListType=null) {
+    let listId;
+    let listIdObj = {};
+    // Check if this is already a listId
+    if (listId = parseInt(issuesListUrl)) {
+      if ((issuesListType === 'board') || (issuesListType == 'filter')) {
+        listIdObj.id = listId;
+        listIdObj.type = issuesListType;
+        return when(listIdObj);
+      } else {
+        return when.reject(new Error(`getBoardOrFilterObjFromIdOrUrl: ID was supplied without specifying a known listId type`));
+      }
+    }
+    // Make sure this URL matches our configured JIRA
+    if (!issuesListUrl.startsWith(this.jira_url)) {
+      return when.reject(new Error(`getBoardOrFilterObjFromIdOrUrl: List URL does not match jira this bot is configured to talk to`));
+    }
+    // Check if this URL matches one of our known types
+    if (this.boardUrlRegExp.test(issuesListUrl)) {
+      listIdObj.type = 'board';
+    } else if (this.filterUrlRegExp.test(issuesListUrl)) { 
+      listIdObj.type = 'filter';
+    } else {
+      // Cannot find known list type from URL
+      return when.reject(new Error(`getBoardOrFilterObjFromIdOrUrl: List URL does include a know list lookup pattern`));
+    }
+    // Extract the list ID from the URL
+    let listIdString = issuesListUrl.slice(issuesListUrl.lastIndexOf('=')+1);
+    if (listId = parseInt(listIdString)) {
+      listIdObj.id = listId;
+      return when(listIdObj);
+    }
+    return when.reject(new Error(`getBoardOrFilterObjFromIdOrUrl: listId in URL does no appear to be a number as expected`));
+  }
+  /**
+   * Lookup a jira board by web URL
+   * 
+   * @function lookupBoardByUrl
+   * @param {string} boardUrl - url of Jira Board to lookup
+   * @return {<Promise>{object}} - if resolved, a jira board object
+   */
+  lookupBoardByUrl(boardUrl) {
+    // Make sure this URL matches our configured JIRA
+    if (!boardUrl.startsWith(this.jira_url)) {
+      return Promise.reject(new Error(`lookupBoardByUrl: Board URL does not match jira this bot is configured to talk to`));
+    }
+    if (!this.boardUrlRegExp.test(boardUrl)) {
+      return Promise.reject(new Error(`lookupBoardByUrl: Board URL does include expected lookup pattern`));
+    }
+    let boardId = boardUrl.slice(boardUrl.lastIndexOf('=')+1);
+    return this.lookupBoardById(boardId);
+  }
+
+  /**
+   * Add a list of issue keys to a list object
+   * Currently supported types are "board" and "filter"
+   * 
+   * @function lookupAndStoreListIssues
+   * @param {object} list - a jira board or filter object
+   * @return {<Promise>} - if resolved, list object will have a list of issue objects
+   */
+  lookupAndStoreListIssues(list) {
+    let issuesUrl;
+    if (list.type === 'board') {
+      issuesUrl = `${list.self}/issue`;
+    } else if (list.type === 'filter') {
+      issuesUrl = list.searchUrl;
+    } else {
+      let msg = `lookupAndStoreListIssues: Could not lookup issues for unknown list type ${list.type}`;
+      logger.error(msg);
+      return Promise.reject(new Error(msg));
+    }
+    return this.getStoriesFromUrl(issuesUrl)
+      .then((stories) => {
+        list.stories = stories.map(s => s.key);
+        logger.info(`Got all ${list.stories.length} issues for ${list.type} Id:${list.id}, name: ${list.name}`);
+        return(list);
+      });
+  }
+
+  /**
+   * 
+   * Recursively fetch all the stories for a given board
+   * @private
+   * @function getStoriesFromUrl
+   * @param {string} url - url to get stories from
+   * @param {Object} options - optional request options 
+   * @param {Array} stories - stories collected so far
+   * @returns {Promise.Array} - returns array with user stories
+   */
+  getStoriesFromUrl(url, options=null, stories=null) {
+    if (!options) {
+      options = JSON.parse(JSON.stringify(this.jiraReqOpts));
+    }
+    return request.get(this.convertForProxy(url), options)
+      .then(issuesListObj => {
+        if (!stories) {
+          stories = [];
+        }
+        if (issuesListObj.total) {
+          stories = stories.concat(issuesListObj.issues);
+        }
+        if (issuesListObj.issues.length === issuesListObj.maxResults) {
+          options.qs = {startAt: stories.length};
+          logger.debug(`Fetching eligible transtion stories from ${url}/?startAt=${stories.length}`);
+          return this.getStoriesFromUrl(url, options, stories);
+        }
+        return stories;
+      });
+  }
+
 
 }
 

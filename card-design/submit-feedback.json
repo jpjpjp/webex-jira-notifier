@@ -1,0 +1,38 @@
+{
+  "type": "Action.ShowCard",
+  "title": "Questions and Feature Requests",
+  "card": {
+    "type": "AdaptiveCard",
+    "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+    "body": [
+      {
+        "type": "Container",
+        "items": [
+          {
+            "type": "TextBlock",
+            "text": "If you are having trouble with this bot or would like to see additional functionality or features, please provide your feedback below.",
+            "wrap": true
+          },
+          {
+            "type": "Input.Text",
+            "id": "feedback",
+            "isMultiline": true,
+            "placeholder": "Enter your feedback..."
+          },
+          {
+            "type": "ActionSet",
+            "actions": [
+              {
+                "type": "Action.Submit",
+                "title": "Send Feedback",
+                "data": {
+                  "action": "feedback"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}    

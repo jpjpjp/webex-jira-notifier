@@ -1,0 +1,21 @@
+{
+    "type": "AdaptiveCard",
+    "version": "1.2",
+    "body": [
+      {
+        "type": "TextBlock",
+        "text": "Jira Notifier Configuration Updated",
+        "size": "medium",
+        "horizontalAlignment": "center",
+        "weight": "bolder"
+      },
+      {
+        "type": "TextBlock",
+        "text": "Placeholder",
+        "wrap": true
+      }
+    ],
+    "actions": [
+    ],
+    "$schema": "http://adaptivecards.io/schemas/adaptive-card.json"
+}

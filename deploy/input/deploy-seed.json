@@ -104,10 +104,10 @@
                 }
               },
               {
-                "name": "ADMIN_EMAIL",
+                "name": "ADMIN_SPACE_ID",
                 "valueFrom": {
                   "configMapKeyRef": {
-                    "key": "ADMIN_EMAIL",
+                    "key": "ADMIN_SPACE_ID",
                     "name": "{{configName}}"
                   }
                 }
@@ -144,6 +144,15 @@
                 "valueFrom": {
                   "configMapKeyRef": {
                     "key": "JIRA_PW",
+                    "name": "{{configName}}"
+                  }
+                }
+              },
+              {
+                "name": "ENABLE_GROUP_NOTIFICATIONS",
+                "valueFrom": {
+                  "configMapKeyRef": {
+                    "key": "ENABLE_GROUP_NOTIFICATIONS",
                     "name": "{{configName}}"
                   }
                 }
