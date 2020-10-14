@@ -26,7 +26,7 @@ Prerequisites:
 
 - [ ] As a Jira administrator configure Jira to set up a webhook that will fire whenever an Issue is created, updated or deleted.  The url will be the URL where your server is running (for example, an ngrok url during development) appended with '/jira'.  For example: http://myserver.ngrok.io/jira.
 
-- [ ] As a Jira administrator, create a jira user to associate with the bot.  This user should have read access to all the jira projects that your users are interested in being notified about.
+- [ ] As a Jira administrator, create a jira user to associate with the bot.  This user should have read access to all the jira projects that your users are interested in being notified about.   Write access is required to support the feature of the bot that allows users to have the bot post a comment on an issue directly from Webex Teams.
 
 - [ ] Create a Webex Teams Bot (save the email address and API key): https://developer.ciscospark.com/add-bot.html
 
@@ -60,6 +60,7 @@ There are also some other undocumented commands that admins may find handy, sear
 ### Special Jira Configurations
 
 Jira webhooks can be configured to send events for new comments.  These are generally redundant with the issue_updated:comment_[created,updated,deleted] events.  If you wish to process the comment event as well set the following:
+
 * PROCESS_COMMENT_EVENTS - when set comment events will be processed and issue_updated:comment_* events will be ignored. (Note that this method is generally less efficient and results in an additional API call to Jira to fetch the issue information anyhow.)
 
 When the bot receives Jira Events it will typically make calls back to the Jira system to lookup the user details for mentioned users and to fetch the watchers for that issue.  The bot also supports a feature which allows users to reply to notifications to add a comment to the issue.   All of these actions require Jira API calls.   The following variables allow configuration of the specific API called for these tasks:
@@ -131,7 +132,17 @@ To faciliate developing and testing the logic of converting events to notificati
 
 The test cases are admiteddly under-documented, and providing that documentation never quite makes it to the top of my to-do list.  If you are interested in using this project and want to leverage the tests please open an issue which will help with my motiviation.
 
-For the more impatient, xxamine the code in [init-test-cases.js](./sample-jira-event-test-cases/init-test-cases.js) may help you learn how to set you your own test cases.
+Briefly, there are two sets of test, both of which can be configured to read in a set of "canned" jira event data in JSON files that reside in a directory specified by the TEST_CAS_DIR enviornment variable.   Both tests read in data from a configuration file that specifies information about the test users/spaces that an emulation of the bot should interact with, the jira event files to read in, and the expected notifications that these events should generate given the configuration of the test "bots".
+
+During interative development, if the environment variable LOG_JIRA_EVENTS is set, the payload for each webhook that the system receives will be written to the directory ./JiraEvents.  These files are useful seeds for test cases.
+
+[test-jira-event-handler.js](./tests/test-jira-event-handler.js) validates that test jira events will generate the expected notifications for 1-1 users with the bot.   The configuration of these tests is described in more details in the [user-notification-test-config-template.js](./tests/user-notification-test-config-template.js).   To run the 1-1 tests:
+
+`TEST_CASE_DIR=JiraEvents npm run test`
+
+[test-transition-notifications.js](./tests/test-transition-notifications.js) validates that test jira events will generate the expected notifications in group spaces that have been configured to watch certain boards or filters.  It also validates the logic that looks up and stores board and filter information.   The configuration of these tests is described in more details in the [transition-test-config-template.js](./tests/transition-test-config-template.js).   To run the group space tests:
+
+`TEST_CASE_DIR=JiraEvents npm run test-group`
 
 ## Deploy
 
