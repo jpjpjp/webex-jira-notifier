@@ -87,7 +87,6 @@ class GroupNotifications {
     if (addedBy) {
       // This is a new group space bot.  Store the default config in
       // and post instructions to the users of the space
-      //this.postGroupSpaceInstructions(bot, /*show_status=*/false, /*show_instructions=*/true);
       bot.store('groupSpaceConfig', this.defaultGroupSpaceConfig)
       .then(()=> {
         this.groupStatus.postStatusCard(bot, this.defaultGroupSpaceConfig)
@@ -138,59 +137,6 @@ class GroupNotifications {
   setFeedbackSpace(bot) {
     this.feedbackSpaceId = bot.roomid;
     this.groupStatus.setFeedbackSpaceBot(bot);
-  }
-
-  /**
-   * Post instructions for a group space
-   * 
-   * @param {object} bot -- bot to post instructions
-   * @param {boolean} show_status - if set show only status
-   * @param {boolean} show_instructions - if set show only instructions
-   * @param {object} group_config - if available use for status update
-   */
-  async postGroupSpaceInstructions(bot, show_status = false, show_instructions = true, group_config = null) {
-    // TODO - reveiw this and see if we can deletat to the group-status module
-    if (bot.isDirect) {
-      this.logger.error(`postGroupSpaceInstructions called with direct bot object!`);
-      return;
-    }
-    try {
-      if (show_status) {
-        let config = group_config;
-        if (!config) {
-          config = await bot.recall('groupSpaceConfig')
-        }
-        let also = '';
-        let msg = '';
-        if (config?.boards?.length) {
-          msg = 'I will send notifications to this space transitions on these boards:\n';
-          config.boardIds.forEach((board) => {
-            msg += `* ${board.name}\n`
-          });
-          msg += '\n';
-          also = 'also ';
-        }
-        // Todo review after implementation
-        if (config?.newIssueNotificationConfig?.length) {
-          msg += `I will ${also}send notifications to this space about new issues. ` +
-          `My current configuration is as follows: \n`;
-          config.newIssueNotificationConfig.forEach(config => {
-            `* Issue Types: Bug\n` +
-            `* Components: ${config.components.join(',')}\n` +
-            `* Team/PT(s): ${config.teamPts.join(', ')}\n\n`;
-          });
-        }
-        await bot.say(msg);
-      }
-      if (show_instructions) {
-        await bot.say(`I don't currently support any commands in group spaces, ` +
-        `but I need to fix this....`);
-      }
-    } catch(e) {
-      this.logger.error(`postGroupSpaceInstructions failed to post instructions to ${bot.room.title}`);
-      this.logger.error(e.message);
-      bot.say("Hmmn. I seem to have a database problem, and can't report my notification status.   Please ask again later.");
-    }
   }
 
   /**

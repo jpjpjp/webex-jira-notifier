@@ -9,8 +9,16 @@ if (!process.env.TEST_CASE_DIR) {
   process.exit(-1);
 }
 
+// Ensure that the directory where the canned Jira Events are exists
+let test_dir;
+try {
+  test_dir = path.resolve(process.env.TEST_CASE_DIR);
+} catch(e) {
+  console.error(`Unable to resolve TEST_CASE_DIR: ${process.env.TEST_CASE_DIR}`);
+  process.exit();
+}
+
 // Load in the jira modules that we are testing
-const test_dir = process.env.TEST_CASE_DIR;
 const JiraConnector = require('../jira-connector');
 const jiraConnector = new JiraConnector();
 const JiraEventHandler = require("../jira-event.js");
@@ -29,9 +37,10 @@ let {Framework, TestCase} = require('./test-framework');
 framework = new Framework();
 
 // Read in the configuration for our tests
+// See user-notification-test-config-template.js for more info
 let {testConfig} = require(`./user-notification-test-config`);
 
-// Create some "bots: for our tests
+// Create some "bots" for our tests
 let Bot = require('./test-bot');
 if (testConfig?.botsUnderTest?.length) {
   testConfig.botsUnderTest.forEach((test) => {

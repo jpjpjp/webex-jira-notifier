@@ -662,65 +662,6 @@ class JiraConnector {
   }
 
   /**
-   * Is issue in our TR Notification Filter Cache
-   * 
-   * @function issueInTRFilterList
-   * @param {string} key - issue key for TR Notification candidate
-   * @return {object} - array of boards that have the issue on them
-   */
-  issueInTRFilterList(key) {
-    return this.transitionStories.filter(boardInfo => {
-      return (-1 != boardInfo.stories.indexOf(key));
-    }); 
-  }
-
-  /**
-   * Gets board info given a list of boardIds
-   * @private
-   * @function getInfoForBoards
-   * @param {Array} boardIds - list of boardIds to fetch
-   * @returns {Promise.Array} - returns array with an info object for each board
-   */
-  getInfoForBoards(boardIds) {
-    let boardsInfo = [];
-    return Promise.all(boardIds.map(boardId => {
-      let boardUrl = `${this.jiraLookupBoardApi}/${boardId}`;
-      return request.get(this.convertForProxy(boardUrl), this.jiraReqOpts)
-        .then(boardInfo => {
-          logger.info(`Will notify of transitions on boardId: ${boardInfo.id}, name: ${boardInfo.name}`);
-          return boardsInfo.push(boardInfo);
-        })
-        .catch(e => {
-          logger.info(`jiraConnector:getInfoForBoards failed lookup for boardID "${boardId}": ${e.message}`);
-          return Promise.reject(e);
-        });
-    }))
-      .then(() => boardsInfo);
-  }
-
-  /**
-   * Add the child stories to a list of boardsInfo
-   * @private
-   * @function getStoriesForBoards
-   * @param {Array} boards - list of board info objects 
-   * @returns {Promise.Array} - returns array with an info object for each board
-   */
-  getStoriesForBoards(boards) {
-    let boardsWithStories = [];
-    return Promise.all(boards.map(board => {
-      let issuesUrl = `${board.self}/issue`;
-      let options = JSON.parse(JSON.stringify(this.jiraReqOpts));
-      return this.getStoriesFromUrl(issuesUrl, options)
-        .then(stories => {
-          board.stories = stories.map(s => s.key);
-          logger.info(`Got all ${board.stories.length} issues on boardId: ${board.id}, name: ${board.name}`);
-          boardsWithStories.push(board);
-        });
-    }))
-      .then(() => boardsWithStories);
-  }
-
-  /**
    * 
    * Recursively fetch all the stories for a given board
    * @private

@@ -91,7 +91,6 @@ class BoardTransitions {
         if (board) {
           this.logger.info(`${boardType} ${boardId}:"${board.name}" already in cache.  Adding this bot to the list of followers.`);
           this.addBotToBoardInfo(bot, board);
-          // TODO update NotPending logic to check for type as well as id
           return new Promise((res, rej) => 
             returnWhenNotPending(res, rej, this.pendingBotAdds,boardIdObj, bot, 10, this));
         } else {
@@ -126,7 +125,6 @@ class BoardTransitions {
           this.logger.info(`${boardId} is a valid ${boardType}: "${board.name}" Added ${board.stories.length} stories to cache.`);
           this.addBotToBoardInfo(bot, board);
           this.addBoardToWatchedSet(board);
-          // TODO update Pending logic to check for type as well as id
           this.updateBoardInfoWithPendingBots();
           return  new Promise((res, rej) => 
             returnWhenNotPending(res, rej, this.pendingBotAdds,boardIdObj, bot, 10, this));

@@ -18,7 +18,7 @@ var logger = require('../logger');
 let test_dir;
 try {
   test_dir = path.resolve(process.env.TEST_CASE_DIR);
-} catch {
+} catch(e) {
   console.error(`Unable to resolve TEST_CASE_DIR: ${process.env.TEST_CASE_DIR}`);
   process.exit();
 }
