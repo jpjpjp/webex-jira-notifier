@@ -10,8 +10,16 @@ fs = require('fs');
 path = require('path');
 var _ = require('lodash');
 
-
-// SET LOG_LEVEL to enable/quiet underlying app logging
+// Set VERBOSE=true to get test logging
+var verbose = false;
+if (process.env.VERBOSE) {
+  verbose = true;
+}
+// Set LOG_LEVEL to warn, info, debug, or verbose to get more logging
+// from the jira handler code
+if (!process.env.LOG_LEVEL) {
+  process.env.LOG_LEVEL='error';
+}
 var logger = require('../logger');
 
 // Ensure that the directory where the canned Jira Events are exists
@@ -49,11 +57,6 @@ process.env.BOARD_STORY_CACHE_TIMEOUT = 5*60000;
 let promiseTimeout = (process.env.TRANSITION_TEST_INIT_TIMEOUT) ? 
   process.env.TRANSITION_TEST_INIT_TIMEOUT : 60*1000;
 
-// Set VERBOSE=true to get test logging
-var verbose = false;
-if (process.env.VERBOSE) {
-  verbose = true;
-}
 // Read in the configuration for our tests
 let {testConfig} = require(`./transition-test-config`);
 
@@ -111,7 +114,8 @@ let processJiraTests = new ProcessJiraTestCases(verbose);
 runInitTestCases(initTestCases, groupNotifier)
   .then(() => {
     // The init tests passed!
-    // If configured force a re-read of the cache to validate that works
+    // All stories associated with configured filters are now in a memory cache
+    // If configured force an update of the cache to validate that the update logic works
     if (process.env.TEST_CACHE_UPDATE_LOGIC) {
       return groupNotifier.boardTransitions.updateStoriesForBoards(
         groupNotifier.boardTransitions.boardsInfo
@@ -123,22 +127,22 @@ runInitTestCases(initTestCases, groupNotifier)
   .then(() => {
     // Run the first pass of tests to check if the defined jira events
     // generate the expected notifications
-    console.log('Ready to start notifying!');
     return processJiraTests.runTests(notifyTestCases, jiraEventHandler, framework); 
   })
   .then(() => {
-    // If configured, emulate button presses to delete some of the boards
-    // from some of the bots
+    // If configured, emulate button presses to delete some of the watched
+    // boards and filters from some of the bot/space configurations...
     let deleteBoardButtonPressTriggers = deleteBoardButtonPresses(testConfig);
     if (deleteBoardButtonPressTriggers.length) {
       let actionPromises = [];
+      console.log();
       deleteBoardButtonPressTriggers.forEach((buttonPress) => {
-        console.log(`Removing watched boards from test bots: ${buttonPress.bot.room.title}.`);
+        console.log(`Removing ${buttonPress.trigger.attachmentAction.inputs.boardsToDelete} from test bot: ${buttonPress.bot.room.title}.`);
         actionPromises.push(groupNotifier.processAttachmentAction(buttonPress.bot, buttonPress.trigger));
       });
       return Promise.all(actionPromises);
     } else {
-      console.log(`No delete board button presses configured.   Tests complete`);
+      console.log(`\nNo delete board button presses configured. Tests complete`);
       process.exit();
     }
   })
@@ -147,13 +151,14 @@ runInitTestCases(initTestCases, groupNotifier)
     // the same events as the first pass, but with fewer expected notifications
     if (testConfig?.secondPassTestCases?.length) {
       notifyTestCases = readNotifyTestCasesFromConfig(testConfig.secondPassTestCases);
-      console.log('Running notification tests again.');
+      console.log(`\nRunning ${notifyTestCases.length} notification tests again...`);
       return processJiraTests.runTests(notifyTestCases, jiraEventHandler, framework); 
     } else {
-      console.error('No secondPassTestCases configured. Tests complete');
+      console.error('\nNo secondPassTestCases configured. Tests complete');
       process.exit();
     }
   })
+  .then(() => process.exit())
   // TODO add another option rerun of the tests after the cache has been updated.
   .catch(e => {
     console.log(`runInitTestCases failed: ${e.message}`);
@@ -228,6 +233,14 @@ async function runInitTestCases(testCases, groupNotifier) {
     return loadPreviouslyDumpedBoardConfigs(groupNotifier);
   }
 
+  console.log(`Running ${testCases.length} init cases to configure boards and filters.`);
+  console.log('This can take some time as we must fetch all the details for each configured filter...');
+  if (!verbose) {
+    console.log(`- Set VERBOSE=true to see test details`);
+    console.log('- Set DUMP_INITIAL_BOARDS_CONFG=some_filename to cache the init config that is being set up now.');
+    console.log('- Set USE_PREVIOUSLY_DUMPED_BOARDS_CONFIG=some_filename to skip this setup and get to the notification tests more quickly.\n');
+  }
+
   return Promise.all(testCases.map(test => {
     return Promise.race([
       groupNotifier.boardTransitions.watchBoardForBot(test.bot, test.listIdOrUrl, test.listType),
@@ -267,8 +280,12 @@ async function runInitTestCases(testCases, groupNotifier) {
       }
       if (verbose) {
         console.log(results);
-        console.log('All init tests passed!');
       }
+
+      // To speed up test init, the board configuration can be dumped to disk after a
+      // succesful init by specifying DUMP_INITIAL_BOARDS_CONFG=some_filename
+      // Subsequent test runs can use this canned config by setting 
+      // USE_PREVIOUSLY_DUMPED_BOARDS_CONFIG=some_filename
       if (process.env.DUMP_INITIAL_BOARDS_CONFIG) {
         // Make a copy of any board notification configs that just got loaded
         let boardsInfo = JSON.parse(JSON.stringify(groupNotifier.boardTransitions.boardsInfo, null, 2));
@@ -287,7 +304,7 @@ async function runInitTestCases(testCases, groupNotifier) {
         }
       }
 
-      // All the init tests (if run) passed!
+      // All the init tests (if we didn't read it from the file) passed!
       return Promise.resolve();
     });
 }

@@ -132,11 +132,17 @@ To faciliate developing and testing the logic of converting events to notificati
 
 The test cases are admiteddly under-documented, and providing that documentation never quite makes it to the top of my to-do list.  If you are interested in using this project and want to leverage the tests please open an issue which will help with my motiviation.
 
-Briefly, there are two sets of test, both of which can be configured to read in a set of "canned" jira event data in JSON files that reside in a directory specified by the TEST_CAS_DIR enviornment variable.   Both tests read in data from a configuration file that specifies information about the test users/spaces that an emulation of the bot should interact with, the jira event files to read in, and the expected notifications that these events should generate given the configuration of the test "bots".
+Briefly, there are two sets of test, both of which can be configured to read in a set of "canned" jira event data in JSON files that reside in a directory specified by the TEST_CASE_DIR enviornment variable.   Both tests read in data from a configuration file that specifies information needed to run the tests, such as:
+
+- the test users/spaces that an emulation of the bot should interact with
+- the jira event files to read in
+- the expected notifications that these events should generate given the configuration of the test "bots".
 
 During interative development, if the environment variable LOG_JIRA_EVENTS is set, the payload for each webhook that the system receives will be written to the directory ./JiraEvents.  These files are useful seeds for test cases.
 
-[test-jira-event-handler.js](./tests/test-jira-event-handler.js) validates that test jira events will generate the expected notifications for 1-1 users with the bot.   The configuration of these tests is described in more details in the [user-notification-test-config-template.js](./tests/user-notification-test-config-template.js).   To run the 1-1 tests:
+[test-jira-event-handler.js](./tests/test-jira-event-handler.js) validates that test jira events will generate the expected notifications for 1-1 users with the bot.   The configuration of these tests is described in more details in the [user-notification-test-config-template.js](./tests/user-notification-test-config-template.js).
+
+Assuming you choose to use the JiraEvent directory as the home of the json files you will use for your test cases, you can run the 1-1 tests, using the command:
 
 `TEST_CASE_DIR=JiraEvents npm run test`
 

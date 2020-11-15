@@ -316,8 +316,12 @@ class JiraConnector {
       let watcherUrl = watches.self;
       return request.get(this.convertForProxy(watcherUrl), this.jiraReqOpts)
         .then(watcherInfo => {
-          if (-1 === this.jiraAllowedProjects.indexOf(project)) {
-            // Temporary so I see this in the logs
+          if (this.jiraAllowedProjects.length &&
+            (-1 === this.jiraAllowedProjects.indexOf(project)))  {
+            // If the environment variable JIRA_PROJECTS is set to a list of known jira
+            // projects that our bot's jira user has access to, this logic will generate a
+            // logging error for each notification received associated with a project
+            // that our bot's user is not configured to read or write
             logger.error(`Got watcher info for project "${issue.fields.project.key}` +
               ` but it is not in our allowed project list.`);
             this.jiraAllowedProjects.push(project);

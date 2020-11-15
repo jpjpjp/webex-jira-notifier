@@ -46,9 +46,9 @@ class ProcessJiraTestCases {
     if (process.env.TEST_TIMER_MULTIPLIER) {
       timerDuration = expectedCallbacks * parseInt(process.env.TEST_TIMER_MULTIPLIER);
     }
-    myConsole.log(`Running ${testCases.length} tests expected to generate ${expectedCallbacks} responses.`);
-    myConsole.log(`Set environment VERBOSE=true for more details.`);
-    myConsole.log(`Will analyze results in ${timerDuration / 1000} seconds...`); 
+    console.log(`Running ${testCases.length} tests expected to generate ${expectedCallbacks} responses.`);
+    console.log(`Set environment VERBOSE=true for more details.`);
+    console.log(`Will analyze results in ${timerDuration / 1000} seconds...`); 
     // TODO -- modify this so it doesn't return until the promise gets
     // resolved in the timeout handler
     return new Promise((r) => returnAfterTimeout(r, testCases, timerDuration));
@@ -82,7 +82,7 @@ function returnAfterTimeout(resolveMethod, testCases, timerDuration) {
       }
     }
 
-    myConsole.log(`\nAll tests complete. ${totalPassed} tests passed.`);
+    console.log(`\nAll tests complete. ${totalPassed} tests passed.`);
     if (totalErrors) {
       console.error(`Number of errors seen: ${totalErrors}`);
     }

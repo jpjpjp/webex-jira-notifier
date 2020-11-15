@@ -3,11 +3,24 @@
 // that we get our expected results
 /*jshint esversion: 6 */  // Help out our linter
 
+path = require('path');
 require('dotenv').config();
 if (!process.env.TEST_CASE_DIR) {
   console.error('The environment variable TEST_CASE_DIR must be specified.');
   process.exit(-1);
 }
+
+// Set VERBOSE=true to get test logging
+var verbose = false;
+if (process.env.VERBOSE) {
+  verbose = true;
+}
+// Set LOG_LEVEL to warn, info, debug, or verbose to get more logging
+// from the jira handler code
+if (!process.env.LOG_LEVEL) {
+  process.env.LOG_LEVEL='error';
+}
+
 
 // Ensure that the directory where the canned Jira Events are exists
 let test_dir;
@@ -25,12 +38,6 @@ const JiraEventHandler = require("../jira-event.js");
 const jiraEventHandler = new JiraEventHandler(jiraConnector);
 fs = require('fs');
 
-
-// Set VERBOSE=true to get test logging
-var verbose = false;
-if (process.env.VERBOSE) {
-  verbose = true;
-}
 
 // Read in our pretend "Framework", and our TestCase object
 let {Framework, TestCase} = require('./test-framework');
