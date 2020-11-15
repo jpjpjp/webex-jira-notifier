@@ -16,9 +16,14 @@ var app = express();
 app.use(bodyParser.json({limit: '50mb'}));
 
 // Details about this instance of the app
+const semver = require('semver');
 const package_version = require('./package.json').version;
 logger.info(`Running app version: ${package_version}`);
 logger.info(`Running node version: ${process.version}`);
+if (semver.lt(process.version, 'v14.0.0')) {
+  logger.error(`Jira notifier requires node v14 or greater.`);
+  process.exit();
+}
 
 // Helper class for calling Jira APIs
 let jira = {};
@@ -222,12 +227,12 @@ framework.on('spawn', function (bot, id, addedById) {
     }
     // Check if this existing user needs to see a new functionality message
     // Usually this is commented out but I revisit it from time to time
-    // bot.recall('newFunctionalityMsg3').then((val) => {
-    //   logger.info(`For ${bot.isDirectTo} got newFunctionalityMsg2 == ${val}`);
-    // }).catch(() => {
-    //   // This user hasn't gotten the new functionality message yet
-    //   sayNewFunctionalityMessage(bot);
-    // });
+    bot.recall('newFunctionalityMsg4').then((val) => {
+      logger.info(`For ${bot.isDirectTo} got newFunctionalityMsg2 == ${val}`);
+    }).catch(() => {
+      // This user hasn't gotten the new functionality message yet
+      sayNewFunctionalityMessage(bot);
+    });
   } else {
     logger.info(`Our bot was added to a new room: ${bot.room.title}`);
     if (adminsBot) {
@@ -743,18 +748,16 @@ function tryToInitAdminBot(bot, framework) {
 // This function is handy when we want to notify all users, once,
 // about new functionality changes.  It is generally commented out
 // until we decide its needed.
-// function sayNewFunctionalityMessage(bot) {
-//   bot.say('If you find your personal jira notifications in this 1-1 space ' +
-//     'with me helpful, your entire team might find my new Transition and ' +
-//     'New Issues for Group Spaces functionality useful too.\n\n' +
-//     'Just add me to a group space, where ' +
-//     'you can configure me to watch jira boards and filters so that I can ' +
-//     'provide notifications when new issues are created, or when the status ' +
-//     'changes on existing issues that match the configured filter criteria.\n\n' +
-//     'Stay on top of your team\'s work by adding me to spaces where bug triage, ' +
-//     'scrum work, or feature transition progress is being tracked!');
-//   bot.store('newFunctionalityMsg3', true);
-// }
+function sayNewFunctionalityMessage(bot) {
+  bot.say('I\'m looking for a voluteer or volunteers to take over my maintenance.\n\n' +
+    'My current owner is leaving and will not be able to maintain me after Thanksgiving. ' +
+    'If you are familar with node.js and find my functionality is handy, JP would be happy ' +
+    'to walk you through how I work.  In the past I\'ve gone over 12 months without the need ' +
+    'for any maintenance, so if you are interested just drop JP a note in the ' +
+    '[Ask JiraNotification Bot space](https://eurl.io/#Hy4f7zOjG)\n\n' +
+    'If no one is available to maintain me, my functionality will end the week of November 23rd.');
+  bot.store('newFunctionalityMsg4', true);
+}
 
 
 /****

@@ -35,6 +35,7 @@
     "mongodb": "^3.5.7",
     "request": "^2.88.2",
     "request-promise": "^4.2.2",
+    "sever": "0.0.2",
     "webex-node-bot-framework": "^2.2.0",
     "winston": "^2.4.5",
     "winston-papertrail": "^1.0.5"
