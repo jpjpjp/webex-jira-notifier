@@ -103,17 +103,16 @@ if (process.env.MONGO_URI) {
       notifySelf: false
     },
     newFunctionalityMsg: true, // New users don't need the "new functionality" message
+    newFunctionalityMsg1: true, // New users don't need the "new functionality" message
+    newFunctionalityMsg2: true, // New users don't need the "new functionality" message
+    newFunctionalityMsg3: true, // New users don't need the "new functionality" message
     trackTickets: []
   };
 } else {
-  console.error('The mongo storage driver requires the following environment variables:\n' +
+  logger.error('The mongo storage driver requires the following environment variables:\n' +
     '* MONGO_URI -- mongo connection URL see https://docs.mongodb.com/manual/reference/connection-string' +
     '\n\nThe following optional environment variables will also be used if set:\n' +
-    '* MONGO_BOT_STORE -- name of collection for bot storage elements (will be created if does not exist).  Will use "webexBotFramworkStorage" if not set\n' +
-    '* MONGO_BOT_METRICS -- name of a collection to write bot metrics to (will be created if does not exist). bot.writeMetric() calls will fail if not set\n' +
-    '* MONGO_INIT_STORAGE -- stringified object assigned as the default startup config if non exists yet\n' +
-    '* MONGO_SINGLE_INSTANCE_MODE -- Optimize lookups speeds when only a single bot server instance is running\n\n' +
-    'Also note, the mongodb module v3.4 or higher must be available (this is not included in the framework\'s default dependencies)');
+    '* MONGO_BOT_STORE -- name of collection for bot storage elements (will be created if does not exist).  Will use "webexBotFramworkStorage" if not set.');
   logger.error('Running without having these set will mean that there will be no persistent storage \n' +
     'across server restarts, and that no metrics will be written.  Generally this is a bad thing for production, \n' +
     ' but may be expected in development.  If you meant this, please disregard warnings about ' +
@@ -227,12 +226,12 @@ framework.on('spawn', function (bot, id, addedById) {
     }
     // Check if this existing user needs to see a new functionality message
     // Usually this is commented out but I revisit it from time to time
-    bot.recall('newFunctionalityMsg4').then((val) => {
-      logger.info(`For ${bot.isDirectTo} got newFunctionalityMsg2 == ${val}`);
-    }).catch(() => {
-      // This user hasn't gotten the new functionality message yet
-      sayNewFunctionalityMessage(bot);
-    });
+    // bot.recall('newFunctionalityMsg3').then((val) => {
+    //   logger.info(`For ${bot.isDirectTo} got newFunctionalityMsg3 == ${val}`);
+    // }).catch(() => {
+    //   // This user hasn't gotten the new functionality message yet
+    //   sayNewFunctionalityMessage(bot);
+    // });
   } else {
     logger.info(`Our bot was added to a new room: ${bot.room.title}`);
     if (adminsBot) {
@@ -748,16 +747,18 @@ function tryToInitAdminBot(bot, framework) {
 // This function is handy when we want to notify all users, once,
 // about new functionality changes.  It is generally commented out
 // until we decide its needed.
-function sayNewFunctionalityMessage(bot) {
-  bot.say('I\'m looking for a voluteer or volunteers to take over my maintenance.\n\n' +
-    'My current owner is leaving and will not be able to maintain me after Thanksgiving. ' +
-    'If you are familar with node.js and find my functionality is handy, JP would be happy ' +
-    'to walk you through how I work.  In the past I\'ve gone over 12 months without the need ' +
-    'for any maintenance, so if you are interested just drop JP a note in the ' +
-    '[Ask JiraNotification Bot space](https://eurl.io/#Hy4f7zOjG)\n\n' +
-    'If no one is available to maintain me, my functionality will end the week of November 23rd.');
-  bot.store('newFunctionalityMsg4', true);
-}
+// function sayNewFunctionalityMessage(bot) {
+//   bot.say('If you find your personal jira notifications in this 1-1 space ' +
+//     'with me helpful, your entire team might find my new Transition and ' +
+//     'New Issues for Group Spaces functionality useful too.\n\n' +
+//     'Just add me to a group space, where ' +
+//     'you can configure me to watch jira boards and filters so that I can ' +
+//     'provide notifications when new issues are created, or when the status ' +
+//     'changes on existing issues that match the configured filter criteria.\n\n' +
+//     'Stay on top of your team\'s work by adding me to spaces where bug triage, ' +
+//     'scrum work, or feature transition progress is being tracked!');
+//   bot.store('newFunctionalityMsg3', true);
+// }
 
 
 /****
