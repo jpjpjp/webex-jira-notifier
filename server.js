@@ -204,7 +204,7 @@ framework.on('spawn', function (bot, id, addedById) {
       bot.say("Hi! Sorry, I only work in one-on-one rooms at the moment.  Goodbye.")
         .finally(() => {
           bot.exit();
-          if (adminsBot) {
+          if ((adminsBot) && (adminsBot.id != bot.id)) {
             adminsBot.say(`${botName} left the group space "${bot.room.title}"`)
               .catch((e) => logger.error(`Failed to update to Admin about a new space our bot left. Error:${e.message}`));
           }
@@ -250,7 +250,10 @@ framework.on('spawn', function (bot, id, addedById) {
 // has changed in such a way as to violate membership rules set via
 // the restrictedToEmailDomains or guideEmails config parameters
 framework.on('despawn', function (bot) {
-  if (bot.isGroup) {
+  if ((adminsBot) && (adminsBot.id === bot.id)) {
+    adminsBot = null;
+  }
+  if ((bot.isGroup) && (groupNotifier !== null)) {
     groupNotifier.onDespawn(bot);
   }
 });
